@@ -20,21 +20,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import unicodedata
 from collections.abc import Iterator
 from pathlib import Path
 
-from . import facts_dir, raw_dir, wiki_dir
+from . import facts_dir, hashing, raw_dir, wiki_dir
 from .errors import DataError
 
-_WS = re.compile(r"\s+")
 _FOOTNOTE = re.compile(r"^\[\^([^\]]+)\]:\s*anchor=(\S+)")
 
-
-def normalize(text: str) -> str:
-    t = unicodedata.normalize("NFC", text)
-    t = _WS.sub(" ", t).strip()
-    return t.lower()
+# The canonical normalization lives in ``hashing`` so blocks and anchors share
+# one definition; re-exported here for callers that import ``anchors.normalize``.
+normalize = hashing.normalize
 
 
 def _qh(normalized_quote: str) -> str:

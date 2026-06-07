@@ -7,8 +7,24 @@ self-describing in the manifest and frontmatter.
 from __future__ import annotations
 
 import hashlib
+import re
+import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
+
+_WS = re.compile(r"\s+")
+
+
+def normalize(text: str) -> str:
+    """Canonical text normalization shared by provenance anchors and block ids.
+
+    NFC → collapse every run of whitespace to a single space → strip ends →
+    lowercase. Keeping one definition here (the leaf both ``anchors`` and
+    ``blocks`` import) means anchor identity and block identity can never drift.
+    """
+    t = unicodedata.normalize("NFC", text)
+    t = _WS.sub(" ", t).strip()
+    return t.lower()
 
 
 def _digest(data: bytes) -> str:

@@ -47,6 +47,32 @@ def test_missing_source_is_stale(kb):
     assert "missing source" in s["reason"]
 
 
+def test_block_dep_stays_fresh_when_other_block_inserted(kb):
+    """A page depending on a single block must not go stale when an unrelated
+    block is inserted elsewhere in the source. Positional ids renumbered here and
+    falsely staled the page; content-derived ids fix that."""
+    kb.add_raw("a", "# A\n\nfirst fact.\n\nsecond fact.\n")
+    bid = kb.block_id("a", "second fact")
+    kb.add_wiki("x", [f"raw/a#{bid}"])
+    assert graph.compute_status(kb.root, use_cache=False)["stale"] == []
+
+    kb.mutate_raw("a", "# A\n\nfirst fact.\n\nINSERTED.\n\nsecond fact.\n")
+    res = graph.compute_status(kb.root, use_cache=False)
+    assert res["stale"] == []
+    assert "concept/x" in {o["id"] for o in res["ok"]}
+
+
+def test_block_dep_goes_stale_when_depended_block_edited(kb):
+    kb.add_raw("a", "# A\n\nfirst fact.\n\nsecond fact.\n")
+    bid = kb.block_id("a", "second fact")
+    kb.add_wiki("x", [f"raw/a#{bid}"])
+    assert graph.compute_status(kb.root, use_cache=False)["stale"] == []
+
+    kb.mutate_raw("a", "# A\n\nfirst fact.\n\nsecond fact, revised.\n")
+    res = graph.compute_status(kb.root, use_cache=False)
+    assert "concept/x" in {s["id"] for s in res["stale"]}
+
+
 def test_status_exit_semantics_via_stale_list(kb):
     # cmd_status returns 1 iff result["stale"] is non-empty
     kb.add_raw("a", "# A\n\nAlpha.\n")
