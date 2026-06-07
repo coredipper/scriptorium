@@ -1,5 +1,10 @@
 # scriptorium
 
+<p align="center">
+  <img src="docs/jean-mielot-scriptorium.jpg" alt="Jean Miélot writing in his scriptorium" width="480"><br>
+  <sub><em>Jean Miélot at work in his scriptorium (illumination by Jean Le Tavernier, c. 1456). Public domain, via <a href="https://commons.wikimedia.org/wiki/File:Tavernier_Jean_Mielot.jpg">Wikimedia Commons</a>.</em></sub>
+</p>
+
 An agent-maintained knowledge base where **staleness and provenance are
 computable, not hoped for** — and where *compile, cache, and retrieve* are not
 rival designs but rungs of one answer policy.
