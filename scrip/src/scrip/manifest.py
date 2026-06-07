@@ -1,10 +1,11 @@
 """The dependency-graph cache: ``.kb/manifest.json``.
 
 This is a *cache, not a source of truth*. Everything in it is recomputable from
-the files in ``vault/``. ``scrip`` reads it only to skip re-hashing unchanged
-sources and to name which source changed; deleting it and rebuilding must yield
-an identical dirty set (enforced by tests). Writes are atomic so a crash never
-leaves a torn manifest.
+the files in ``vault/``. Staleness always re-hashes raw content from current
+bytes (see ``graph.scan_raw``); ``scrip`` reads the manifest only for persisted
+metadata and to name *which* source changed since the last build — never to skip
+a re-hash. Deleting it and rebuilding must yield an identical dirty set (enforced
+by tests). Writes are atomic so a crash never leaves a torn manifest.
 """
 
 from __future__ import annotations

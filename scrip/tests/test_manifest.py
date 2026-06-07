@@ -1,3 +1,4 @@
+import os
 import shutil
 
 from scrip import graph, manifest, manifest_path
@@ -47,6 +48,26 @@ def test_manifest_written_and_shaped(kb):
     assert "raw/a" in data["raw"]
     assert "blocks" in data["raw"]["raw/a"]
     assert "concept/x" in data["derived"]
+
+
+def test_same_size_edit_with_restored_mtime_is_still_detected(kb):
+    """Regression for the cache-coherency hole: a byte change that preserves
+    size AND restores the original mtime must still mark dependents stale,
+    because status re-hashes raw content unconditionally."""
+    kb.add_raw("a", "# A\n\nalpha value here.\n")
+    kb.add_wiki("x", ["raw/a"])
+    graph.compute_status(kb.root, use_cache=True, rebuild=True)  # seed the manifest
+
+    p = kb.root / "vault" / "raw" / "a.md"
+    st = p.stat()
+    original = p.read_text()
+    edited = original.replace("alpha", "ALPHA")  # same byte length, real change
+    assert len(edited) == len(original)
+    p.write_text(edited, encoding="utf-8")
+    os.utime(p, (st.st_atime, st.st_mtime))  # restore the original mtime
+
+    res = graph.compute_status(kb.root, use_cache=True)
+    assert "concept/x" in {s["id"] for s in res["stale"]}
 
 
 def test_corrupt_manifest_is_a_cache_miss_not_an_error(kb):
