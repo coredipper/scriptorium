@@ -160,8 +160,12 @@ every run of whitespace to a single space → strip ends → lowercase.
 `len` characters and hash each window:
 - exactly one matching window → **OK**
 - zero matches → **BROKEN** (the citation no longer resolves)
-- more than one match → **AMBIGUOUS** (resolve to the one nearest `loc`; the
-  remedy is to lengthen the quote until unique)
+- more than one match → **AMBIGUOUS** (the citation does not resolve *uniquely*)
+
+`verify` **fails (exit 1) on BROKEN and on AMBIGUOUS by default** — a citation
+must resolve to exactly one span. The remedy for AMBIGUOUS is to lengthen the
+quote until unique; `--allow-ambiguous` downgrades it to a warning (resolving to
+the span nearest `loc`).
 
 Because `qh` is computed over the *stored* `raw/` text, re-extracting a PDF with a
 different tool cannot silently break anchors; only a deliberate **re-ingest**
@@ -210,6 +214,10 @@ that block.
 
 - Any computation must be reproducible **without** the manifest. Deleting `.kb/`
   and recomputing from files must yield an identical stale/OK/uncompiled set.
+- **Staleness always re-hashes raw content.** `(mtime, size)` are recorded for
+  information only and are *never* trusted to skip a re-hash — otherwise an edit
+  preserving both could hide a byte change and falsely report dependents fresh.
+  The manifest's stored hashes are used only to annotate *which* source changed.
 - It is written **atomically** (temp file + rename). A corrupt or stale manifest
   is treated as a cache miss, never an error.
 - It may be committed to git for fast first reads; on a merge conflict, discard

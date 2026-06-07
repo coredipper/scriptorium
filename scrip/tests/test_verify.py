@@ -1,7 +1,15 @@
 import pytest
 
-from scrip import anchors
+from scrip import anchors, cli
 from scrip.errors import DataError
+
+
+def test_cli_verify_fails_on_ambiguous_by_default(kb):
+    # a quote that occurs twice in the source -> AMBIGUOUS
+    kb.add_raw("a", "# A\n\nalpha beta gamma. alpha beta gamma.\n")
+    kb.add_claim("clm_1", "a", "alpha beta gamma.")
+    assert cli.main(["verify", "--root", str(kb.root)]) == 1
+    assert cli.main(["verify", "--allow-ambiguous", "--root", str(kb.root)]) == 0
 
 
 def test_verify_clean_vault(kb):

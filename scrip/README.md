@@ -21,7 +21,7 @@ uv run --project scrip scrip --help
 | Command | What it does |
 |---|---|
 | `scrip status` | Report `STALE` / `OK` / `UNCOMPILED` artifacts from the dependency graph. `--no-cache` recomputes from files; `--rebuild-manifest` regenerates the cache. |
-| `scrip verify` | Check every provenance anchor still resolves to text in its source; check referenced sources exist and `claim_id`s are unique. `--strict` fails on `AMBIGUOUS` too. |
+| `scrip verify` | Check every provenance anchor still resolves to text in its source; check referenced sources exist and `claim_id`s are unique. Fails on `BROKEN` and `AMBIGUOUS` by default; `--allow-ambiguous` downgrades `AMBIGUOUS` to a warning. |
 | `scrip query [claims\|entities\|edges\|contradictions]` | Structured query over `vault/facts/*.ndjson` via DuckDB. `--sql "<duckdb>"`, `--where`, `--limit`. |
 | `scrip index` | v0 stub for the embeddings retrieval rung. |
 

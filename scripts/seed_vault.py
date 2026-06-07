@@ -48,7 +48,9 @@ SOURCES: dict[str, tuple[dict, str]] = {
         "is regenerable. Good answers should be filed back as wiki pages so the "
         "knowledge compounds.\n\n"
         "What is left undefined: how freshness is tracked, how a claim is tied "
-        "back to its source, and what 'lint' actually checks.\n",
+        "back to its source, and what 'lint' actually checks.\n\n"
+        "A later clarification: the wiki is a cache over the raw sources, never a "
+        "replacement for them.\n",
     ),
     "motherduck-duckdb-obsidian": (
         {
@@ -119,6 +121,18 @@ SOURCES: dict[str, tuple[dict, str]] = {
         "More fundamentally: retrieval surfaces fragments; it does not synthesize "
         "understanding. That is the gap a compiled wiki layer is meant to fill.\n",
     ),
+    "contrarian-rag": (
+        {
+            "title": "A contrarian take on chunking",
+            "author": "(background reading)",
+            "url": "https://example.org/notes/contrarian",
+            "retrieved": "2026-06-07",
+        },
+        "# Reading note — a contrarian take on chunking\n\n"
+        "Fixed-size chunking does not meaningfully harm retrieval quality in "
+        "practice. In practice, the impact depends on chunk size and a good "
+        "reranker.\n",
+    ),
 }
 
 
@@ -150,6 +164,15 @@ CLAIMS = [
     ("commonplace-books",
      "The value is in the curation and cross-referencing, not the raw collection.",
      "commonplace book", "values", "curation over collection", "asserts", ["history"]),
+    # A deliberate contradiction with clm_0007 (same subject+predicate, opposing
+    # polarity, different source) so `scrip query contradictions` has a live pair,
+    # plus a qualifying claim recording the reconciliation.
+    ("contrarian-rag",
+     "Fixed-size chunking does not meaningfully harm retrieval quality in practice.",
+     "fixed-size chunking", "discards", "document structure", "denies", ["retrieval", "chunking"]),
+    ("contrarian-rag",
+     "In practice, the impact depends on chunk size and a good reranker.",
+     "fixed-size chunking", "discards", "document structure", "qualifies", ["retrieval", "chunking"]),
 ]
 
 
@@ -259,6 +282,25 @@ WIKI_PAGES = [
              "DuckDB runs locally via WASM, with no server, and can query Parquet, CSV, and JSON."),
         ],
     },
+    {
+        "path": WIKI / "concepts" / "why-immutability.md",
+        "fm": {
+            "id": "concept/why-immutability",
+            "type": "wiki.concept",
+            "title": "Why raw sources are immutable",
+            "derived-from": ["raw/karpathy-llm-wiki"],
+            "confidence": 0.8,
+        },
+        "body": (
+            "Immutability of `raw/` is load-bearing: because anchors hash the "
+            "stored source text, citations only break on a deliberate re-ingest, "
+            "never on a reformat.[^a1]"
+        ),
+        "notes": [
+            ("a1", "karpathy-llm-wiki",
+             "Raw sources stay immutable; the wiki layer is regenerable."),
+        ],
+    },
 ]
 
 
@@ -292,6 +334,19 @@ def write_ndjson(path: Path, rows: list[dict]) -> None:
 
 
 def main() -> None:
+    # 0. rebuild from this single source of truth: clear previously generated
+    #    content so records removed from this script never linger in the vault.
+    for d in (RAW, FACTS, WIKI / "concepts", WIKI / "entities"):
+        d.mkdir(parents=True, exist_ok=True)
+    for p in list(RAW.glob("*.md")) + list(RAW.glob("*.meta.yaml")):
+        p.unlink()
+    for p in FACTS.glob("*.ndjson"):
+        p.unlink()
+    (FACTS / "_meta.yaml").unlink(missing_ok=True)
+    for sub in ("concepts", "entities"):
+        for p in (WIKI / sub).glob("*.md"):
+            p.unlink()
+
     # 1. raw notes + sidecars
     for slug, (meta, text) in SOURCES.items():
         (RAW / f"{slug}.md").write_text(text, encoding="utf-8")
@@ -345,17 +400,24 @@ def main() -> None:
         page["path"].write_text(frontmatter.dump(page["fm"], body), encoding="utf-8")
 
     # index + log (untracked)
+    concept_links = "".join(
+        f"- [[{p['fm']['id'].split('/')[-1]}]]\n"
+        for p in WIKI_PAGES
+        if p["fm"]["type"] == "wiki.concept"
+    )
+    entity_links = "".join(
+        f"- [[{p['fm']['id'].split('/')[-1]}]]\n"
+        for p in WIKI_PAGES
+        if p["fm"]["type"] == "wiki.entity"
+    )
     (WIKI / "index.md").write_text(
-        "# Index\n\n## Concepts\n"
-        "- [[compilation-over-retrieval]]\n"
-        "- [[provenance-and-staleness]]\n"
-        "- [[the-answer-ladder]]\n\n"
-        "## Entities\n- [[duckdb]]\n",
+        f"# Index\n\n## Concepts\n{concept_links}\n## Entities\n{entity_links}",
         encoding="utf-8",
     )
     (WIKI / "log.md").write_text(
-        "# Log\n\n- 2026-06-07 — seeded vault from 5 reading notes; "
-        "compiled 4 wiki pages and 8 claims.\n",
+        f"# Log\n\n- 2026-06-07 — seeded vault from {len(SOURCES)} reading notes; "
+        f"compiled {len(WIKI_PAGES)} wiki pages and {len(claim_rows)} claims "
+        f"(incl. a contradiction pair reconciled with a 'qualifies' claim).\n",
         encoding="utf-8",
     )
     print(f"seeded {len(SOURCES)} sources, {len(WIKI_PAGES)} wiki pages, "

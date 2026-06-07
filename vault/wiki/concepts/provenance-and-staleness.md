@@ -7,7 +7,7 @@ derived-from:
 - raw/karpathy-llm-wiki
 confidence: 0.8
 input-hash: sha256:83e035cbed4b4ee686c9f1a1522ab8cbfe717464e6bcaf038cc45bacbc5ae55f
-last-compiled: '2026-06-07T20:59:44Z'
+last-compiled: '2026-06-07T21:20:14Z'
 ---
 MotherDuck's sentinel is the seed of a general idea: a frozen result is wrapped in a marker that records what produced it, so a refresh knows what to replace.[^a1] Generalize that marker from a single SQL block to *any* derived artifact and you get a content-hash dependency graph — the concrete definition of the 'freshness' and 'lint' that compile-only designs leave undefined.
 

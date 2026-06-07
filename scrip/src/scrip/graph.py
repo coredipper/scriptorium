@@ -23,37 +23,30 @@ from .errors import DataError
 # --------------------------------------------------------------------------- #
 # Scanning
 # --------------------------------------------------------------------------- #
-def scan_raw(root: Path, cache: dict | None = None) -> dict:
-    """Hash every ``vault/raw/*.md`` source (+ its blocks). Reuses cached hashes
-    when a file's ``(mtime, size)`` is unchanged."""
+def scan_raw(root: Path) -> dict:
+    """Hash every ``vault/raw/*.md`` source (+ its blocks) from its current bytes.
+
+    Hashing is **always** performed: status correctness must never depend on a
+    cache that could hide a byte change (e.g. an edit that preserves both mtime
+    and size). For small/medium vaults this is cheap. ``(mtime, size)`` are still
+    recorded in the manifest for informational use, but are never trusted to skip
+    a re-hash; a future explicit ``--fast`` mode could reintroduce that shortcut
+    as an opt-in acceleration.
+    """
     out: dict = {}
     rd = raw_dir(root)
     if not rd.is_dir():
         return out
-    cache_raw = (cache or {}).get("raw", {})
     for path in sorted(rd.glob("*.md")):
         rid = "raw/" + path.stem
+        data = path.read_bytes()
         st = path.stat()
-        mtime, size = st.st_mtime, st.st_size
-        c = cache_raw.get(rid)
-        if (
-            c
-            and c.get("mtime") == mtime
-            and c.get("size") == size
-            and "content_hash" in c
-        ):
-            content_hash = c["content_hash"]
-            blocks = c.get("blocks", [])
-        else:
-            data = path.read_bytes()
-            content_hash = hashing.sha256_bytes(data)
-            blocks = blocks_mod.split_blocks(data.decode("utf-8"))
         out[rid] = {
             "path": str(path.relative_to(root)),
-            "content_hash": content_hash,
-            "blocks": blocks,
-            "mtime": mtime,
-            "size": size,
+            "content_hash": hashing.sha256_bytes(data),
+            "blocks": blocks_mod.split_blocks(data.decode("utf-8")),
+            "mtime": st.st_mtime,
+            "size": st.st_size,
         }
     return out
 
@@ -114,8 +107,10 @@ def _dep_hash(dep_id: str, raw: dict) -> str | None:
 # Status
 # --------------------------------------------------------------------------- #
 def compute_status(root: Path, use_cache: bool = True, rebuild: bool = False) -> dict:
+    # The cache is loaded only to annotate *which* source changed; staleness
+    # itself is always computed from freshly-hashed files (see scan_raw).
     cache = manifest_mod.load(root) if use_cache else None
-    raw = scan_raw(root, cache)
+    raw = scan_raw(root)
     derived = scan_derived(root)
 
     # Which sources changed vs the cached hashes (best-effort annotation only).
@@ -197,7 +192,7 @@ def stamp_artifacts(root: Path, paths: list[str] | None = None) -> list[dict]:
     declares ``derived-from``; ``scrip stamp`` records the provenance hash so it
     is always trustworthy. With no ``paths``, every derived artifact is stamped.
     """
-    raw = scan_raw(root, None)
+    raw = scan_raw(root)
     derived = scan_derived(root)
 
     if paths:

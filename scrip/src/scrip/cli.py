@@ -75,7 +75,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
         _emit(result)
     else:
         anchors.print_verify(result)
-    failed = bool(result["broken"]) or (args.strict and bool(result["ambiguous"]))
+    # Ambiguous anchors fail by default: a citation that does not resolve
+    # *uniquely* is a provenance weakness the protocol requires fixing.
+    failed = bool(result["broken"]) or (
+        not args.allow_ambiguous and bool(result["ambiguous"])
+    )
     return 1 if failed else 0
 
 
@@ -196,9 +200,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="check that every provenance anchor still resolves to its source",
     )
     pv.add_argument(
-        "--strict",
+        "--allow-ambiguous",
         action="store_true",
-        help="treat AMBIGUOUS anchors as failures too",
+        help="downgrade AMBIGUOUS anchors to a warning (default: they fail)",
     )
     pv.set_defaults(func=cmd_verify)
 

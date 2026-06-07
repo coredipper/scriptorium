@@ -8,7 +8,7 @@ derived-from:
 - raw/ganglani-local-rag
 confidence: 0.85
 input-hash: sha256:40196025b8b114a48e753cdbcbc6c4e6e6d67639d54ddfae480139faeacf9410
-last-compiled: '2026-06-07T20:59:44Z'
+last-compiled: '2026-06-07T21:20:14Z'
 ---
 Compile, cache, and retrieve are not rival architectures but rungs of one policy. The default is cached: when the compiled layer covers a question, the agent reads the precomputed note with no re-fetch cost.[^a1] The system stays cached by default, live when it matters[^a2] — recompiling only the slice that has gone stale, and retrieving from raw sources only on a genuine miss.
 
