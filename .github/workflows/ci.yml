@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Run scrip test suite (hermetic — no network, no LLM)
+        working-directory: scrip
+        run: uv run pytest -q
+
+      - name: Vault health — staleness, provenance, and facts must be clean
+        run: |
+          uv run --project scrip scrip status --root .
+          uv run --project scrip scrip verify --root .
+          uv run --project scrip scrip query --sql "SELECT count(*) AS claims FROM claims" --root .

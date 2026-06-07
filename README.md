@@ -23,6 +23,7 @@ still resolve). See **[RATIONALE.md](RATIONALE.md)** for the full argument and
 SPEC.md         the technology-agnostic file contract (the durable artifact)
 RATIONALE.md    why this beats compile-only / cache-only / retrieve-only
 AGENT.md        the protocol the maintaining agent follows
+HOWTO.md        practical day-to-day operator guide (start here to *use* it)
 vault/          a real, dogfooded instance (reading notes on the 3 designs above)
   raw/          immutable sources (+ .meta.yaml sidecars)
   facts/        structured extractions, queryable as data (NDJSON)
@@ -33,6 +34,8 @@ adapters/       deferred bindings (Obsidian, embeddings) — see adapters/README
 ```
 
 The contract is the point; `scrip` and `vault/` are one conforming instance of it.
+
+**Want to actually use it day to day?** See **[HOWTO.md](HOWTO.md)**.
 
 ## Quickstart
 
