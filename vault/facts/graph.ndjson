@@ -1,0 +1,5 @@
+{"src": "raw/motherduck-duckdb-obsidian", "dst": "raw/karpathy-llm-wiki", "kind": "cites"}
+{"src": "entity/duckdb", "dst": "entity/motherduck", "kind": "made-by"}
+{"src": "entity/llm-c", "dst": "entity/karpathy", "kind": "made-by"}
+{"src": "raw/ganglani-local-rag", "dst": "entity/rag", "kind": "about"}
+{"src": "concept/the-answer-ladder", "dst": "concept/compilation-over-retrieval", "kind": "builds-on"}

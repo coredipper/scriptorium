@@ -1,0 +1,33 @@
+[project]
+name = "scrip"
+version = "0.1.0"
+description = "Deterministic scriptorium-keeper: staleness, provenance integrity, and fact queries for an agent-compiled knowledge base"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "duckdb>=1.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+scrip = "scrip.cli:main"
+
+[project.optional-dependencies]
+# The retrieval rung (rung 4). Optional: without it, `scrip search` uses grep.
+# model2vec ships small static embeddings (no torch), fast on CPU.
+embeddings = ["model2vec>=0.3", "numpy>=1.24"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scrip"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

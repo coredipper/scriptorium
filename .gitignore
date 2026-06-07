@@ -1,0 +1,25 @@
+# Python / uv
+.venv/
+**/.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# DuckDB scratch / temp writes
+*.duckdb
+*.duckdb.wal
+*.tmp
+
+# OS
+.DS_Store
+
+# Embeddings index: a large, regenerable binary cache (rebuild with `scrip index`)
+/.kb/embeddings/
+
+# NOTE: .kb/manifest.json is intentionally NOT ignored — it is a committed,
+# regenerable cache (see SPEC §8). On a merge conflict, discard it and run
+# `scrip status --rebuild-manifest`.
+# roborev snapshots
+/.roborev/

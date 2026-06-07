@@ -1,0 +1,16 @@
+id: facts/core
+type: facts.set
+derived-from:
+- raw/karpathy-llm-wiki
+- raw/motherduck-duckdb-obsidian
+- raw/ganglani-local-rag
+- raw/commonplace-books
+- raw/rag-chunking-limits
+- raw/contrarian-rag
+members:
+- facts/entities.ndjson
+- facts/claims.ndjson
+- facts/graph.ndjson
+confidence: 0.85
+input-hash: sha256:b492da2986a0b2bff230e6e03ef405a4c72bb3ed59593c661ee7293e36b84f8f
+last-compiled: '2026-06-07T20:59:45Z'

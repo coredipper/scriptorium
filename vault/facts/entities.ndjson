@@ -1,0 +1,7 @@
+{"entity_id": "entity/karpathy", "name": "Andrej Karpathy", "kind": "person", "tags": ["author"]}
+{"entity_id": "entity/motherduck", "name": "MotherDuck", "kind": "org", "tags": ["vendor"]}
+{"entity_id": "entity/duckdb", "name": "DuckDB", "kind": "system", "tags": ["database"]}
+{"entity_id": "entity/obsidian", "name": "Obsidian", "kind": "system", "tags": ["editor"]}
+{"entity_id": "entity/llm-c", "name": "llm.c", "kind": "system", "tags": ["inference"]}
+{"entity_id": "entity/rag", "name": "Retrieval-Augmented Generation", "kind": "concept", "tags": ["retrieval"]}
+{"entity_id": "entity/commonplace-book", "name": "Commonplace book", "kind": "concept", "tags": ["history"]}

@@ -1,0 +1,7 @@
+# The manifest is a regenerable cache, not source of truth. Mark it generated so
+# diffs are collapsed by default. On a merge conflict, do not hand-merge — discard
+# and regenerate with: scrip status --rebuild-manifest
+.kb/manifest.json linguist-generated=true
+
+# The facts layer is line-delimited JSON: keep it as plain text, diff line-by-line.
+*.ndjson text

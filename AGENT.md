@@ -1,0 +1,103 @@
+# AGENT.md — the scriptorium protocol
+
+You are the scribe. You own **judgment**: what to ingest, how to synthesize, when
+two claims conflict, whether an answer deserves to become a page. The `scrip` CLI
+owns **determinism**: hashing, staleness, provenance integrity, fact queries.
+Never hand-compute a hash or guess whether something is stale — ask `scrip`.
+
+Golden rules:
+- **Never edit `vault/raw/`** after ingest. It is immutable. A changed source is a
+  *re-ingest*, which is a tracked event.
+- **Never silently overwrite** a claim that a new source contradicts. Reconcile.
+- After any compile or extract, leave the vault **green**: `scrip status` exits 0
+  and `scrip verify` exits 0.
+
+The data contract these steps assume is normative in [SPEC.md](SPEC.md).
+
+---
+
+## INGEST — bring a source in
+
+1. Obtain the source text (extract from PDF/HTML if needed). Save it verbatim to
+   `vault/raw/<slug>.md`. This stored text is canonical; do not touch it again.
+2. Write `vault/raw/<slug>.meta.yaml` with `title`, `author`, `url`, `retrieved`.
+3. `scrip status --rebuild-manifest` — the new source registers and shows as
+   `UNCOMPILED` (nothing depends on it yet).
+
+## COMPILE — synthesize a wiki page
+
+1. Read the relevant `raw/` source(s).
+2. Write or update `vault/wiki/concepts/<slug>.md` (or `entities/<slug>.md`):
+   - frontmatter: `id`, `type`, `title`, `derived-from: [raw/…]`, `confidence`.
+   - prose: synthesize. For each claim-bearing sentence, add a footnote anchor
+     quoting the exact source text:
+     `[^a1]: anchor=raw/<slug>#<anchor>  "short label"`.
+     Compute `<anchor>` by quoting the source verbatim (the reference tool exposes
+     `make_anchor`; or quote and let `verify` confirm).
+3. `scrip stamp vault/wiki/concepts/<slug>.md` — records the correct `input-hash`
+   + `last-compiled` deterministically.
+4. `scrip verify` — fix any `BROKEN`/`AMBIGUOUS` anchors (lengthen the quote until
+   unique) until it exits 0.
+
+## EXTRACT — pull structured facts
+
+1. From the `raw/` source(s), append records to:
+   - `facts/entities.ndjson` — one entity per line.
+   - `facts/claims.ndjson` — one claim per line, each with a resolvable `anchor`,
+     a `subject`/`predicate`/`object` triple, and a `polarity`
+     (`asserts`/`denies`/`qualifies`).
+   - `facts/graph.ndjson` — edges (citation/idea relations).
+2. Update `facts/_meta.yaml` `derived-from`, then `scrip stamp vault/facts/_meta.yaml`.
+3. `scrip verify` (anchors resolve) and `scrip query contradictions` (catch
+   self-conflicts before they harden).
+
+## ANSWER — the policy ladder
+
+Descend; stop at the first rung that applies (see [SPEC §9](SPEC.md#9-the-answer-policy-ladder)):
+
+1. `scrip status` the relevant artifact(s); consult `wiki/` + `scrip query` over
+   `facts/`.
+2. **Hit & fresh** → answer, citing anchors. Done. *(cheap — no re-derivation)*
+3. **Hit & stale** → recompile just that artifact (COMPILE/EXTRACT), `scrip stamp`,
+   then answer.
+4. **Miss** → `scrip search "<question>"` to retrieve candidate source blocks
+   (semantic if `scrip index` has been built with the embeddings extra, else
+   grep), synthesize an answer, cite it, then **PROMOTE** it.
+5. **Conflict surfaced** → **RECONCILE**.
+
+Append a one-line entry to `wiki/log.md` for compiles, promotions, and
+reconciliations.
+
+## PROMOTE — turn a good answer into a page
+
+1. Before creating a page, list existing `wiki/concepts/` + `entities/` and score
+   overlap with the new topic: normalized-title token overlap + shared `tags` +
+   shared `derived-from`.
+2. **High overlap** → MERGE into the existing page (append, extend `derived-from`,
+   record the absorbed id in `supersedes`). **Low** → create a new page.
+   **Middle** → you decide, but only over that small candidate set.
+3. Entity pages are strictly 1:1 with `entities.ndjson` rows. Re-`stamp` and
+   `verify` after.
+
+## RECONCILE — resolve a contradiction
+
+1. Triggered by `scrip query contradictions` (opposing `polarity`, same
+   subject+predicate, different source) **or** a `verify` `BROKEN` anchor from a
+   re-ingested source.
+2. Read both anchored spans. Decide: **supersede** (one wins; record `supersedes`),
+   **qualify** (add a `polarity: qualifies` claim and a caveat in the page), or
+   **keep-both** (note the disagreement explicitly).
+3. Never silent overwrite. Log the decision in `wiki/log.md`.
+
+---
+
+## Quick reference
+
+| You want to… | Command |
+|---|---|
+| see what's stale / uncompiled | `scrip status` |
+| record provenance hashes after compiling | `scrip stamp [path…]` |
+| check every citation still resolves | `scrip verify` |
+| query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |
+| retrieve source blocks (rung 4) | `scrip search "<question>"` |
+| build the semantic index (optional) | `scrip index` *(needs the `[embeddings]` extra)* |
