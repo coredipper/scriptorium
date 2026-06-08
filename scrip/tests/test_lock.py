@@ -90,6 +90,20 @@ def test_unreadable_lock_is_stale():
     assert lock.is_stale(None) is True
 
 
+def test_empty_lock_is_not_reclaimed_on_acquire(tmp_path):
+    """A lock that exists but is not yet readable may be a competing writer caught
+    between exclusive-create and payload-write. ``acquire`` must refuse it, not
+    reclaim it — otherwise two writers could both proceed. (``unlock`` may still
+    clear it as junk, since that is an explicit user action.)"""
+    p = lock_path(tmp_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("")  # empty -> _read returns None
+    with pytest.raises(errors.LockError):
+        lock.acquire(tmp_path)
+    assert p.exists()  # not silently reclaimed out from under the other writer
+    assert lock.unlock(tmp_path) is True  # explicit cleanup still works
+
+
 # --- unlock -----------------------------------------------------------------
 def test_unlock_refuses_live_lock_without_force(tmp_path):
     info = lock.acquire(tmp_path)

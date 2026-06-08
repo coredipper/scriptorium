@@ -92,6 +92,17 @@ def test_duplicate_blocks_get_distinct_ids():
     assert dup_ids[1] == f"{dup_ids[0]}:1"
 
 
+def test_normalized_equivalent_blocks_share_base_id():
+    """Because ids key on the *normalized* digest, blocks that differ only by
+    case/whitespace are duplicates too — so the occurrence-suffix edge covers
+    normalized-identical blocks, not just byte-identical ones."""
+    # bs[0] is the heading; bs[1] and bs[2] are the two normalized-equivalent paras
+    bs = blocks.split_blocks("# T\n\nRepeat   ME.\n\nrepeat me.\n")
+    assert bs[1]["block_id"] != bs[2]["block_id"]  # disambiguated...
+    assert bs[2]["block_id"] == f"{bs[1]['block_id']}:1"  # ...by occurrence suffix
+    assert bs[1]["hash"] != bs[2]["hash"]  # even though their exact bytes differ
+
+
 def _dup_ids(text: str, needle: str) -> list[str]:
     return [
         b["block_id"]
@@ -101,9 +112,9 @@ def _dup_ids(text: str, needle: str) -> list[str]:
 
 
 def test_duplicate_insertion_shifts_occurrence_suffix():
-    """Documented residual limitation (SPEC §7.2/§11): byte-identical blocks are
-    disambiguated by occurrence order, so prepending an identical copy shifts the
-    suffixes of the existing duplicates. Unique blocks are unaffected; only a
+    """Documented residual limitation (SPEC §7.2/§11): normalized-identical blocks
+    are disambiguated by occurrence order, so prepending an identical copy shifts
+    the suffixes of the existing duplicates. Unique blocks are unaffected; only a
     dependency on a *duplicated* block is positional."""
     two = _dup_ids("# T\n\ndup.\n\ndup.\n", "dup.")
     assert ":" not in two[0]

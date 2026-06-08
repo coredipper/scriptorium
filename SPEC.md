@@ -208,10 +208,12 @@ Consequences:
 - **Reflow-stable identity.** Whitespace/case reformatting does not change a
   block's id; the separate exact-slice `hash` still changes, so a dependent of a
   reflowed block goes STALE via an input-hash mismatch (§7.1), not a vanished id.
-- **Duplicate disambiguation.** Byte-identical blocks share a base id; the first
-  keeps the bare id and later repeats take an occurrence suffix (`…:1`, `…:2`).
-  A dependency on a *duplicated* block is inherently positional and may shift if
-  an earlier identical copy is inserted — the one residual edge (§11 Versioning).
+- **Duplicate disambiguation.** Blocks with identical *normalized* text
+  (byte-identical, or differing only in case/whitespace) share a base id; the
+  first keeps the bare id and later repeats take an occurrence suffix (`…:1`,
+  `…:2`). A dependency on such a *duplicated* block is inherently positional and
+  may shift if an earlier normalized-identical copy is inserted — the one residual
+  edge (§11 Versioning).
 
 Whole-file dependencies remain the safe default; block-precise dependencies are
 **opt-in**.
@@ -296,16 +298,19 @@ behaviours; their exit codes are part of the contract surface
   `version: 1` manifest holds positional ids and is simply discarded as a cache
   miss and regenerated (the manifest is never truth, §8). Whole-file dependencies
   are byte-for-byte unaffected. The one residual limitation is duplicate blocks:
-  byte-identical blocks are disambiguated by occurrence order, so a dependency on
-  one of several identical blocks can still shift if an earlier copy is inserted.
+  normalized-identical blocks (byte-identical, or differing only in
+  case/whitespace) are disambiguated by occurrence order, so a dependency on one
+  of several such blocks can still shift if an earlier copy is inserted.
 - **Concurrency (advisory lock).** Mutating commands take an advisory lock at
-  `.kb/lock` — a small JSON record `{pid, host, acquired_at}` created atomically
-  (`O_CREAT|O_EXCL`); reads (`status`/`verify`/`query`/`search`) never lock. A
-  lock whose holder is a dead process *on this host* is reclaimed automatically on
-  the next acquire; otherwise a blocked write fails fast (exit 2) and
-  `scrip unlock [--force]` clears a stuck lock. It is advisory, not a kernel
-  mutex (a small TOCTOU window remains when reclaiming a stale lock) and not part
-  of the files-are-truth contract — deleting it never affects `status`/`verify`.
+  `.kb/lock` — a small JSON record `{pid, host, acquired_at}` *published
+  atomically* (written to a temp file, then hard-linked into place, so the lock
+  is never observed empty or half-written); reads
+  (`status`/`verify`/`query`/`search`) never lock. A lock whose holder is a
+  *provably-dead* process on this host is reclaimed automatically on the next
+  acquire; a live, other-host, or not-yet-readable lock is left alone and the
+  blocked write fails fast (exit 2), with `scrip unlock [--force]` to clear a
+  stuck lock. It is advisory, not a kernel mutex, and not part of the
+  files-are-truth contract — deleting it never affects `status`/`verify`.
 - **Optional adapters** (outside the core contract): an embeddings retrieval rung
   (`scrip index` / `scrip search`, via the `[embeddings]` extra) and an Obsidian
   browsing layer (`adapters/obsidian/`).

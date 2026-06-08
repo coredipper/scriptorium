@@ -13,10 +13,11 @@ correct (see SPEC §7.2).
 ``block_id`` is **content-derived**: a short digest of the block's *normalized*
 text (the same normalization provenance anchors use), so it is independent of
 position. Inserting a block elsewhere leaves every other block's id untouched —
-the insertion-stability that positional ids lacked. Byte-identical duplicate
-blocks share a base id and are disambiguated by an occurrence suffix
-(``…:1``, ``…:2``); the first occurrence keeps the bare id so it stays stable
-when a duplicate is appended later.
+the insertion-stability that positional ids lacked. Blocks whose *normalized*
+text is identical (byte-identical, or differing only in case/whitespace) share a
+base id and are disambiguated by an occurrence suffix (``…:1``, ``…:2``); the
+first occurrence keeps the bare id so it stays stable when a duplicate is
+appended later.
 """
 
 from __future__ import annotations
@@ -79,8 +80,8 @@ def split_blocks(text: str) -> list[dict]:
 
 def _block_id(slice_text: str, seen: dict[str, int]) -> str:
     """Content-derived id for a block: ``b`` + 12 hex of the normalized text's
-    digest, with a ``:n`` suffix for byte-identical repeats. ``seen`` accumulates
-    base-id occurrence counts across one ``split_blocks`` call.
+    digest, with a ``:n`` suffix for normalized-identical repeats. ``seen``
+    accumulates base-id occurrence counts across one ``split_blocks`` call.
 
     Identity is taken over the *normalized* text so reformatting (whitespace,
     case) does not change a block's id; the separate ``hash`` over the exact

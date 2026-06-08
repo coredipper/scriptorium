@@ -62,11 +62,13 @@ def _pid_alive(pid: int) -> bool:
 
 
 def is_stale(info: dict | None) -> bool:
-    """True iff the lock's holder is known-dead and reclaiming is safe.
+    """True iff this lock is safe for an *explicit* ``unlock`` to remove.
 
-    An unreadable/empty lock is reclaimable. A lock from another host is *not*
-    stale (we cannot prove its process dead). Otherwise it is stale exactly when
-    its pid is no longer alive here.
+    An unreadable/empty lock is removable junk here. A lock from another host is
+    *not* stale (we cannot prove its process dead). Otherwise it is stale exactly
+    when its pid is no longer alive here. Note ``acquire`` uses the stricter
+    :func:`_reclaimable` instead — it must never reclaim an empty lock, which may
+    be a competing writer caught mid-creation.
     """
     if not info:
         return True
@@ -78,6 +80,20 @@ def is_stale(info: dict | None) -> bool:
     return not _pid_alive(pid)
 
 
+def _reclaimable(info: dict | None) -> bool:
+    """Whether ``acquire`` may auto-break this lock. Stricter than
+    :func:`is_stale`: only a *fully-readable* lock whose holder is a dead process
+    on this host. An unreadable/empty lock is NOT reclaimable — it may be another
+    writer between exclusive-create and payload-write — so it requires an explicit
+    ``scrip unlock``."""
+    if not info or info.get("host") != socket.gethostname():
+        return False
+    pid = info.get("pid")
+    if not isinstance(pid, int):
+        return False
+    return not _pid_alive(pid)
+
+
 def _describe(info: dict | None) -> str:
     if not info:
         return "an unreadable lock file"
@@ -85,14 +101,27 @@ def _describe(info: dict | None) -> str:
 
 
 def _create(path: Path, payload: bytes) -> None:
-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-    with os.fdopen(fd, "wb") as f:
-        f.write(payload)
+    """Atomically publish a fully-written lock file. Write the payload to a
+    per-pid temp file, then hard-link it into place: ``os.link`` is atomic and
+    raises ``FileExistsError`` if the lock is already held, so the lock is never
+    observed empty or half-written (closing the create-then-write race)."""
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(payload)
+        os.link(tmp, path)  # atomic exclusive publish; raises if lock held
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
 
 
 def acquire(root: Path) -> dict:
-    """Take the lock, returning the holder info. Reclaims a stale lock once;
-    raises :class:`LockError` (exit 2) if the lock looks live."""
+    """Take the lock, returning the holder info. Reclaims a *provably-dead* lock
+    once; raises :class:`LockError` (exit 2) if the lock looks live or is being
+    created by another writer."""
     p = lock_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
     info = _holder_info()
@@ -104,7 +133,12 @@ def acquire(root: Path) -> dict:
         pass
 
     existing = _read(p)
-    if not is_stale(existing):
+    if not _reclaimable(existing):
+        if existing is None:
+            raise LockError(
+                ".kb/lock is held but not yet readable (another writer may be "
+                "acquiring it). Retry; run `scrip unlock --force` if it is stuck."
+            ) from None
         raise LockError(
             f"vault is locked by another writer ({_describe(existing)}). Wait for "
             f"it to finish, or run `scrip unlock --force` if it is stuck."

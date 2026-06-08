@@ -67,9 +67,10 @@ at compile time, and amortize over every future read.
   never flaky-flag and never silently overwrite than catch every semantic clash.
 - **Block ids are content-derived** (SPEC v2), so inserting a paragraph no longer
   renumbers others and block-precise dependencies are insertion-stable; the one
-  residual edge is *byte-identical duplicate* blocks, disambiguated by occurrence
-  order (see [SPEC §7.2](SPEC.md#72-sub-source-granularity-blocks)). Whole-file
-  dependencies remain the safe default.
+  residual edge is *normalized-identical duplicate* blocks (byte-identical, or
+  differing only in case/whitespace), disambiguated by occurrence order (see
+  [SPEC §7.2](SPEC.md#72-sub-source-granularity-blocks)). Whole-file dependencies
+  remain the safe default.
 - **Single-writer** in v0. Concurrent agents need an advisory lock, deferred.
 
 The point is not to be clever. It is to make *staleness* and *provenance* —
