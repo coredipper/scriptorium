@@ -84,10 +84,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_stamp(args: argparse.Namespace) -> int:
-    from . import graph
+    from . import graph, lock
 
     root = resolve_root(args.root)
-    stamped = graph.stamp_artifacts(root, args.paths or None)
+    with lock.write_lock(root):
+        stamped = graph.stamp_artifacts(root, args.paths or None)
     if args.json:
         _emit({"stamped": stamped})
     else:
@@ -154,6 +155,18 @@ def cmd_search(args: argparse.Namespace) -> int:
             print(f"    {r['snippet']}")
         if not out["results"]:
             print("  (no matches)")
+    return 0
+
+
+def cmd_unlock(args: argparse.Namespace) -> int:
+    from . import lock
+
+    root = resolve_root(args.root)
+    removed = lock.unlock(root, force=args.force)
+    if args.json:
+        _emit({"removed": removed})
+    else:
+        print("removed .kb/lock" if removed else "no lock to remove")
     return 0
 
 
@@ -249,6 +262,18 @@ def build_parser() -> argparse.ArgumentParser:
     psr.add_argument("query", help="the question / search text")
     psr.add_argument("-k", type=int, default=5, help="number of results (default 5)")
     psr.set_defaults(func=cmd_search)
+
+    pul = sub.add_parser(
+        "unlock",
+        parents=[common],
+        help="remove a stale .kb/lock (use --force to break a live one)",
+    )
+    pul.add_argument(
+        "--force",
+        action="store_true",
+        help="remove the lock even if its holder still looks alive",
+    )
+    pul.set_defaults(func=cmd_unlock)
 
     return p
 

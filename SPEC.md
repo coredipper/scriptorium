@@ -235,6 +235,10 @@ Whole-file dependencies remain the safe default; block-precise dependencies are
 - It may be committed to git for fast first reads; on a merge conflict, discard
   and regenerate (`scrip status --rebuild-manifest`).
 
+`.kb/` holds only regenerable state: the manifest, the optional embeddings index
+(`.kb/embeddings/`), and the advisory write lock (`.kb/lock`, §11). None are the
+source of truth; deleting `.kb/` and recomputing from `vault/` must be a no-op.
+
 ---
 
 ## 9. The answer policy ladder
@@ -294,7 +298,14 @@ behaviours; their exit codes are part of the contract surface
   are byte-for-byte unaffected. The one residual limitation is duplicate blocks:
   byte-identical blocks are disambiguated by occurrence order, so a dependency on
   one of several identical blocks can still shift if an earlier copy is inserted.
+- **Concurrency (advisory lock).** Mutating commands take an advisory lock at
+  `.kb/lock` — a small JSON record `{pid, host, acquired_at}` created atomically
+  (`O_CREAT|O_EXCL`); reads (`status`/`verify`/`query`/`search`) never lock. A
+  lock whose holder is a dead process *on this host* is reclaimed automatically on
+  the next acquire; otherwise a blocked write fails fast (exit 2) and
+  `scrip unlock [--force]` clears a stuck lock. It is advisory, not a kernel
+  mutex (a small TOCTOU window remains when reclaiming a stale lock) and not part
+  of the files-are-truth contract — deleting it never affects `status`/`verify`.
 - **Optional adapters** (outside the core contract): an embeddings retrieval rung
   (`scrip index` / `scrip search`, via the `[embeddings]` extra) and an Obsidian
-  browsing layer (`adapters/obsidian/`). **Deferred:** multi-writer locking
-  (`.kb/lock`).
+  browsing layer (`adapters/obsidian/`).

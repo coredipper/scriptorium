@@ -5,7 +5,7 @@ Exit-code contract (uniform across subcommands):
     0  clean / success
     1  actionable finding (stale artifacts; broken citations) -- NOT an exception,
        it is a normal return value the agent branches on
-    2  usage error (bad arguments, missing root)
+    2  usage error (bad arguments, missing root, write blocked by the lock)
     3  data error (malformed frontmatter, unreadable NDJSON, missing source)
     4  internal error (any uncaught exception)
 
@@ -34,3 +34,10 @@ class DataError(ScripError):
     a referenced source that does not exist, duplicate ids, ...)."""
 
     exit_code = 3
+
+
+class LockError(ScripError):
+    """A mutating command was blocked because another writer holds ``.kb/lock``.
+    Maps to the usage exit code (2): it is an operational refusal, not bad data."""
+
+    exit_code = 2
