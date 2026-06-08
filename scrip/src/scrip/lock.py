@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -102,18 +103,23 @@ def _describe(info: dict | None) -> str:
 
 def _create(path: Path, payload: bytes) -> None:
     """Atomically publish a fully-written lock file. Write the payload to a
-    per-pid temp file, then hard-link it into place: ``os.link`` is atomic and
-    raises ``FileExistsError`` if the lock is already held, so the lock is never
-    observed empty or half-written (closing the create-then-write race)."""
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    *uniquely-named* temp file in the lock directory, then hard-link it into
+    place: ``os.link`` is atomic and raises ``FileExistsError`` iff the lock is
+    already held, so the lock is never observed empty or half-written.
+
+    The temp name comes from ``mkstemp`` (random, never reused), so a temp left by
+    a crashed process can never collide with a new acquire — and the only
+    ``FileExistsError`` that escapes is the genuine ``os.link`` "lock held" case,
+    not a temp-creation clash."""
+    fd, tmpname = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    tmp = Path(tmpname)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(payload)
-        os.link(tmp, path)  # atomic exclusive publish; raises if lock held
+        os.link(tmp, path)  # atomic exclusive publish; raises iff lock held
     finally:
         try:
-            os.unlink(tmp)
+            tmp.unlink()
         except FileNotFoundError:
             pass
 

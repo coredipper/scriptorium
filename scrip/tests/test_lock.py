@@ -73,6 +73,21 @@ def test_release_only_removes_our_own_lock(tmp_path):
 
 
 # --- staleness --------------------------------------------------------------
+def test_leftover_temp_from_recycled_pid_does_not_block_acquire(tmp_path, monkeypatch):
+    """A temp file left by a crashed process must not be mistaken for a held lock
+    when a later process reuses its pid. The temp name must be unique, not keyed
+    on pid, so it never collides and only a real `.kb/lock` blocks acquisition."""
+    d = lock_path(tmp_path).parent
+    d.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(lock.os, "getpid", lambda: 4242)
+    (d / "lock.4242.tmp").write_text("leftover from a crashed acquire")
+    info = lock.acquire(tmp_path)  # must succeed: no real lock is held
+    try:
+        assert lock_path(tmp_path).exists()
+    finally:
+        lock.release(tmp_path, info)
+
+
 def test_stale_lock_is_reclaimed_on_acquire(tmp_path):
     _write_lock_file(tmp_path, _dead_pid())
     info = lock.acquire(tmp_path)  # breaks the dead lock and takes it
