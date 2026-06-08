@@ -114,6 +114,11 @@ def _create(path: Path, payload: bytes) -> None:
     fd, tmpname = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
     tmp = Path(tmpname)
     try:
+        # mkstemp creates the inode 0600; os.link publishes that same inode as the
+        # lock, so restore the 0644 the lock had before mkstemp — otherwise another
+        # user on a shared checkout can't read a dead holder to reclaim it.
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o644)
         with os.fdopen(fd, "wb") as f:
             f.write(payload)
         os.link(tmp, path)  # atomic exclusive publish; raises iff lock held

@@ -4,6 +4,7 @@ with a real reaped child pid (dead on this host) rather than a guessed number.""
 import json
 import os
 import socket
+import stat
 import subprocess
 
 import pytest
@@ -49,6 +50,18 @@ def test_second_acquire_is_blocked_exit_2(tmp_path):
         with pytest.raises(errors.LockError) as ei:
             lock.acquire(tmp_path)
         assert ei.value.exit_code == 2
+    finally:
+        lock.release(tmp_path, info)
+
+
+def test_lock_file_is_group_and_other_readable(tmp_path):
+    """The published lock must stay readable by other users (mkstemp defaults to
+    0600). Otherwise, on a shared checkout, a dead lock from another user reads as
+    unreadable and is never auto-reclaimed."""
+    info = lock.acquire(tmp_path)
+    try:
+        mode = stat.S_IMODE(lock_path(tmp_path).stat().st_mode)
+        assert mode & 0o044 == 0o044  # group- and other-readable
     finally:
         lock.release(tmp_path, info)
 
