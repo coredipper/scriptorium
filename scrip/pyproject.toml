@@ -18,6 +18,11 @@ scrip = "scrip.cli:main"
 # model2vec ships small static embeddings (no torch), fast on CPU.
 embeddings = ["model2vec>=0.3", "numpy>=1.24"]
 
+# HTML/PDF extraction for `scrip ingest`. Optional: without it, ingest still
+# handles .md/.txt; HTML/PDF ask you to install this extra. trafilatura does
+# main-content extraction (markdown output keeps headings); pypdf is pure-Python.
+ingest = ["trafilatura>=1.8", "pypdf>=4.0"]
+
 [dependency-groups]
 dev = ["pytest>=8"]
 

@@ -269,6 +269,29 @@ def cmd_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ingest(args: argparse.Namespace) -> int:
+    from . import ingest, lock
+
+    root = resolve_root(args.root)
+    slug = _safe_slug(args.slug or ingest.default_slug(args.source))
+    data, kind = ingest.fetch(args.source)
+    text = ingest.extract_text(data, kind)
+    found = ingest.extract_metadata(data, kind)
+    meta = ingest.build_meta(
+        source=args.source,
+        title=args.title or found.get("title"),
+        author=args.author or found.get("author"),
+    )
+    with lock.write_lock(root):
+        written = ingest.write_source(root, slug, text, meta, overwrite=args.reingest)
+    if args.json:
+        _emit({"ingested": written["id"], "path": written["path"], "kind": kind})
+    else:
+        print(f"ingested {written['id']}  ({written['path']}, {kind})")
+        print("  next: compile a page (`scrip new` + `scrip anchor`), then `scrip stamp`")
+    return 0
+
+
 # --------------------------------------------------------------------------- #
 # Parser
 # --------------------------------------------------------------------------- #
@@ -405,6 +428,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pn.add_argument("--title", help="human title (default: the slug)")
     pn.set_defaults(func=cmd_new)
+
+    pin = sub.add_parser(
+        "ingest",
+        parents=[common],
+        help="fetch/read a source, extract canonical text, write raw/<slug>.md + .meta.yaml",
+    )
+    pin.add_argument("source", help="a URL or a local file (.md/.txt/.html/.pdf)")
+    pin.add_argument("--slug", help="vault slug (default: derived from the source name)")
+    pin.add_argument("--title", help="bibliographic title for the .meta.yaml sidecar")
+    pin.add_argument("--author", help="bibliographic author for the .meta.yaml sidecar")
+    pin.add_argument(
+        "--reingest",
+        action="store_true",
+        help="replace an existing raw source (a deliberate, tracked re-ingest)",
+    )
+    pin.set_defaults(func=cmd_ingest)
 
     return p
 

@@ -18,10 +18,13 @@ The data contract these steps assume is normative in [SPEC.md](SPEC.md).
 
 ## INGEST — bring a source in
 
-1. Obtain the source text (extract from PDF/HTML if needed). Save it verbatim to
-   `vault/raw/<slug>.md`. This stored text is canonical; do not touch it again.
-2. Write `vault/raw/<slug>.meta.yaml` with `title`, `author`, `url`, `retrieved`.
-3. `scrip status --rebuild-manifest` — the new source registers and shows as
+1. `scrip ingest <url|file> [--slug …] [--title …] [--author …]` — fetches or
+   reads the source, extracts **canonical text** (HTML/PDF via the optional
+   `[ingest]` extra; `.md`/`.txt` passthrough), and writes `vault/raw/<slug>.md` +
+   `.meta.yaml`. The stored text is canonical; do not touch it again. Raw is
+   immutable — re-ingesting a *changed* source needs `--reingest` (a tracked
+   event). (You may still hand-author the two files instead.)
+2. `scrip status --rebuild-manifest` — the new source registers and shows as
    `UNCOMPILED` (nothing depends on it yet).
 
 ## COMPILE — synthesize a wiki page
@@ -96,6 +99,7 @@ reconciliations.
 
 | You want to… | Command |
 |---|---|
+| bring a source into raw/ | `scrip ingest <url\|file> [--slug …]` |
 | see what's stale / uncompiled | `scrip status` |
 | scaffold a new wiki page | `scrip new concept\|entity <slug> --from raw/…` |
 | mint a provenance anchor for a quote | `scrip anchor "<quote>" --source raw/<slug>` |

@@ -75,10 +75,12 @@ scrip index    # embeds vault/raw/ blocks into .kb/embeddings/ (regenerable cach
 scrip search "keeping citations trustworthy when sources change"
 ```
 
-The maintaining loop (for an agent or a human): **ingest** a source into `raw/`,
-**compile** a page into `wiki/` and **extract** claims into `facts/`, then
-`scrip stamp` to record provenance and `scrip verify` to prove citations resolve.
-Full protocol in **[AGENT.md](AGENT.md)**.
+The maintaining loop (for an agent or a human): **ingest** a source into `raw/`
+(`scrip ingest <url|file>` — extracts canonical text; HTML/PDF need the optional
+`[ingest]` extra, markdown/text need nothing), **compile** a page into `wiki/`
+(`scrip new` + `scrip anchor` to mint verified citations) and **extract** claims
+into `facts/`, then `scrip stamp` to record provenance and `scrip verify` to prove
+citations resolve. Full protocol in **[AGENT.md](AGENT.md)**.
 
 ## Regenerate the example vault
 

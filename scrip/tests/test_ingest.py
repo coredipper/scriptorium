@@ -1,0 +1,161 @@
+"""`scrip ingest` — bring a source into vault/raw/.
+
+Hermetic by construction: the network *fetch* is separate from the pure
+*extract + write*, which is what these tests exercise (local bytes only). HTML/PDF
+extraction needs the optional [ingest] extra, so those tests skip when it is
+absent; the "extra missing" path is tested by monkeypatching the importer.
+"""
+
+import importlib.util
+
+import pytest
+import yaml
+
+from scrip import cli, errors, ingest, lock_path, raw_dir
+
+needs_trafilatura = pytest.mark.skipif(
+    importlib.util.find_spec("trafilatura") is None, reason="needs the [ingest] extra"
+)
+needs_pypdf = pytest.mark.skipif(
+    importlib.util.find_spec("pypdf") is None, reason="needs the [ingest] extra"
+)
+
+def _make_pdf(text: str) -> bytes:
+    """Build a valid one-page PDF whose content stream draws ``text`` (with a
+    correct xref table + startxref, which pypdf requires)."""
+    stream = b"BT /F1 24 Tf 20 60 Td (" + text.encode("latin-1") + b") Tj ET"
+    objs = [
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]"
+        b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>",
+        b"<</Length " + str(len(stream)).encode() + b">>stream\n" + stream + b"\nendstream",
+        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objs, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % i + body + b"\nendobj\n"
+    xref_pos = len(out)
+    out += b"xref\n0 %d\n" % (len(objs) + 1)
+    out += b"0000000000 65535 f \n"
+    for off in offsets:
+        out += b"%010d 00000 n \n" % off
+    out += b"trailer<</Size %d/Root 1 0 R>>\n" % (len(objs) + 1)
+    out += b"startxref\n%d\n%%%%EOF\n" % xref_pos
+    return bytes(out)
+
+
+# --- pure helpers -----------------------------------------------------------
+def test_slugify_from_url():
+    assert ingest.default_slug("https://example.com/blog/My-Post.html") == "my-post"
+
+
+def test_slugify_from_path():
+    assert ingest.default_slug("/tmp/Some Notes.md") == "some-notes"
+
+
+def test_extract_md_passthrough():
+    assert ingest.extract_text(b"# Title\n\nBody.\n", "md") == "# Title\n\nBody.\n"
+
+
+def test_extract_txt_normalizes_crlf_and_trailing_newline():
+    assert ingest.extract_text(b"a\r\nb", "txt") == "a\nb\n"
+
+
+# --- CLI: local file ingest (no extractor needed) ---------------------------
+def test_ingest_local_md_writes_raw_and_meta(kb, tmp_path):
+    src = tmp_path / "note.md"
+    src.write_text("# Note\n\nKeep this verbatim.\n", encoding="utf-8")
+    assert cli.main(["ingest", str(src), "--root", str(kb.root)]) == 0
+    assert (raw_dir(kb.root) / "note.md").read_text() == "# Note\n\nKeep this verbatim.\n"
+    meta = yaml.safe_load((raw_dir(kb.root) / "note.meta.yaml").read_text())
+    assert "retrieved" in meta
+
+
+def test_ingest_custom_slug_and_title(kb, tmp_path):
+    src = tmp_path / "x.md"
+    src.write_text("text\n")
+    cli.main(
+        ["ingest", str(src), "--slug", "my-src", "--title", "My Source", "--root", str(kb.root)]
+    )
+    meta = yaml.safe_load((raw_dir(kb.root) / "my-src.meta.yaml").read_text())
+    assert meta["title"] == "My Source"
+    assert (raw_dir(kb.root) / "my-src.md").exists()
+
+
+def test_ingest_refuses_overwrite_without_reingest(kb, tmp_path):
+    src = tmp_path / "n.md"
+    src.write_text("v1\n")
+    assert cli.main(["ingest", str(src), "--slug", "s", "--root", str(kb.root)]) == 0
+    src.write_text("v2\n")
+    assert cli.main(["ingest", str(src), "--slug", "s", "--root", str(kb.root)]) == 2
+    assert (raw_dir(kb.root) / "s.md").read_text() == "v1\n"  # immutable
+
+
+def test_ingest_reingest_overwrites(kb, tmp_path):
+    src = tmp_path / "n.md"
+    src.write_text("v1\n")
+    cli.main(["ingest", str(src), "--slug", "s", "--root", str(kb.root)])
+    src.write_text("v2 changed\n")
+    assert cli.main(["ingest", str(src), "--slug", "s", "--reingest", "--root", str(kb.root)]) == 0
+    assert (raw_dir(kb.root) / "s.md").read_text() == "v2 changed\n"
+
+
+def test_ingest_releases_lock(kb, tmp_path):
+    src = tmp_path / "n.md"
+    src.write_text("x\n")
+    cli.main(["ingest", str(src), "--slug", "s", "--root", str(kb.root)])
+    assert not lock_path(kb.root).exists()
+
+
+def test_ingest_unsafe_slug_exit_2(kb, tmp_path):
+    src = tmp_path / "n.md"
+    src.write_text("x\n")
+    assert cli.main(["ingest", str(src), "--slug", "../evil", "--root", str(kb.root)]) == 2
+
+
+def test_ingest_missing_file_exit_2(kb):
+    assert cli.main(["ingest", "/no/such/file.md", "--root", str(kb.root)]) == 2
+
+
+# --- extractors -------------------------------------------------------------
+@needs_trafilatura
+def test_extract_html_strips_boilerplate():
+    html = (
+        b"<html><head><title>T</title></head><body>"
+        b"<nav>Home About Login</nav>"
+        b"<article><h1>Main Heading</h1><p>The important load-bearing sentence.</p></article>"
+        b"<footer>Copyright boilerplate 2026</footer></body></html>"
+    )
+    text = ingest.extract_text(html, "html")
+    assert "important load-bearing sentence" in text.lower()
+    assert "copyright boilerplate" not in text.lower()
+
+
+@needs_trafilatura
+def test_ingest_html_autofills_title_from_page(kb, tmp_path):
+    src = tmp_path / "page.html"
+    src.write_text(
+        "<html><head><title>Auto-Captured Title</title></head><body><article>"
+        "<h1>Auto-Captured Title</h1><p>A sufficiently long article paragraph so the "
+        "main-content extractor keeps it as the body of the page rather than "
+        "discarding it.</p></article></body></html>",
+        encoding="utf-8",
+    )
+    cli.main(["ingest", str(src), "--slug", "page", "--root", str(kb.root)])
+    meta = yaml.safe_load((raw_dir(kb.root) / "page.meta.yaml").read_text())
+    assert meta["title"] == "Auto-Captured Title"
+
+
+def test_html_without_extra_gives_helpful_error(monkeypatch):
+    monkeypatch.setattr(ingest, "_import", lambda name: None)
+    with pytest.raises(errors.UsageError):
+        ingest.extract_text(b"<html><body>x</body></html>", "html")
+
+
+@needs_pypdf
+def test_extract_pdf_returns_text():
+    text = ingest.extract_text(_make_pdf("Hello PDF"), "pdf")
+    assert "Hello" in text
