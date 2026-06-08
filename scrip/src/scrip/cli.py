@@ -10,10 +10,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 from . import __version__, errors
+
+# A slug names a single path component (a source or page). Forbid anything that
+# could escape its directory: path separators, '..', absolute paths, leading dot.
+_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _safe_slug(slug: str, what: str = "slug") -> str:
+    if not _SLUG_RE.match(slug):
+        raise errors.UsageError(
+            f"invalid {what} {slug!r}: use letters/digits/'.'/'_'/'-', "
+            f"with no path separators, '..', or leading dot"
+        )
+    return slug
 
 
 # --------------------------------------------------------------------------- #
@@ -175,6 +189,7 @@ def cmd_anchor(args: argparse.Namespace) -> int:
 
     root = resolve_root(args.root)
     source_id = args.source if args.source.startswith("raw/") else f"raw/{args.source}"
+    _safe_slug(source_id[len("raw/") :], "source")
     text = anchors.source_text(root, source_id)
     anchor = anchors.make_anchor(text, args.quote)
     status = anchors.resolve(text, anchor)
@@ -204,12 +219,14 @@ def cmd_new(args: argparse.Namespace) -> int:
     from . import frontmatter, lock, raw_dir, wiki_dir
 
     root = resolve_root(args.root)
+    _safe_slug(args.slug)
     raw_ids: list[str] = []
     for s in (s.strip() for s in args.sources.split(",")):
         if not s:
             continue
         sid = s if s.startswith("raw/") else f"raw/{s}"
         slug = sid.split("#", 1)[0][len("raw/") :]
+        _safe_slug(slug, "source")
         if not (raw_dir(root) / f"{slug}.md").exists():
             raise errors.DataError(f"declared source does not exist: {sid}")
         raw_ids.append(sid)
@@ -218,10 +235,6 @@ def cmd_new(args: argparse.Namespace) -> int:
 
     subdir = "concepts" if args.kind == "concept" else "entities"
     path = wiki_dir(root) / subdir / f"{args.slug}.md"
-    if path.exists():
-        raise errors.UsageError(
-            f"refusing to overwrite existing page: {path.relative_to(root)}"
-        )
 
     meta = {
         "id": f"{args.kind}/{args.slug}",
@@ -234,9 +247,18 @@ def cmd_new(args: argparse.Namespace) -> int:
         "<!-- Draft: synthesize from the sources in derived-from; cite each claim "
         "with a footnote anchor (`scrip anchor`), then `scrip stamp` + `scrip verify`. -->\n"
     )
+    # Create exclusively *inside* the lock: the existence check and the write are
+    # one atomic step, so two concurrent `new`s for the same slug can't both pass
+    # an earlier check and clobber each other.
     with lock.write_lock(root):
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(frontmatter.dump(meta, body), encoding="utf-8")
+        try:
+            with open(path, "x", encoding="utf-8") as f:
+                f.write(frontmatter.dump(meta, body))
+        except FileExistsError:
+            raise errors.UsageError(
+                f"refusing to overwrite existing page: {path.relative_to(root)}"
+            ) from None
 
     rel = str(path.relative_to(root))
     if args.json:

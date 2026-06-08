@@ -52,6 +52,12 @@ def test_anchor_source_without_raw_prefix_is_accepted(kb, capsys):
     assert "raw/s#qh:" in capsys.readouterr().out
 
 
+def test_anchor_rejects_unsafe_source_exit_2(kb):
+    kb.add_raw("s", "# H\n\nSome text.\n")
+    rc = cli.main(["anchor", "Some text.", "--source", "../../etc/passwd", "--root", str(kb.root)])
+    assert rc == 2  # traversal in the source id is rejected, not read
+
+
 def test_anchor_custom_footnote_label(kb, capsys):
     kb.add_raw("s", "# H\n\nDistinct labelled line.\n")
     rc = cli.main(

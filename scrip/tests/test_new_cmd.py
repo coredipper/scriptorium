@@ -1,6 +1,8 @@
 """`scrip new` — scaffold a wiki page's frontmatter for the agent to fill.
 Deterministic, no model; acquires the write lock; refuses to overwrite."""
 
+import pytest
+
 from scrip import cli, frontmatter, graph, lock_path
 
 
@@ -50,6 +52,22 @@ def test_new_refuses_overwrite_exit_2(kb):
 def test_new_missing_source_exit_3(kb):
     rc = cli.main(["new", "concept", "x", "--from", "raw/ghost", "--root", str(kb.root)])
     assert rc == 3
+
+
+@pytest.mark.parametrize("bad", ["../evil", "a/b", "..", "/abs", ".hidden", "a b"])
+def test_new_rejects_unsafe_slug_exit_2(kb, bad):
+    """A slug must not be able to escape vault/wiki/{concepts,entities}."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    assert cli.main(["new", "concept", bad, "--from", "raw/a", "--root", str(kb.root)]) == 2
+    # nothing was written outside the wiki concepts dir
+    assert list((kb.root / "vault" / "wiki" / "concepts").glob("*.md")) == []
+    assert not (kb.root.parent / "evil.md").exists()
+
+
+def test_new_rejects_unsafe_source_slug_exit_2(kb):
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    rc = cli.main(["new", "concept", "x", "--from", "../../etc/passwd", "--root", str(kb.root)])
+    assert rc == 2
 
 
 def test_new_then_stamp_goes_green(kb):
