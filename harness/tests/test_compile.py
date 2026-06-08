@@ -1,6 +1,21 @@
 """Pure unit tests for the deterministic compile helpers — no model, no scrip."""
 
-from scrip_harness.compile import DraftClaim, DraftPage, assemble_body, build_user_prompt
+from scrip_harness.compile import (
+    DraftClaim,
+    DraftPage,
+    assemble_body,
+    build_user_prompt,
+    extract_markers,
+)
+
+
+def test_extract_markers_in_first_appearance_order():
+    assert extract_markers("First.[^a1] Second.[^a2]\n") == [1, 2]
+    assert extract_markers("no markers here") == []
+    # out of order / missing / duplicate references are reported as-seen, distinct
+    assert extract_markers("b[^a2] a[^a1]") == [2, 1]
+    assert extract_markers("x[^a1] y[^a3]") == [1, 3]
+    assert extract_markers("x[^a1] again[^a1]") == [1]
 
 
 def test_build_user_prompt_includes_the_source():

@@ -3,7 +3,23 @@ construction, and page-body assembly. No network, no scrip — unit-testable."""
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel
+
+_MARKER = re.compile(r"\[\^a(\d+)\]")
+
+
+def extract_markers(body: str) -> list[int]:
+    """Footnote marker numbers in ``body``, distinct, in first-appearance order
+    (``[^a1]`` → 1). Used to check the model's prose matches the claims it
+    returned before any page is stamped."""
+    seen: list[int] = []
+    for m in _MARKER.finditer(body):
+        k = int(m.group(1))
+        if k not in seen:
+            seen.append(k)
+    return seen
 
 SYSTEM = (
     "You are the scribe for a scriptorium knowledge base. From the single source "

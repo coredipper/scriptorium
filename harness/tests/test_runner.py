@@ -58,3 +58,37 @@ def test_compile_rejects_a_non_verbatim_quote(tmp_path):
         compile_page(root, "topic", draft_fn=stub)
     # nothing was left behind as a stamped page
     assert not (root / "vault" / "wiki" / "concepts" / "topic.md").exists()
+
+
+def test_compile_rejects_marker_mismatch(tmp_path):
+    """If the draft body's markers don't match the claims (here: a2 missing for two
+    claims), the compile must fail before stamping — scrip verify wouldn't catch
+    uncited prose on its own."""
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text(
+        "# T\n\nFirst real fact. Second real fact in the same source.\n", encoding="utf-8"
+    )
+
+    def stub(source_text, *, source_id):
+        return DraftPage(
+            title="T",
+            body="Only one marker.[^a1]\n",  # but two claims supplied
+            claims=[DraftClaim(quote="first real fact"), DraftClaim(quote="second real fact")],
+        )
+
+    with pytest.raises(CompileError):
+        compile_page(root, "topic", draft_fn=stub)
+
+
+def test_compile_rejects_unsafe_slug(tmp_path):
+    root = _vault(tmp_path)
+    called = False
+
+    def stub(source_text, *, source_id):
+        nonlocal called
+        called = True
+        return DraftPage(title="x", body="x[^a1]\n", claims=[DraftClaim(quote="x")])
+
+    with pytest.raises(CompileError):
+        compile_page(root, "../../etc/passwd", draft_fn=stub)
+    assert called is False  # rejected before reading any source or calling the model

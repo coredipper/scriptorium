@@ -5,19 +5,24 @@ source of truth — this never re-implements hashing, anchoring, or staleness.""
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from scrip import frontmatter  # reuse the deterministic frontmatter helper
 
-from .compile import DraftPage, assemble_body
+from .compile import DraftPage, assemble_body, extract_markers
 
 DraftFn = Callable[..., DraftPage]
 
+# Same conservative shape scrip enforces — no path separators, '..', or leading dot.
+_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
 
 class CompileError(RuntimeError):
-    """A compile step failed (a quote didn't resolve, or a scrip command erred)."""
+    """A compile step failed (bad slug, marker mismatch, an unresolved quote, or a
+    scrip command erred)."""
 
 
 def _scrip(cmd: Sequence[str], args: list[str]) -> subprocess.CompletedProcess:
@@ -39,9 +44,25 @@ def compile_page(
     :class:`CompileError` if any quote fails to resolve or any scrip step errors,
     so a bad draft never produces a stamped-but-broken page."""
     root = Path(root)
+    if not _SLUG_RE.match(slug):
+        raise CompileError(
+            f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
+            f"separators, '..', or leading dot"
+        )
     source_id = f"raw/{slug}"
     source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
     draft = draft_fn(source_text, source_id=source_id)
+
+    # The model's inline markers must be exactly [^a1]..[^aN] in order for the N
+    # claims. scrip verify only checks footnote *definitions* resolve, so without
+    # this a misnumbered/missing/extra marker could be stamped with uncited prose.
+    markers = extract_markers(draft.body)
+    expected = list(range(1, len(draft.claims) + 1))
+    if markers != expected:
+        raise CompileError(
+            f"draft markers {markers} do not match claims {expected} in first-"
+            f"appearance order"
+        )
 
     # Mint a verified anchor per claim. scrip anchor exits non-zero on a quote that
     # is not present or not unique, so a hallucinated quote fails the compile here.
