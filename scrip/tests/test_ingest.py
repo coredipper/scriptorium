@@ -201,6 +201,25 @@ def test_html_iso_8859_1_label_decoded_as_cp1252():
     assert "\x93" not in text and "\x94" not in text and "\x97" not in text  # no C1
 
 
+@needs_trafilatura
+@pytest.mark.parametrize(
+    "label", ["iso88591", "iso_8859-1:1987", "Latin1", " ISO-8859-1 ", "cp819"]
+)
+def test_html_whatwg_windows1252_labels(label):
+    """Every WHATWG windows-1252 label (incl. separator-free and case/whitespace
+    variants) decodes CP1252 punctuation correctly, not as C1 controls."""
+    body = "a “quoted” phrase — with an em dash and enough body text to be kept."
+    html = (
+        "<html><head><title>P</title></head><body><article><h1>P</h1><p>"
+        + body
+        + "</p></article></body></html>"
+    )
+    data = html.encode("cp1252")
+    text = ingest.extract_text(data, "html", charset=label)
+    assert "“" in text and "—" in text
+    assert "\x93" not in text and "\x97" not in text
+
+
 def test_text_unknown_charset_falls_back_cleanly():
     """An unknown header charset on a text/markdown response must not raise
     LookupError (an internal exit 4) — fall back to UTF-8."""
