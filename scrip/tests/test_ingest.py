@@ -167,6 +167,23 @@ def test_html_respects_declared_charset():
     assert "�" not in text  # not mangled to the replacement char
 
 
+@needs_trafilatura
+def test_html_uses_http_header_charset_when_no_meta():
+    """When a page declares its charset only in the HTTP Content-Type header (no
+    in-document <meta charset>), that charset must be honored — else header-only
+    cp1252/Latin-1 pages corrupt the canonical raw text."""
+    body = "résumé — a long enough latin-1/1252 article body for the extractor to keep."
+    html = (
+        "<html><head><title>Enc</title></head><body><article><h1>Enc</h1><p>"
+        + body
+        + "</p></article></body></html>"
+    )
+    data = html.encode("cp1252")  # no <meta charset> in the document
+    text = ingest.extract_text(data, "html", charset="windows-1252")
+    assert "résumé" in text
+    assert "�" not in text
+
+
 def test_fetch_url_error_maps_to_exit_2(kb, monkeypatch):
     import urllib.error
 

@@ -274,9 +274,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 
     root = resolve_root(args.root)
     slug = _safe_slug(args.slug or ingest.default_slug(args.source))
-    data, kind = ingest.fetch(args.source)
-    text = ingest.extract_text(data, kind)
-    found = ingest.extract_metadata(data, kind)
+    data, kind, charset = ingest.fetch(args.source)
+    text = ingest.extract_text(data, kind, charset)
+    found = ingest.extract_metadata(data, kind, charset)
     meta = ingest.build_meta(
         source=args.source,
         title=args.title or found.get("title"),
