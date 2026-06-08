@@ -240,8 +240,11 @@ def test_fetch_url_error_maps_to_exit_2(kb, monkeypatch):
 
 def test_html_without_extra_gives_helpful_error(monkeypatch):
     monkeypatch.setattr(ingest, "_import", lambda name: None)
-    with pytest.raises(errors.UsageError):
+    with pytest.raises(errors.UsageError) as ei:
         ingest.extract_text(b"<html><body>x</body></html>", "html")
+    # the hint must name the published PyPI package, not the taken `scrip`
+    assert "scriptoria[ingest]" in str(ei.value)
+    assert "scrip[ingest]" not in str(ei.value)
 
 
 @needs_pypdf

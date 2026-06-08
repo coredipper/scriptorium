@@ -204,8 +204,8 @@ def cmd_index(args: argparse.Namespace) -> int:
     if not embeddings.available():
         msg = (
             "embeddings backend not installed; rung 4 falls back to grep. "
-            "Enable it with:  uv tool install './scrip[embeddings]'  "
-            "(or: pip install 'scrip[embeddings]')"
+            "Enable it with:  uv tool install 'scriptoria[embeddings]'  "
+            "(or: pip install 'scriptoria[embeddings]')"
         )
         if args.json:
             _emit({"status": "unavailable", "message": msg})

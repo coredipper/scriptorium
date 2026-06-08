@@ -2,7 +2,7 @@
 
 This is an *optional adapter*, not part of the core contract. Install it with:
 
-    uv tool install './scrip[embeddings]'      # or: pip install 'scrip[embeddings]'
+    uv tool install './scrip[embeddings]'      # or: pip install 'scriptoria[embeddings]'
 
 If the backend (model2vec) is not installed, `available()` is False and callers
 fall back to lexical grep — the vault stays fully valid either way. The index is

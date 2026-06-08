@@ -177,7 +177,7 @@ def _extract_html(data: bytes, charset: str | None = None) -> str:
     if trafilatura is None:
         raise UsageError(
             "HTML ingest needs the [ingest] extra: "
-            "uv tool install './scrip[ingest]'  (or: pip install 'scrip[ingest]')"
+            "uv tool install 'scriptoria[ingest]'  (or: pip install 'scriptoria[ingest]')"
         )
     # Markdown output keeps headings (feeds block-precise dependencies).
     text = trafilatura.extract(
@@ -195,7 +195,7 @@ def _extract_pdf(data: bytes) -> str:
     if pypdf is None:
         raise UsageError(
             "PDF ingest needs the [ingest] extra: "
-            "uv tool install './scrip[ingest]'  (or: pip install 'scrip[ingest]')"
+            "uv tool install 'scriptoria[ingest]'  (or: pip install 'scriptoria[ingest]')"
         )
     import io
 
