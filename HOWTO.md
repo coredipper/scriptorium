@@ -50,8 +50,9 @@ In Claude Code (or any agent that can read [AGENT.md](AGENT.md)), say:
 > Ingest and compile `raw/some-article` per AGENT.md: write a concept page with
 > provenance footnotes, extract claims into facts, then stamp and verify.
 
-The agent writes the page + claims, runs `scrip stamp` to record provenance
-hashes, and `scrip verify` until every citation resolves.
+The agent scaffolds the page with `scrip new`, mints each citation with
+`scrip anchor` (which refuses a non-unique quote), runs `scrip stamp` to record
+provenance hashes, and `scrip verify` until every citation resolves.
 
 ### 3. Keep it fresh
 

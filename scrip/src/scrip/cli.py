@@ -170,6 +170,83 @@ def cmd_unlock(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_anchor(args: argparse.Namespace) -> int:
+    from . import anchors
+
+    root = resolve_root(args.root)
+    source_id = args.source if args.source.startswith("raw/") else f"raw/{args.source}"
+    text = anchors.source_text(root, source_id)
+    anchor = anchors.make_anchor(text, args.quote)
+    status = anchors.resolve(text, anchor)
+    target = f"{source_id}#{anchor}"
+    label = args.quote[:48].replace("\n", " ").strip()
+    footnote = f'[^{args.label}]: anchor={target}  "{label}"'
+    if args.json:
+        _emit(
+            {
+                "source_id": source_id,
+                "anchor": anchor,
+                "target": target,
+                "status": status,
+                "label": args.label,
+                "footnote": footnote,
+            }
+        )
+    else:
+        print(f"{target}   [{status}]")
+        print(footnote)
+    # Mirror `verify`: a citation must resolve to exactly one span. AMBIGUOUS or
+    # BROKEN exits 1 so the agent lengthens the quote until unique.
+    return 0 if status == "OK" else 1
+
+
+def cmd_new(args: argparse.Namespace) -> int:
+    from . import frontmatter, lock, raw_dir, wiki_dir
+
+    root = resolve_root(args.root)
+    raw_ids: list[str] = []
+    for s in (s.strip() for s in args.sources.split(",")):
+        if not s:
+            continue
+        sid = s if s.startswith("raw/") else f"raw/{s}"
+        slug = sid.split("#", 1)[0][len("raw/") :]
+        if not (raw_dir(root) / f"{slug}.md").exists():
+            raise errors.DataError(f"declared source does not exist: {sid}")
+        raw_ids.append(sid)
+    if not raw_ids:
+        raise errors.UsageError("--from requires at least one source id")
+
+    subdir = "concepts" if args.kind == "concept" else "entities"
+    path = wiki_dir(root) / subdir / f"{args.slug}.md"
+    if path.exists():
+        raise errors.UsageError(
+            f"refusing to overwrite existing page: {path.relative_to(root)}"
+        )
+
+    meta = {
+        "id": f"{args.kind}/{args.slug}",
+        "type": f"wiki.{args.kind}",
+        "title": args.title or args.slug,
+        "derived-from": raw_ids,
+        "confidence": 0.0,
+    }
+    body = (
+        "<!-- Draft: synthesize from the sources in derived-from; cite each claim "
+        "with a footnote anchor (`scrip anchor`), then `scrip stamp` + `scrip verify`. -->\n"
+    )
+    with lock.write_lock(root):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(frontmatter.dump(meta, body), encoding="utf-8")
+
+    rel = str(path.relative_to(root))
+    if args.json:
+        _emit({"created": rel, "id": meta["id"]})
+    else:
+        print(f"created {rel}  (id {meta['id']})")
+        print("  fill the body, cite with `scrip anchor`, then `scrip stamp` + `scrip verify`")
+    return 0
+
+
 # --------------------------------------------------------------------------- #
 # Parser
 # --------------------------------------------------------------------------- #
@@ -274,6 +351,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="remove the lock even if its holder still looks alive",
     )
     pul.set_defaults(func=cmd_unlock)
+
+    pa = sub.add_parser(
+        "anchor",
+        parents=[common],
+        help="mint a verified provenance anchor for a quote in a source",
+    )
+    pa.add_argument("quote", help="the exact quoted text, as it appears in the source")
+    pa.add_argument(
+        "--source",
+        required=True,
+        metavar="raw/<slug>",
+        help="source id the quote is drawn from (the 'raw/' prefix is optional)",
+    )
+    pa.add_argument("--label", default="a1", help="footnote label (default: a1)")
+    pa.set_defaults(func=cmd_anchor)
+
+    pn = sub.add_parser(
+        "new",
+        parents=[common],
+        help="scaffold a new wiki page (frontmatter only) for the agent to fill",
+    )
+    pn.add_argument("kind", choices=["concept", "entity"])
+    pn.add_argument("slug", help="page slug, e.g. compilation-over-retrieval")
+    pn.add_argument(
+        "--from",
+        dest="sources",
+        required=True,
+        metavar="raw/a,raw/b",
+        help="comma-separated source ids for derived-from",
+    )
+    pn.add_argument("--title", help="human title (default: the slug)")
+    pn.set_defaults(func=cmd_new)
 
     return p
 

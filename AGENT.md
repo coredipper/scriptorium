@@ -27,13 +27,14 @@ The data contract these steps assume is normative in [SPEC.md](SPEC.md).
 ## COMPILE — synthesize a wiki page
 
 1. Read the relevant `raw/` source(s).
-2. Write or update `vault/wiki/concepts/<slug>.md` (or `entities/<slug>.md`):
-   - frontmatter: `id`, `type`, `title`, `derived-from: [raw/…]`, `confidence`.
-   - prose: synthesize. For each claim-bearing sentence, add a footnote anchor
-     quoting the exact source text:
-     `[^a1]: anchor=raw/<slug>#<anchor>  "short label"`.
-     Compute `<anchor>` by quoting the source verbatim (the reference tool exposes
-     `make_anchor`; or quote and let `verify` confirm).
+2. Scaffold the page with the correct frontmatter, then synthesize:
+   - `scrip new concept <slug> --from raw/a,raw/b [--title "…"]` (or `entity`)
+     writes `vault/wiki/{concepts,entities}/<slug>.md` with `id`, `type`, `title`,
+     `derived-from`, `confidence` and an empty body. It refuses to overwrite.
+   - Fill the prose. For each claim-bearing sentence, mint a footnote anchor with
+     `scrip anchor "<exact quote>" --source raw/<slug>` — it prints a ready-to-paste
+     `[^a1]: anchor=raw/<slug>#<anchor>  "…"` line and **exits 1 if the quote is
+     not unique** (lengthen it until `OK`). Set `confidence` to your honest rating.
 3. `scrip stamp vault/wiki/concepts/<slug>.md` — records the correct `input-hash`
    + `last-compiled` deterministically.
 4. `scrip verify` — fix any `BROKEN`/`AMBIGUOUS` anchors (lengthen the quote until
@@ -96,6 +97,8 @@ reconciliations.
 | You want to… | Command |
 |---|---|
 | see what's stale / uncompiled | `scrip status` |
+| scaffold a new wiki page | `scrip new concept\|entity <slug> --from raw/…` |
+| mint a provenance anchor for a quote | `scrip anchor "<quote>" --source raw/<slug>` |
 | record provenance hashes after compiling | `scrip stamp [path…]` |
 | check every citation still resolves | `scrip verify` |
 | query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |

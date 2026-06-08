@@ -105,6 +105,12 @@ def _source_text(root: Path, source_id: str, cache: dict[str, str]) -> str:
     return cache[source_id]
 
 
+def source_text(root: Path, source_id: str) -> str:
+    """Public read of a raw source's canonical text (raises ``DataError`` if the
+    source id is malformed or the file is missing). Used by ``scrip anchor``."""
+    return _source_text(root, source_id, {})
+
+
 def _iter_footnote_anchors(path: Path) -> Iterator[dict]:
     for line in path.read_text(encoding="utf-8").splitlines():
         m = _FOOTNOTE.match(line)
