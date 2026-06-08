@@ -7,14 +7,14 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
     "anthropic>=0.40",
-    "scrip",
+    "scriptoria",
 ]
 
 [project.scripts]
 scrip-harness = "scrip_harness.cli:main"
 
 [tool.uv.sources]
-scrip = { path = "../scrip" }
+scriptoria = { path = "../scrip" }
 
 [dependency-groups]
 dev = ["pytest>=8"]

@@ -1,9 +1,9 @@
 name: release
 
-# Publishes the `scrip` package to PyPI when a v* tag is pushed.
-# Uses PyPI Trusted Publishing (OIDC) — configure a trusted publisher for the
-# `scrip` project on PyPI pointing at this repo + workflow, so no token secret is
-# stored here. (scrip-harness is not published: it has a path dependency on scrip.)
+# Publishes the `scriptoria` package (the `scrip` CLI) to PyPI when a v* tag is
+# pushed. Uses PyPI Trusted Publishing (OIDC) — configure a trusted publisher for
+# the `scriptoria` project on PyPI pointing at this repo + workflow, so no token
+# secret is stored here. (scrip-harness is not published: it has a path dep.)
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.2.0
 
-      - name: Build scrip
+      - name: Build scriptoria (the scrip CLI)
         working-directory: scrip
         run: uv build
 

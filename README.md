@@ -44,8 +44,11 @@ The contract is the point; `scrip` and `vault/` are one conforming instance of i
 
 ## Quickstart
 
+The package is published to PyPI as **`scriptoria`**; the command it installs and
+the import package are both `scrip` (`pip install scriptoria` → run `scrip`).
+
 ```sh
-# install the deterministic keeper
+# install the deterministic keeper (from this checkout)
 uv tool install ./scrip
 
 # what's stale / what's uncompiled

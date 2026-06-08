@@ -533,7 +533,30 @@ wheels = [
 ]
 
 [[package]]
-name = "scrip"
+name = "scrip-harness"
+version = "0.2.0"
+source = { editable = "." }
+dependencies = [
+    { name = "anthropic" },
+    { name = "scriptoria" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", specifier = ">=0.40" },
+    { name = "scriptoria", directory = "../scrip" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
+
+[[package]]
+name = "scriptoria"
 version = "0.2.0"
 source = { directory = "../scrip" }
 dependencies = [
@@ -551,29 +574,6 @@ requires-dist = [
     { name = "trafilatura", marker = "extra == 'ingest'", specifier = ">=1.8" },
 ]
 provides-extras = ["embeddings", "ingest"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
-
-[[package]]
-name = "scrip-harness"
-version = "0.2.0"
-source = { editable = "." }
-dependencies = [
-    { name = "anthropic" },
-    { name = "scrip" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=0.40" },
-    { name = "scrip", directory = "../scrip" },
-]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]

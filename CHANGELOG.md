@@ -46,6 +46,8 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   that no longer resolve.
 
 ### Notes
+- Published to PyPI as **`scriptoria`** (`scrip` and `scriptorium` were already
+  taken); the CLI command and the import package both remain `scrip`.
 - `scrip status --fast` deliberately trades the "always re-hash" guarantee
   (SPEC §8) for speed: an edit that preserves both mtime and size is missed.
   Plain `scrip status` always re-hashes and remains the safe default.
