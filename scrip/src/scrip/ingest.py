@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,20 +84,30 @@ def _kind_from_content_type(ctype: str, url: str) -> str:
 
 def fetch(source: str) -> tuple[bytes, str]:
     """Return ``(bytes, kind)`` for ``source``. URLs hit the network; everything
-    else is read from disk. ``kind`` ∈ {md, txt, html, pdf}."""
+    else is read from disk. ``kind`` ∈ {md, txt, html, pdf}. Fetch/read failures
+    surface as ``UsageError`` (exit 2), not an internal error."""
     if source.startswith(("http://", "https://")):
         return _fetch_url(source)
     p = Path(source).expanduser()
     if not p.is_file():
         raise UsageError(f"no such file: {source}")
-    return p.read_bytes(), _kind_from_suffix(p.suffix)
+    try:
+        return p.read_bytes(), _kind_from_suffix(p.suffix)
+    except OSError as e:
+        raise UsageError(f"could not read {source}: {e}") from e
 
 
 def _fetch_url(url: str) -> tuple[bytes, str]:  # network — not exercised in tests
     req = urllib.request.Request(url, headers={"User-Agent": "scrip-ingest/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (http(s) only)
-        data = resp.read()
-        ctype = resp.headers.get_content_type()
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (http(s) only)
+            data = resp.read()
+            ctype = resp.headers.get_content_type()
+    except urllib.error.HTTPError as e:
+        raise UsageError(f"could not fetch {url}: HTTP {e.code} {e.reason}") from e
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        reason = getattr(e, "reason", e)
+        raise UsageError(f"could not fetch {url}: {reason}") from e
     return data, _kind_from_content_type(ctype, url)
 
 
@@ -124,9 +135,10 @@ def _extract_html(data: bytes) -> str:
             "HTML ingest needs the [ingest] extra: "
             "uv tool install './scrip[ingest]'  (or: pip install 'scrip[ingest]')"
         )
-    html = data.decode("utf-8", errors="replace")
-    # Markdown output keeps headings, which feeds block-precise dependencies.
-    text = trafilatura.extract(html, output_format="markdown", include_comments=False)
+    # Pass the raw bytes so trafilatura detects the declared/actual charset
+    # itself; pre-decoding as UTF-8 would corrupt Windows-1252/Latin-1 pages in
+    # the canonical raw text. Markdown output keeps headings (feeds block deps).
+    text = trafilatura.extract(data, output_format="markdown", include_comments=False)
     if not text:
         raise DataError("could not extract article text from the HTML")
     return text
@@ -158,7 +170,7 @@ def extract_metadata(data: bytes, kind: str) -> dict:
     if trafilatura is None:
         return {}
     try:
-        doc = trafilatura.extract_metadata(data.decode("utf-8", errors="replace"))
+        doc = trafilatura.extract_metadata(data)  # bytes — charset handled inside
     except Exception:  # noqa: BLE001 — metadata is best-effort, never fatal
         return {}
     out = {}

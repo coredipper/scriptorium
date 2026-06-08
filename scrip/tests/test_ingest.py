@@ -149,6 +149,35 @@ def test_ingest_html_autofills_title_from_page(kb, tmp_path):
     assert meta["title"] == "Auto-Captured Title"
 
 
+@needs_trafilatura
+def test_html_respects_declared_charset():
+    """A non-UTF-8 page (here Windows-1252) must not be corrupted in the canonical
+    raw text — decoding has to honor the declared charset, not assume UTF-8."""
+    body = (
+        "don’t panic — this windows-1252 article body is long enough that "
+        "the main-content extractor keeps it as the page body."
+    )
+    html = (
+        '<html><head><meta charset="windows-1252"><title>Enc</title></head>'
+        "<body><article><h1>Enc</h1><p>" + body + "</p></article></body></html>"
+    )
+    data = html.encode("cp1252")
+    text = ingest.extract_text(data, "html")
+    assert "’" in text  # curly apostrophe survived
+    assert "�" not in text  # not mangled to the replacement char
+
+
+def test_fetch_url_error_maps_to_exit_2(kb, monkeypatch):
+    import urllib.error
+
+    def boom(*a, **k):
+        raise urllib.error.URLError("name or service not known")
+
+    monkeypatch.setattr(ingest.urllib.request, "urlopen", boom)
+    rc = cli.main(["ingest", "https://nonexistent.invalid/x", "--root", str(kb.root)])
+    assert rc == 2  # a clean usage error, not an internal (4)
+
+
 def test_html_without_extra_gives_helpful_error(monkeypatch):
     monkeypatch.setattr(ingest, "_import", lambda name: None)
     with pytest.raises(errors.UsageError):
