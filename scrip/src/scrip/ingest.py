@@ -120,11 +120,39 @@ def _canonical(text: str) -> str:
     return text.rstrip("\n") + "\n" if text.strip() else ""
 
 
+# Per the WHATWG Encoding Standard, HTML parsing decodes these labels as
+# windows-1252. Python's iso-8859-1 codec is *true* Latin-1, which would turn
+# CP1252 punctuation bytes (smart quotes/dashes, 0x80–0x9F) into C1 controls.
+_CP1252_ALIASES = frozenset(
+    {
+        "iso-8859-1", "iso8859-1", "iso_8859-1", "iso-8859-1:1987", "iso-ir-100",
+        "latin1", "latin-1", "l1", "cp819", "ibm819", "csisolatin1",
+        "ascii", "us-ascii", "ansi_x3.4-1968", "cp367", "ibm367", "iso646-us", "us",
+        "windows-1252", "cp1252", "x-cp1252",
+    }
+)
+
+
+def _resolve_charset(label: str) -> str:
+    label = label.strip().lower()
+    return "cp1252" if label in _CP1252_ALIASES else label
+
+
+def _decode(data: bytes, charset: str | None) -> str:
+    """Decode bytes with a WHATWG-normalized charset, falling back to UTF-8 on an
+    unknown codec name (``LookupError``); bad bytes are always replaced."""
+    enc = _resolve_charset(charset) if charset else "utf-8"
+    try:
+        return data.decode(enc, errors="replace")
+    except LookupError:
+        return data.decode("utf-8", errors="replace")
+
+
 def extract_text(data: bytes, kind: str, charset: str | None = None) -> str:
     """Extract canonical text from ``data`` according to ``kind``. ``charset``, if
     given (an HTTP header charset), is used to decode rather than guessing."""
     if kind in ("md", "txt"):
-        return _canonical(data.decode(charset or "utf-8", errors="replace"))
+        return _canonical(_decode(data, charset))
     if kind == "html":
         return _canonical(_extract_html(data, charset))
     if kind == "pdf":
@@ -134,12 +162,12 @@ def extract_text(data: bytes, kind: str, charset: str | None = None) -> str:
 
 def _html_for_trafilatura(data: bytes, charset: str | None):
     """A header-declared charset wins (HTML5 ranks it above any in-document
-    <meta charset>), so decode with it; otherwise hand trafilatura the raw bytes
-    and let it detect the in-document charset."""
+    <meta charset>), so decode with it (WHATWG-normalized); otherwise hand
+    trafilatura the raw bytes and let it detect the in-document charset."""
     if not charset:
         return data
     try:
-        return data.decode(charset, errors="replace")
+        return data.decode(_resolve_charset(charset), errors="replace")
     except LookupError:  # unknown charset name → fall back to byte detection
         return data
 

@@ -184,6 +184,30 @@ def test_html_uses_http_header_charset_when_no_meta():
     assert "�" not in text
 
 
+@needs_trafilatura
+def test_html_iso_8859_1_label_decoded_as_cp1252():
+    """Per WHATWG, an `iso-8859-1` (or latin1/ascii) label decodes as
+    windows-1252 when parsing HTML, so CP1252 punctuation bytes become real
+    Unicode punctuation rather than C1 control characters."""
+    body = "smart “quotes” and an em—dash, with enough body text for the extractor."
+    html = (
+        "<html><head><title>P</title></head><body><article><h1>P</h1><p>"
+        + body
+        + "</p></article></body></html>"
+    )
+    data = html.encode("cp1252")  # 0x93/0x94 quotes, 0x97 em dash
+    text = ingest.extract_text(data, "html", charset="iso-8859-1")
+    assert "“" in text and "”" in text and "—" in text  # real punctuation
+    assert "\x93" not in text and "\x94" not in text and "\x97" not in text  # no C1
+
+
+def test_text_unknown_charset_falls_back_cleanly():
+    """An unknown header charset on a text/markdown response must not raise
+    LookupError (an internal exit 4) — fall back to UTF-8."""
+    out = ingest.extract_text(b"hello world", "txt", charset="totally-bogus-charset")
+    assert "hello world" in out
+
+
 def test_fetch_url_error_maps_to_exit_2(kb, monkeypatch):
     import urllib.error
 
