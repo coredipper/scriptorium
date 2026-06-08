@@ -22,3 +22,7 @@ jobs:
           uv run --locked --project scrip scrip status --root .
           uv run --locked --project scrip scrip verify --root .
           uv run --locked --project scrip scrip query --sql "SELECT count(*) AS claims FROM claims" --root .
+
+      - name: Run harness test suite (hermetic — model stubbed, scrip runs for real)
+        working-directory: harness
+        run: uv run --locked pytest -q
