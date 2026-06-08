@@ -131,10 +131,11 @@ def compute_status(
 ) -> dict:
     # The cache annotates *which* source changed; by default staleness itself is
     # computed from freshly-hashed files (see scan_raw). ``fast`` additionally
-    # lets scan_raw trust the cached hash when (mtime, size) match — an opt-in
-    # acceleration, so the cache must be loaded for it.
-    cache = manifest_mod.load(root) if (use_cache or fast) else None
-    raw = scan_raw(root, cache=cache, fast=fast)
+    # lets scan_raw trust the cached hash when (mtime, size) match — but only when
+    # the cache is in use: ``fast`` must never override ``use_cache=False``, or
+    # ``--no-cache --fast`` would silently read the manifest it was told to ignore.
+    cache = manifest_mod.load(root) if use_cache else None
+    raw = scan_raw(root, cache=cache, fast=fast and use_cache)
     derived = scan_derived(root)
 
     # Which sources changed vs the cached hashes (best-effort annotation only).

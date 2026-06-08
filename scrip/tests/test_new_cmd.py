@@ -64,6 +64,11 @@ def test_new_rejects_unsafe_slug_exit_2(kb, bad):
     assert not (kb.root.parent / "evil.md").exists()
 
 
+def test_new_rejects_slug_with_trailing_newline(kb):
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    assert cli.main(["new", "concept", "x\n", "--from", "raw/a", "--root", str(kb.root)]) == 2
+
+
 def test_new_rejects_unsafe_source_slug_exit_2(kb):
     kb.add_raw("a", "# A\n\nAlpha.\n")
     rc = cli.main(["new", "concept", "x", "--from", "../../etc/passwd", "--root", str(kb.root)])

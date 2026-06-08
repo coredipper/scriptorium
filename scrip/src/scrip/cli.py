@@ -22,7 +22,9 @@ _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def _safe_slug(slug: str, what: str = "slug") -> str:
-    if not _SLUG_RE.match(slug):
+    # fullmatch (not match): `match` + `$` would accept a trailing newline, which
+    # could split a `raw/<slug>#…` footnote target across lines.
+    if not _SLUG_RE.fullmatch(slug):
         raise errors.UsageError(
             f"invalid {what} {slug!r}: use letters/digits/'.'/'_'/'-', "
             f"with no path separators, '..', or leading dot"
@@ -69,6 +71,11 @@ def _emit(payload: dict) -> None:
 def cmd_status(args: argparse.Namespace) -> int:
     from . import graph
 
+    if args.fast and args.no_cache:
+        raise errors.UsageError(
+            "--fast cannot be combined with --no-cache: --fast reuses the manifest "
+            "cache to skip re-hashing, which --no-cache disables"
+        )
     root = resolve_root(args.root)
     result = graph.compute_status(
         root,

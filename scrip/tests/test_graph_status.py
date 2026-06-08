@@ -1,6 +1,6 @@
 import os
 
-from scrip import graph
+from scrip import cli, graph
 
 
 def test_fresh_vault_all_ok(kb):
@@ -92,6 +92,27 @@ def test_fast_trusts_mtime_size_and_can_miss_an_edit(kb):
 
     assert graph.compute_status(kb.root, use_cache=True)["stale"]  # plain: detected
     assert graph.compute_status(kb.root, use_cache=True, fast=True)["stale"] == []  # fast: missed
+
+
+def test_fast_without_cache_falls_back_to_rehash(kb):
+    """`fast` must not override `use_cache`: with the cache off there is nothing
+    trustworthy to reuse, so it re-hashes and catches a same-mtime+size edit."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("x", ["raw/a"])
+    graph.compute_status(kb.root, use_cache=True, rebuild=True)
+    p = kb.root / "vault" / "raw" / "a.md"
+    st = p.stat()
+    new = "# A\n\nBeta!.\n"
+    assert len(new.encode()) == st.st_size
+    p.write_text(new, encoding="utf-8")
+    os.utime(p, (st.st_atime, st.st_mtime))
+    assert graph.compute_status(kb.root, use_cache=False, fast=True)["stale"]
+
+
+def test_status_fast_with_no_cache_is_usage_error(kb):
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("x", ["raw/a"])
+    assert cli.main(["status", "--no-cache", "--fast", "--root", str(kb.root)]) == 2
 
 
 def test_fast_still_detects_a_normal_edit(kb):
