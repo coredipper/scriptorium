@@ -97,5 +97,10 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 
 ## Status
 
-v0 — the thin end-to-end slice is complete and dogfooded. Deferred to adapters:
-an embeddings retrieval rung, an Obsidian browsing layer, multi-writer locking.
+**v0.2** — the first complete cut beyond the v0 slice (see [CHANGELOG.md](CHANGELOG.md)).
+The contract is hardened (content-derived block ids, **SPEC v2**), the input side is
+automated (`scrip ingest`), the agent COMPILE step is runnable (the optional
+[`scrip-harness`](harness/README.md), which keeps `scrip` itself model-free), and
+there's an advisory write lock plus `scrip watch`. The embeddings retrieval rung
+ships as the optional `[embeddings]` extra; an Obsidian browsing layer remains an
+adapter.

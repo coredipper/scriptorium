@@ -71,13 +71,73 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     root = resolve_root(args.root)
     result = graph.compute_status(
-        root, use_cache=not args.no_cache, rebuild=args.rebuild_manifest
+        root,
+        use_cache=not args.no_cache,
+        rebuild=args.rebuild_manifest,
+        fast=args.fast,
     )
     if args.json:
         _emit(result)
     else:
         graph.print_status(result)
     return 1 if result["stale"] else 0
+
+
+def _watch_summary(root: Path, fast: bool = False) -> dict:
+    """One watch cycle: compute status + verify and return a counts summary.
+    Factored out of the loop so it is unit-testable."""
+    from . import anchors, graph
+
+    status = graph.compute_status(root, fast=fast)
+    verify = anchors.verify_vault(root)
+    return {
+        "stale": len(status["stale"]),
+        "ok": len(status["ok"]),
+        "broken": len(verify["broken"]),
+        "ambiguous": len(verify["ambiguous"]),
+    }
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    import time
+    from datetime import datetime, timezone
+
+    from . import vault_dir
+
+    root = resolve_root(args.root)
+    vd = vault_dir(root)
+
+    def signature() -> tuple:
+        sig = []
+        if vd.is_dir():
+            for p in sorted(vd.rglob("*")):
+                if p.is_file():
+                    st = p.stat()
+                    sig.append((str(p), st.st_mtime, st.st_size))
+        return tuple(sig)
+
+    print(f"watching {vd} every {args.interval}s — Ctrl-C to stop")
+    last: tuple | None = None
+    try:
+        while True:
+            sig = signature()
+            if sig != last:
+                last = sig
+                stamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                try:
+                    s = _watch_summary(root, fast=args.fast)
+                except errors.ScripError as e:
+                    print(f"[{stamp}] data error: {e}")
+                else:
+                    clean = not (s["stale"] or s["broken"] or s["ambiguous"])
+                    mark = "ok" if clean else "FINDINGS"
+                    print(
+                        f"[{stamp}] {mark} — stale={s['stale']} broken={s['broken']} "
+                        f"ambiguous={s['ambiguous']} ok={s['ok']}"
+                    )
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        return 0
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -327,7 +387,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="regenerate .kb/manifest.json from files after computing status",
     )
+    ps.add_argument(
+        "--fast",
+        action="store_true",
+        help="trust (mtime,size) to skip re-hashing unchanged sources — faster, but "
+        "can miss an edit that preserves both (SPEC §8); plain status always re-hashes",
+    )
     ps.set_defaults(func=cmd_status)
+
+    pw = sub.add_parser(
+        "watch",
+        parents=[common],
+        help="re-run status + verify whenever the vault changes (poll loop)",
+    )
+    pw.add_argument(
+        "--interval", type=float, default=2.0, help="poll interval in seconds (default 2)"
+    )
+    pw.add_argument(
+        "--fast", action="store_true", help="use the --fast status path while watching"
+    )
+    pw.set_defaults(func=cmd_watch)
 
     pv = sub.add_parser(
         "verify",

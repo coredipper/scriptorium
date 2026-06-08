@@ -1,3 +1,5 @@
+import os
+
 from scrip import graph
 
 
@@ -70,6 +72,34 @@ def test_block_dep_goes_stale_when_depended_block_edited(kb):
 
     kb.mutate_raw("a", "# A\n\nfirst fact.\n\nsecond fact, revised.\n")
     res = graph.compute_status(kb.root, use_cache=False)
+    assert "concept/x" in {s["id"] for s in res["stale"]}
+
+
+def test_fast_trusts_mtime_size_and_can_miss_an_edit(kb):
+    """`--fast` reuses the cached hash when (mtime, size) match, so an edit that
+    preserves both is missed — the documented speed/guarantee tradeoff. Plain
+    status always re-hashes and catches it."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("x", ["raw/a"])
+    graph.compute_status(kb.root, use_cache=True, rebuild=True)  # seed manifest
+
+    p = kb.root / "vault" / "raw" / "a.md"
+    st = p.stat()
+    new = "# A\n\nBeta!.\n"  # same byte length as the original
+    assert len(new.encode()) == st.st_size
+    p.write_text(new, encoding="utf-8")
+    os.utime(p, (st.st_atime, st.st_mtime))  # restore mtime → looks unchanged
+
+    assert graph.compute_status(kb.root, use_cache=True)["stale"]  # plain: detected
+    assert graph.compute_status(kb.root, use_cache=True, fast=True)["stale"] == []  # fast: missed
+
+
+def test_fast_still_detects_a_normal_edit(kb):
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("x", ["raw/a"])
+    graph.compute_status(kb.root, use_cache=True, rebuild=True)
+    kb.mutate_raw("a", "# A\n\nAlpha rewritten at length.\n")  # bumps mtime + size
+    res = graph.compute_status(kb.root, use_cache=True, fast=True)
     assert "concept/x" in {s["id"] for s in res["stale"]}
 
 

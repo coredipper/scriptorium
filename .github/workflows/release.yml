@@ -1,0 +1,38 @@
+name: release
+
+# Publishes the `scrip` package to PyPI when a v* tag is pushed.
+# Uses PyPI Trusted Publishing (OIDC) — configure a trusted publisher for the
+# `scrip` project on PyPI pointing at this repo + workflow, so no token secret is
+# stored here. (scrip-harness is not published: it has a path dependency on scrip.)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # required for OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Build scrip
+        working-directory: scrip
+        run: uv build
+
+      - name: Verify the tag matches the package version
+        working-directory: scrip
+        run: |
+          pkg=$(uv version --short)
+          tag="${GITHUB_REF_NAME#v}"
+          test "$pkg" = "$tag" || { echo "tag v$tag != package $pkg"; exit 1; }
+
+      - name: Publish to PyPI (trusted publishing)
+        working-directory: scrip
+        run: uv publish

@@ -23,24 +23,44 @@ from .errors import DataError
 # --------------------------------------------------------------------------- #
 # Scanning
 # --------------------------------------------------------------------------- #
-def scan_raw(root: Path) -> dict:
+def scan_raw(root: Path, cache: dict | None = None, fast: bool = False) -> dict:
     """Hash every ``vault/raw/*.md`` source (+ its blocks) from its current bytes.
 
-    Hashing is **always** performed: status correctness must never depend on a
-    cache that could hide a byte change (e.g. an edit that preserves both mtime
-    and size). For small/medium vaults this is cheap. ``(mtime, size)`` are still
-    recorded in the manifest for informational use, but are never trusted to skip
-    a re-hash; a future explicit ``--fast`` mode could reintroduce that shortcut
-    as an opt-in acceleration.
+    By default hashing is **always** performed: status correctness must never
+    depend on a cache that could hide a byte change (e.g. an edit that preserves
+    both mtime and size). For small/medium vaults this is cheap.
+
+    With ``fast=True`` and a cached entry whose ``(mtime, size)`` match the file,
+    the cached ``content_hash``/``blocks`` are reused instead of re-reading and
+    re-hashing — an opt-in acceleration that trades the always-re-hash guarantee
+    for speed (an edit preserving both mtime and size is missed). See SPEC §8.
     """
     out: dict = {}
     rd = raw_dir(root)
     if not rd.is_dir():
         return out
+    cache_raw = (cache or {}).get("raw", {}) if fast else {}
     for path in sorted(rd.glob("*.md")):
         rid = "raw/" + path.stem
-        data = path.read_bytes()
         st = path.stat()
+        prev = cache_raw.get(rid)
+        if (
+            fast
+            and prev
+            and prev.get("mtime") == st.st_mtime
+            and prev.get("size") == st.st_size
+            and prev.get("content_hash")
+            and prev.get("blocks") is not None
+        ):
+            out[rid] = {
+                "path": str(path.relative_to(root)),
+                "content_hash": prev["content_hash"],
+                "blocks": prev["blocks"],
+                "mtime": st.st_mtime,
+                "size": st.st_size,
+            }
+            continue
+        data = path.read_bytes()
         out[rid] = {
             "path": str(path.relative_to(root)),
             "content_hash": hashing.sha256_bytes(data),
@@ -106,11 +126,15 @@ def _dep_hash(dep_id: str, raw: dict) -> str | None:
 # --------------------------------------------------------------------------- #
 # Status
 # --------------------------------------------------------------------------- #
-def compute_status(root: Path, use_cache: bool = True, rebuild: bool = False) -> dict:
-    # The cache is loaded only to annotate *which* source changed; staleness
-    # itself is always computed from freshly-hashed files (see scan_raw).
-    cache = manifest_mod.load(root) if use_cache else None
-    raw = scan_raw(root)
+def compute_status(
+    root: Path, use_cache: bool = True, rebuild: bool = False, fast: bool = False
+) -> dict:
+    # The cache annotates *which* source changed; by default staleness itself is
+    # computed from freshly-hashed files (see scan_raw). ``fast`` additionally
+    # lets scan_raw trust the cached hash when (mtime, size) match — an opt-in
+    # acceleration, so the cache must be loaded for it.
+    cache = manifest_mod.load(root) if (use_cache or fast) else None
+    raw = scan_raw(root, cache=cache, fast=fast)
     derived = scan_derived(root)
 
     # Which sources changed vs the cached hashes (best-effort annotation only).

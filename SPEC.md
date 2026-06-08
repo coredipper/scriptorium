@@ -228,10 +228,14 @@ Whole-file dependencies remain the safe default; block-precise dependencies are
 
 - Any computation must be reproducible **without** the manifest. Deleting `.kb/`
   and recomputing from files must yield an identical stale/OK/uncompiled set.
-- **Staleness always re-hashes raw content.** `(mtime, size)` are recorded for
-  information only and are *never* trusted to skip a re-hash — otherwise an edit
+- **Staleness re-hashes raw content by default.** `(mtime, size)` are recorded
+  for information only and are *not* trusted to skip a re-hash — otherwise an edit
   preserving both could hide a byte change and falsely report dependents fresh.
   The manifest's stored hashes are used only to annotate *which* source changed.
+  The opt-in `scrip status --fast` deliberately reverses this: it trusts
+  `(mtime, size)` to reuse the cached hash for unchanged sources (faster on large
+  vaults), accepting that an edit preserving both is missed. It is an explicit
+  acceleration, never the default.
 - It is written **atomically** (temp file + rename). A corrupt or stale manifest
   is treated as a cache miss, never an error.
 - It may be committed to git for fast first reads; on a merge conflict, discard
