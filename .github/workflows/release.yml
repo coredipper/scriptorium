@@ -13,6 +13,13 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # The `pypi` GitHub Environment is the deploy-time protection hook — configure
+    # it in repo Settings → Environments with **required reviewers** (manual
+    # approval before each publish) and ideally a deployment-branch/tag rule
+    # (v* tags on the default branch). This is independent of PyPI's "(Any)"
+    # environment setting, which only scopes the OIDC token; the line below is
+    # what enforces the gate at deploy time, so keep it even with "(Any)".
+    environment: pypi
     permissions:
       contents: read # actions/checkout needs repo read access
       id-token: write # required for OIDC trusted publishing (uv publish auto-detects)
