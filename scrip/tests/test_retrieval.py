@@ -3,12 +3,14 @@ not installed in the test env, so `search` exercises the grep fallback. (If the
 backend *is* installed, no index is built here, so vector_search returns None and
 we still fall back to grep.)"""
 
-from scrip import cli, retrieval
+from scrip import cli, embeddings, retrieval
 
 
-def test_index_unavailable_message_names_scriptoria(kb, capsys):
-    # the embeddings backend is not installed in the test env, so `index` prints
-    # the "enable it with…" hint — which must name the published PyPI package.
+def test_index_unavailable_message_names_scriptoria(kb, capsys, monkeypatch):
+    # Force the backend-absent branch (don't depend on whether the optional
+    # embeddings extra happens to be installed) so `index` prints the install
+    # hint — which must name the published PyPI package, not the taken `scrip`.
+    monkeypatch.setattr(embeddings, "available", lambda: False)
     kb.add_raw("a", "# A\n\nAlpha.\n")
     assert cli.main(["index", "--root", str(kb.root)]) == 0
     out = capsys.readouterr().out
