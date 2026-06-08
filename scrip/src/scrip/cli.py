@@ -10,10 +10,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 from . import __version__, errors
+
+# A slug names a single path component (a source or page). Forbid anything that
+# could escape its directory: path separators, '..', absolute paths, leading dot.
+_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _safe_slug(slug: str, what: str = "slug") -> str:
+    # fullmatch (not match): `match` + `$` would accept a trailing newline, which
+    # could split a `raw/<slug>#…` footnote target across lines.
+    if not _SLUG_RE.fullmatch(slug):
+        raise errors.UsageError(
+            f"invalid {what} {slug!r}: use letters/digits/'.'/'_'/'-', "
+            f"with no path separators, '..', or leading dot"
+        )
+    return slug
 
 
 # --------------------------------------------------------------------------- #
@@ -55,15 +71,80 @@ def _emit(payload: dict) -> None:
 def cmd_status(args: argparse.Namespace) -> int:
     from . import graph
 
+    if args.fast and args.no_cache:
+        raise errors.UsageError(
+            "--fast cannot be combined with --no-cache: --fast reuses the manifest "
+            "cache to skip re-hashing, which --no-cache disables"
+        )
     root = resolve_root(args.root)
     result = graph.compute_status(
-        root, use_cache=not args.no_cache, rebuild=args.rebuild_manifest
+        root,
+        use_cache=not args.no_cache,
+        rebuild=args.rebuild_manifest,
+        fast=args.fast,
     )
     if args.json:
         _emit(result)
     else:
         graph.print_status(result)
     return 1 if result["stale"] else 0
+
+
+def _watch_summary(root: Path, fast: bool = False) -> dict:
+    """One watch cycle: compute status + verify and return a counts summary.
+    Factored out of the loop so it is unit-testable."""
+    from . import anchors, graph
+
+    status = graph.compute_status(root, fast=fast)
+    verify = anchors.verify_vault(root)
+    return {
+        "stale": len(status["stale"]),
+        "ok": len(status["ok"]),
+        "broken": len(verify["broken"]),
+        "ambiguous": len(verify["ambiguous"]),
+    }
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    import time
+    from datetime import datetime, timezone
+
+    from . import vault_dir
+
+    root = resolve_root(args.root)
+    vd = vault_dir(root)
+
+    def signature() -> tuple:
+        sig = []
+        if vd.is_dir():
+            for p in sorted(vd.rglob("*")):
+                if p.is_file():
+                    st = p.stat()
+                    sig.append((str(p), st.st_mtime, st.st_size))
+        return tuple(sig)
+
+    print(f"watching {vd} every {args.interval}s — Ctrl-C to stop")
+    last: tuple | None = None
+    try:
+        while True:
+            sig = signature()
+            if sig != last:
+                last = sig
+                stamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                try:
+                    s = _watch_summary(root, fast=args.fast)
+                except errors.ScripError as e:
+                    print(f"[{stamp}] data error: {e}")
+                else:
+                    clean = not (s["stale"] or s["broken"] or s["ambiguous"])
+                    mark = "ok" if clean else "FINDINGS"
+                    print(
+                        f"[{stamp}] {mark} — stale={s['stale']} broken={s['broken']} "
+                        f"ambiguous={s['ambiguous']} ok={s['ok']}"
+                    )
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        return 0
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -84,10 +165,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_stamp(args: argparse.Namespace) -> int:
-    from . import graph
+    from . import graph, lock
 
     root = resolve_root(args.root)
-    stamped = graph.stamp_artifacts(root, args.paths or None)
+    with lock.write_lock(root):
+        stamped = graph.stamp_artifacts(root, args.paths or None)
     if args.json:
         _emit({"stamped": stamped})
     else:
@@ -122,8 +204,8 @@ def cmd_index(args: argparse.Namespace) -> int:
     if not embeddings.available():
         msg = (
             "embeddings backend not installed; rung 4 falls back to grep. "
-            "Enable it with:  uv tool install './scrip[embeddings]'  "
-            "(or: pip install 'scrip[embeddings]')"
+            "Enable it with:  uv tool install 'scriptoria[embeddings]'  "
+            "(or: pip install 'scriptoria[embeddings]')"
         )
         if args.json:
             _emit({"status": "unavailable", "message": msg})
@@ -154,6 +236,126 @@ def cmd_search(args: argparse.Namespace) -> int:
             print(f"    {r['snippet']}")
         if not out["results"]:
             print("  (no matches)")
+    return 0
+
+
+def cmd_unlock(args: argparse.Namespace) -> int:
+    from . import lock
+
+    root = resolve_root(args.root)
+    removed = lock.unlock(root, force=args.force)
+    if args.json:
+        _emit({"removed": removed})
+    else:
+        print("removed .kb/lock" if removed else "no lock to remove")
+    return 0
+
+
+def cmd_anchor(args: argparse.Namespace) -> int:
+    from . import anchors
+
+    root = resolve_root(args.root)
+    source_id = args.source if args.source.startswith("raw/") else f"raw/{args.source}"
+    _safe_slug(source_id[len("raw/") :], "source")
+    text = anchors.source_text(root, source_id)
+    anchor = anchors.make_anchor(text, args.quote)
+    status = anchors.resolve(text, anchor)
+    target = f"{source_id}#{anchor}"
+    label = args.quote[:48].replace("\n", " ").strip()
+    footnote = f'[^{args.label}]: anchor={target}  "{label}"'
+    if args.json:
+        _emit(
+            {
+                "source_id": source_id,
+                "anchor": anchor,
+                "target": target,
+                "status": status,
+                "label": args.label,
+                "footnote": footnote,
+            }
+        )
+    else:
+        print(f"{target}   [{status}]")
+        print(footnote)
+    # Mirror `verify`: a citation must resolve to exactly one span. AMBIGUOUS or
+    # BROKEN exits 1 so the agent lengthens the quote until unique.
+    return 0 if status == "OK" else 1
+
+
+def cmd_new(args: argparse.Namespace) -> int:
+    from . import frontmatter, lock, raw_dir, wiki_dir
+
+    root = resolve_root(args.root)
+    _safe_slug(args.slug)
+    raw_ids: list[str] = []
+    for s in (s.strip() for s in args.sources.split(",")):
+        if not s:
+            continue
+        sid = s if s.startswith("raw/") else f"raw/{s}"
+        slug = sid.split("#", 1)[0][len("raw/") :]
+        _safe_slug(slug, "source")
+        if not (raw_dir(root) / f"{slug}.md").exists():
+            raise errors.DataError(f"declared source does not exist: {sid}")
+        raw_ids.append(sid)
+    if not raw_ids:
+        raise errors.UsageError("--from requires at least one source id")
+
+    subdir = "concepts" if args.kind == "concept" else "entities"
+    path = wiki_dir(root) / subdir / f"{args.slug}.md"
+
+    meta = {
+        "id": f"{args.kind}/{args.slug}",
+        "type": f"wiki.{args.kind}",
+        "title": args.title or args.slug,
+        "derived-from": raw_ids,
+        "confidence": 0.0,
+    }
+    body = (
+        "<!-- Draft: synthesize from the sources in derived-from; cite each claim "
+        "with a footnote anchor (`scrip anchor`), then `scrip stamp` + `scrip verify`. -->\n"
+    )
+    # Create exclusively *inside* the lock: the existence check and the write are
+    # one atomic step, so two concurrent `new`s for the same slug can't both pass
+    # an earlier check and clobber each other.
+    with lock.write_lock(root):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(path, "x", encoding="utf-8") as f:
+                f.write(frontmatter.dump(meta, body))
+        except FileExistsError:
+            raise errors.UsageError(
+                f"refusing to overwrite existing page: {path.relative_to(root)}"
+            ) from None
+
+    rel = str(path.relative_to(root))
+    if args.json:
+        _emit({"created": rel, "id": meta["id"]})
+    else:
+        print(f"created {rel}  (id {meta['id']})")
+        print("  fill the body, cite with `scrip anchor`, then `scrip stamp` + `scrip verify`")
+    return 0
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    from . import ingest, lock
+
+    root = resolve_root(args.root)
+    slug = _safe_slug(args.slug or ingest.default_slug(args.source))
+    data, kind, charset = ingest.fetch(args.source)
+    text = ingest.extract_text(data, kind, charset)
+    found = ingest.extract_metadata(data, kind, charset)
+    meta = ingest.build_meta(
+        source=args.source,
+        title=args.title or found.get("title"),
+        author=args.author or found.get("author"),
+    )
+    with lock.write_lock(root):
+        written = ingest.write_source(root, slug, text, meta, overwrite=args.reingest)
+    if args.json:
+        _emit({"ingested": written["id"], "path": written["path"], "kind": kind})
+    else:
+        print(f"ingested {written['id']}  ({written['path']}, {kind})")
+        print("  next: compile a page (`scrip new` + `scrip anchor`), then `scrip stamp`")
     return 0
 
 
@@ -192,7 +394,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="regenerate .kb/manifest.json from files after computing status",
     )
+    ps.add_argument(
+        "--fast",
+        action="store_true",
+        help="trust (mtime,size) to skip re-hashing unchanged sources — faster, but "
+        "can miss an edit that preserves both (SPEC §8); plain status always re-hashes",
+    )
     ps.set_defaults(func=cmd_status)
+
+    pw = sub.add_parser(
+        "watch",
+        parents=[common],
+        help="re-run status + verify whenever the vault changes (poll loop)",
+    )
+    pw.add_argument(
+        "--interval", type=float, default=2.0, help="poll interval in seconds (default 2)"
+    )
+    pw.add_argument(
+        "--fast", action="store_true", help="use the --fast status path while watching"
+    )
+    pw.set_defaults(func=cmd_watch)
 
     pv = sub.add_parser(
         "verify",
@@ -249,6 +470,66 @@ def build_parser() -> argparse.ArgumentParser:
     psr.add_argument("query", help="the question / search text")
     psr.add_argument("-k", type=int, default=5, help="number of results (default 5)")
     psr.set_defaults(func=cmd_search)
+
+    pul = sub.add_parser(
+        "unlock",
+        parents=[common],
+        help="remove a stale .kb/lock (use --force to break a live one)",
+    )
+    pul.add_argument(
+        "--force",
+        action="store_true",
+        help="remove the lock even if its holder still looks alive",
+    )
+    pul.set_defaults(func=cmd_unlock)
+
+    pa = sub.add_parser(
+        "anchor",
+        parents=[common],
+        help="mint a verified provenance anchor for a quote in a source",
+    )
+    pa.add_argument("quote", help="the exact quoted text, as it appears in the source")
+    pa.add_argument(
+        "--source",
+        required=True,
+        metavar="raw/<slug>",
+        help="source id the quote is drawn from (the 'raw/' prefix is optional)",
+    )
+    pa.add_argument("--label", default="a1", help="footnote label (default: a1)")
+    pa.set_defaults(func=cmd_anchor)
+
+    pn = sub.add_parser(
+        "new",
+        parents=[common],
+        help="scaffold a new wiki page (frontmatter only) for the agent to fill",
+    )
+    pn.add_argument("kind", choices=["concept", "entity"])
+    pn.add_argument("slug", help="page slug, e.g. compilation-over-retrieval")
+    pn.add_argument(
+        "--from",
+        dest="sources",
+        required=True,
+        metavar="raw/a,raw/b",
+        help="comma-separated source ids for derived-from",
+    )
+    pn.add_argument("--title", help="human title (default: the slug)")
+    pn.set_defaults(func=cmd_new)
+
+    pin = sub.add_parser(
+        "ingest",
+        parents=[common],
+        help="fetch/read a source, extract canonical text, write raw/<slug>.md + .meta.yaml",
+    )
+    pin.add_argument("source", help="a URL or a local file (.md/.txt/.html/.pdf)")
+    pin.add_argument("--slug", help="vault slug (default: derived from the source name)")
+    pin.add_argument("--title", help="bibliographic title for the .meta.yaml sidecar")
+    pin.add_argument("--author", help="bibliographic author for the .meta.yaml sidecar")
+    pin.add_argument(
+        "--reingest",
+        action="store_true",
+        help="replace an existing raw source (a deliberate, tracked re-ingest)",
+    )
+    pin.set_defaults(func=cmd_ingest)
 
     return p
 

@@ -8,12 +8,16 @@ Each block records its char ``span`` into the original text and a ``hash`` of
 the exact sliced substring. Editing one paragraph shifts the spans of later
 blocks but leaves their sliced content — and therefore their hashes —
 unchanged, which is what makes block-precise dependency tracking cheap and
-correct (see SPEC §6.2).
+correct (see SPEC §7.2).
 
-``block_id`` is positional (``b0``, ``b1``, …). Positional ids are stable under
-in-place edits; *inserting* a block renumbers later ids — a known limitation,
-which is why whole-file dependencies are the v0 default and block-precise deps
-are opt-in.
+``block_id`` is **content-derived**: a short digest of the block's *normalized*
+text (the same normalization provenance anchors use), so it is independent of
+position. Inserting a block elsewhere leaves every other block's id untouched —
+the insertion-stability that positional ids lacked. Blocks whose *normalized*
+text is identical (byte-identical, or differing only in case/whitespace) share a
+base id and are disambiguated by an occurrence suffix (``…:1``, ``…:2``); the
+first occurrence keeps the bare id so it stays stable when a duplicate is
+appended later.
 """
 
 from __future__ import annotations
@@ -59,11 +63,36 @@ def split_blocks(text: str) -> list[dict]:
     if cur is not None:
         ranges.append(cur)
 
-    return [
-        {
-            "block_id": f"b{idx}",
-            "span": [s, e],
-            "hash": hashing.sha256_text(text[s:e]),
-        }
-        for idx, (s, e) in enumerate(ranges)
-    ]
+    out: list[dict] = []
+    seen: dict[str, int] = {}
+    for s, e in ranges:
+        slice_text = text[s:e]
+        block_id = _block_id(slice_text, seen)
+        out.append(
+            {
+                "block_id": block_id,
+                "span": [s, e],
+                "hash": hashing.sha256_text(slice_text),
+            }
+        )
+    return out
+
+
+def _block_id(slice_text: str, seen: dict[str, int]) -> str:
+    """Content-derived id for a block: ``b`` + 12 hex of the normalized text's
+    digest, with a ``:n`` suffix for normalized-identical repeats. ``seen``
+    accumulates base-id occurrence counts across one ``split_blocks`` call.
+
+    Identity is taken over the *normalized* text so reformatting (whitespace,
+    case) does not change a block's id; the separate ``hash`` over the exact
+    slice still captures byte changes for staleness. The empty-normalization
+    fallback (hash the exact bytes instead) is defensive only: blank lines are
+    already block boundaries, so every block holds ≥1 non-blank line and cannot
+    normalize to empty — but the guard keeps the id total just in case.
+    """
+    norm = hashing.normalize(slice_text)
+    digest = hashing.sha256_text(norm if norm else slice_text)
+    base = "b" + digest.split(":", 1)[1][:12]
+    n = seen.get(base, 0)
+    seen[base] = n + 1
+    return base if n == 0 else f"{base}:{n}"

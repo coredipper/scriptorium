@@ -17,7 +17,9 @@ from pathlib import Path
 
 from . import manifest_path
 
-VERSION = 1
+# v2: block_ids became content-derived (SPEC v2). A v1 manifest holds positional
+# block ids, so it is rejected by ``load`` as a cache miss and regenerated.
+VERSION = 2
 
 
 def load(root: Path) -> dict | None:

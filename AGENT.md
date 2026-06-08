@@ -18,22 +18,26 @@ The data contract these steps assume is normative in [SPEC.md](SPEC.md).
 
 ## INGEST — bring a source in
 
-1. Obtain the source text (extract from PDF/HTML if needed). Save it verbatim to
-   `vault/raw/<slug>.md`. This stored text is canonical; do not touch it again.
-2. Write `vault/raw/<slug>.meta.yaml` with `title`, `author`, `url`, `retrieved`.
-3. `scrip status --rebuild-manifest` — the new source registers and shows as
+1. `scrip ingest <url|file> [--slug …] [--title …] [--author …]` — fetches or
+   reads the source, extracts **canonical text** (HTML/PDF via the optional
+   `[ingest]` extra; `.md`/`.txt` passthrough), and writes `vault/raw/<slug>.md` +
+   `.meta.yaml`. The stored text is canonical; do not touch it again. Raw is
+   immutable — re-ingesting a *changed* source needs `--reingest` (a tracked
+   event). (You may still hand-author the two files instead.)
+2. `scrip status --rebuild-manifest` — the new source registers and shows as
    `UNCOMPILED` (nothing depends on it yet).
 
 ## COMPILE — synthesize a wiki page
 
 1. Read the relevant `raw/` source(s).
-2. Write or update `vault/wiki/concepts/<slug>.md` (or `entities/<slug>.md`):
-   - frontmatter: `id`, `type`, `title`, `derived-from: [raw/…]`, `confidence`.
-   - prose: synthesize. For each claim-bearing sentence, add a footnote anchor
-     quoting the exact source text:
-     `[^a1]: anchor=raw/<slug>#<anchor>  "short label"`.
-     Compute `<anchor>` by quoting the source verbatim (the reference tool exposes
-     `make_anchor`; or quote and let `verify` confirm).
+2. Scaffold the page with the correct frontmatter, then synthesize:
+   - `scrip new concept <slug> --from raw/a,raw/b [--title "…"]` (or `entity`)
+     writes `vault/wiki/{concepts,entities}/<slug>.md` with `id`, `type`, `title`,
+     `derived-from`, `confidence` and an empty body. It refuses to overwrite.
+   - Fill the prose. For each claim-bearing sentence, mint a footnote anchor with
+     `scrip anchor "<exact quote>" --source raw/<slug>` — it prints a ready-to-paste
+     `[^a1]: anchor=raw/<slug>#<anchor>  "…"` line and **exits 1 if the quote is
+     not unique** (lengthen it until `OK`). Set `confidence` to your honest rating.
 3. `scrip stamp vault/wiki/concepts/<slug>.md` — records the correct `input-hash`
    + `last-compiled` deterministically.
 4. `scrip verify` — fix any `BROKEN`/`AMBIGUOUS` anchors (lengthen the quote until
@@ -95,7 +99,10 @@ reconciliations.
 
 | You want to… | Command |
 |---|---|
+| bring a source into raw/ | `scrip ingest <url\|file> [--slug …]` |
 | see what's stale / uncompiled | `scrip status` |
+| scaffold a new wiki page | `scrip new concept\|entity <slug> --from raw/…` |
+| mint a provenance anchor for a quote | `scrip anchor "<quote>" --source raw/<slug>` |
 | record provenance hashes after compiling | `scrip stamp [path…]` |
 | check every citation still resolves | `scrip verify` |
 | query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |

@@ -34,14 +34,19 @@ scrip verify     # → all citations resolve
 
 ### 1. Capture something you read
 
-Save the source text (or your notes/excerpts) as a markdown file, plus a small
-sidecar with where it came from:
+Let `scrip ingest` fetch and extract it — HTML/PDF need the optional `[ingest]`
+extra; markdown/text need nothing:
 
 ```sh
-$EDITOR vault/raw/some-article.md          # the text — keep verbatim quotes you may cite
-$EDITOR vault/raw/some-article.meta.yaml   # title / author / url / retrieved
-scrip status --rebuild-manifest            # registers it; shows as UNCOMPILED
+scrip ingest https://example.com/article            # → vault/raw/article.md + .meta.yaml
+scrip ingest ~/papers/the-paper.pdf --title "The Paper"
+scrip status --rebuild-manifest                     # registers it; shows as UNCOMPILED
 ```
+
+`raw/` is immutable; re-ingesting a *changed* source is a deliberate
+`scrip ingest … --reingest`. You can also hand-author `vault/raw/<slug>.md`
+(verbatim text, keep quotes you may cite) + `.meta.yaml` (title/author/url/
+retrieved) yourself.
 
 ### 2. Let the agent compile it
 
@@ -50,8 +55,9 @@ In Claude Code (or any agent that can read [AGENT.md](AGENT.md)), say:
 > Ingest and compile `raw/some-article` per AGENT.md: write a concept page with
 > provenance footnotes, extract claims into facts, then stamp and verify.
 
-The agent writes the page + claims, runs `scrip stamp` to record provenance
-hashes, and `scrip verify` until every citation resolves.
+The agent scaffolds the page with `scrip new`, mints each citation with
+`scrip anchor` (which refuses a non-unique quote), runs `scrip stamp` to record
+provenance hashes, and `scrip verify` until every citation resolves.
 
 ### 3. Keep it fresh
 
@@ -82,7 +88,7 @@ query`, recompile anything stale, and `scrip search` only if nothing covers it
 
 | You want to… | Do this |
 |---|---|
-| Add an article you read | drop `raw/<slug>.md` + `.meta.yaml`, then `scrip status --rebuild-manifest` |
+| Add an article you read | `scrip ingest <url\|file>` (HTML/PDF need the `[ingest]` extra), then `scrip status --rebuild-manifest` |
 | Turn it into knowledge | ask the agent to *ingest + compile + extract* per AGENT.md |
 | Re-index for semantic search | `scrip index` (needs the `[embeddings]` extra) |
 | See what needs recompiling | `scrip status` |

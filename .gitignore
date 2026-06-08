@@ -18,6 +18,9 @@ build/
 # Embeddings index: a large, regenerable binary cache (rebuild with `scrip index`)
 /.kb/embeddings/
 
+# Advisory write lock: ephemeral runtime state, never committed (see SPEC §11)
+/.kb/lock
+
 # NOTE: .kb/manifest.json is intentionally NOT ignored — it is a committed,
 # regenerable cache (see SPEC §8). On a merge conflict, discard it and run
 # `scrip status --rebuild-manifest`.

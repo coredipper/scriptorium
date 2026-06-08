@@ -1,4 +1,4 @@
-# The scriptorium contract (v1)
+# The scriptorium contract (v2)
 
 This is a **technology-agnostic file contract** for an agent-maintained knowledge
 base. It says what the files on disk mean — nothing about which agent, editor, or
@@ -87,7 +87,7 @@ appends without rewrites and diffs line-by-line in git.
 | facts set | `facts/<name>` | `facts/core` |
 
 A `raw/<slug>` id maps to the file `vault/raw/<slug>.md`. Block-scoped ids append
-`#<block_id>` (§7.2), e.g. `raw/friston-2010#b7`.
+`#<block_id>` (§7.2), e.g. `raw/friston-2010#b3f9a1c2d4e5`.
 
 ---
 
@@ -196,32 +196,54 @@ Otherwise `D` is **OK**. A raw source that no dependency references is
 A source may be split into deterministic blocks (heading lines and
 blank-line-separated paragraphs), each with a `block_id` and a hash of its sliced
 text. A derived artifact may then declare block-scoped dependencies
-(`raw/x#b3`), so a one-paragraph edit only invalidates artifacts that depend on
-that block.
+(`raw/x#<block_id>`), so a one-paragraph edit only invalidates artifacts that
+depend on that block.
 
-- **v0 default is whole-file** dependencies (correct; may over-invalidate).
-- Block-precise dependencies are **opt-in** and have a known limitation:
-  *inserting* a block renumbers positional `block_id`s. See
-  [Versioning](#10-versioning).
+The `block_id` is **content-derived**: a short digest of the block's *normalized*
+text (the §6 normalization), so it is a function of content, not position.
+Consequences:
+- **Insertion-stable.** Inserting a block elsewhere leaves every other block's id
+  unchanged, so dependents of unaffected blocks stay fresh. (In v1 ids were
+  positional and an insertion renumbered them, falsely staling dependents.)
+- **Reflow-stable identity.** Whitespace/case reformatting does not change a
+  block's id; the separate exact-slice `hash` still changes, so a dependent of a
+  reflowed block goes STALE via an input-hash mismatch (§7.1), not a vanished id.
+- **Duplicate disambiguation.** Blocks with identical *normalized* text
+  (byte-identical, or differing only in case/whitespace) share a base id; the
+  first keeps the bare id and later repeats take an occurrence suffix (`…:1`,
+  `…:2`). A dependency on such a *duplicated* block is inherently positional and
+  may shift if an earlier normalized-identical copy is inserted — the one residual
+  edge (§11 Versioning).
+
+Whole-file dependencies remain the safe default; block-precise dependencies are
+**opt-in**.
 
 ---
 
 ## 8. Manifest (the cache)
 
-`.kb/manifest.json` (`version: 1`) records, per raw source, its
+`.kb/manifest.json` (`version: 2`) records, per raw source, its
 `content_hash`/`blocks` plus `(mtime, size)`; and per derived artifact, its
 `derived-from`/`input-hash`/`last-compiled`. It is a **cache, not truth**:
 
 - Any computation must be reproducible **without** the manifest. Deleting `.kb/`
   and recomputing from files must yield an identical stale/OK/uncompiled set.
-- **Staleness always re-hashes raw content.** `(mtime, size)` are recorded for
-  information only and are *never* trusted to skip a re-hash — otherwise an edit
+- **Staleness re-hashes raw content by default.** `(mtime, size)` are recorded
+  for information only and are *not* trusted to skip a re-hash — otherwise an edit
   preserving both could hide a byte change and falsely report dependents fresh.
   The manifest's stored hashes are used only to annotate *which* source changed.
+  The opt-in `scrip status --fast` deliberately reverses this: it trusts
+  `(mtime, size)` to reuse the cached hash for unchanged sources (faster on large
+  vaults), accepting that an edit preserving both is missed. It is an explicit
+  acceleration, never the default.
 - It is written **atomically** (temp file + rename). A corrupt or stale manifest
   is treated as a cache miss, never an error.
 - It may be committed to git for fast first reads; on a merge conflict, discard
   and regenerate (`scrip status --rebuild-manifest`).
+
+`.kb/` holds only regenerable state: the manifest, the optional embeddings index
+(`.kb/embeddings/`), and the advisory write lock (`.kb/lock`, §11). None are the
+source of truth; deleting `.kb/` and recomputing from `vault/` must be a no-op.
 
 ---
 
@@ -273,12 +295,26 @@ behaviours; their exit codes are part of the contract surface
 
 ## 11. Versioning
 
-- This document is `version: 1`; the manifest carries the same.
-- **Known limitation (block ids).** Positional `block_id`s are stable under
-  in-place edits but renumber on insertion. A future version may switch to
-  content-derived block ids (e.g. a heading-path + occurrence hash) to make
-  block-precise dependencies insertion-stable.
+- This document is `version: 2`; the manifest carries the same.
+- **v1 → v2 (block ids).** Block ids became content-derived (a digest of the
+  normalized block text) instead of positional `b0,b1,…`, making block-precise
+  dependencies insertion-stable (§7.2). The id *form* is the only change: a
+  `version: 1` manifest holds positional ids and is simply discarded as a cache
+  miss and regenerated (the manifest is never truth, §8). Whole-file dependencies
+  are byte-for-byte unaffected. The one residual limitation is duplicate blocks:
+  normalized-identical blocks (byte-identical, or differing only in
+  case/whitespace) are disambiguated by occurrence order, so a dependency on one
+  of several such blocks can still shift if an earlier copy is inserted.
+- **Concurrency (advisory lock).** Mutating commands take an advisory lock at
+  `.kb/lock` — a small JSON record `{pid, host, acquired_at}` *published
+  atomically* (written to a temp file, then hard-linked into place, so the lock
+  is never observed empty or half-written); reads
+  (`status`/`verify`/`query`/`search`) never lock. A lock whose holder is a
+  *provably-dead* process on this host is reclaimed automatically on the next
+  acquire; a live, other-host, or not-yet-readable lock is left alone and the
+  blocked write fails fast (exit 2), with `scrip unlock [--force]` to clear a
+  stuck lock. It is advisory, not a kernel mutex, and not part of the
+  files-are-truth contract — deleting it never affects `status`/`verify`.
 - **Optional adapters** (outside the core contract): an embeddings retrieval rung
   (`scrip index` / `scrip search`, via the `[embeddings]` extra) and an Obsidian
-  browsing layer (`adapters/obsidian/`). **Deferred:** multi-writer locking
-  (`.kb/lock`).
+  browsing layer (`adapters/obsidian/`).

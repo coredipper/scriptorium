@@ -1,7 +1,9 @@
 [project]
-name = "scrip"
-version = "0.1.0"
-description = "Deterministic scriptorium-keeper: staleness, provenance integrity, and fact queries for an agent-compiled knowledge base"
+# Distribution name on PyPI is `scriptoria` (scrip/scriptorium were taken); the
+# CLI command and the import package both remain `scrip`.
+name = "scriptoria"
+version = "0.2.0"
+description = "Deterministic scriptorium-keeper (the `scrip` CLI): staleness, provenance integrity, and fact queries for an agent-compiled knowledge base"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -17,6 +19,11 @@ scrip = "scrip.cli:main"
 # The retrieval rung (rung 4). Optional: without it, `scrip search` uses grep.
 # model2vec ships small static embeddings (no torch), fast on CPU.
 embeddings = ["model2vec>=0.3", "numpy>=1.24"]
+
+# HTML/PDF extraction for `scrip ingest`. Optional: without it, ingest still
+# handles .md/.txt; HTML/PDF ask you to install this extra. trafilatura does
+# main-content extraction (markdown output keeps headings); pypdf is pure-Python.
+ingest = ["trafilatura>=1.8", "pypdf>=4.0"]
 
 [dependency-groups]
 dev = ["pytest>=8"]

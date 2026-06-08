@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # --- canonical vault layout ------------------------------------------------
 # ``root`` is the repo/instance root: the directory containing ``vault/``.
@@ -38,3 +38,7 @@ def wiki_dir(root: Path) -> Path:
 
 def manifest_path(root: Path) -> Path:
     return root / ".kb" / "manifest.json"
+
+
+def lock_path(root: Path) -> Path:
+    return root / ".kb" / "lock"

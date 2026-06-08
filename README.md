@@ -44,8 +44,11 @@ The contract is the point; `scrip` and `vault/` are one conforming instance of i
 
 ## Quickstart
 
+The package is published to PyPI as **`scriptoria`**; the command it installs and
+the import package are both `scrip` (`pip install scriptoria` → run `scrip`).
+
 ```sh
-# install the deterministic keeper
+# install the deterministic keeper (from this checkout)
 uv tool install ./scrip
 
 # what's stale / what's uncompiled
@@ -75,10 +78,12 @@ scrip index    # embeds vault/raw/ blocks into .kb/embeddings/ (regenerable cach
 scrip search "keeping citations trustworthy when sources change"
 ```
 
-The maintaining loop (for an agent or a human): **ingest** a source into `raw/`,
-**compile** a page into `wiki/` and **extract** claims into `facts/`, then
-`scrip stamp` to record provenance and `scrip verify` to prove citations resolve.
-Full protocol in **[AGENT.md](AGENT.md)**.
+The maintaining loop (for an agent or a human): **ingest** a source into `raw/`
+(`scrip ingest <url|file>` — extracts canonical text; HTML/PDF need the optional
+`[ingest]` extra, markdown/text need nothing), **compile** a page into `wiki/`
+(`scrip new` + `scrip anchor` to mint verified citations) and **extract** claims
+into `facts/`, then `scrip stamp` to record provenance and `scrip verify` to prove
+citations resolve. Full protocol in **[AGENT.md](AGENT.md)**.
 
 ## Regenerate the example vault
 
@@ -95,5 +100,10 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 
 ## Status
 
-v0 — the thin end-to-end slice is complete and dogfooded. Deferred to adapters:
-an embeddings retrieval rung, an Obsidian browsing layer, multi-writer locking.
+**v0.2** — the first complete cut beyond the v0 slice (see [CHANGELOG.md](CHANGELOG.md)).
+The contract is hardened (content-derived block ids, **SPEC v2**), the input side is
+automated (`scrip ingest`), the agent COMPILE step is runnable (the optional
+[`scrip-harness`](harness/README.md), which keeps `scrip` itself model-free), and
+there's an advisory write lock plus `scrip watch`. The embeddings retrieval rung
+ships as the optional `[embeddings]` extra; an Obsidian browsing layer remains an
+adapter.

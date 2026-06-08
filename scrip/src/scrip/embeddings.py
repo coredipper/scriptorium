@@ -2,7 +2,7 @@
 
 This is an *optional adapter*, not part of the core contract. Install it with:
 
-    uv tool install './scrip[embeddings]'      # or: pip install 'scrip[embeddings]'
+    uv tool install './scrip[embeddings]'      # or: pip install 'scriptoria[embeddings]'
 
 If the backend (model2vec) is not installed, `available()` is False and callers
 fall back to lexical grep — the vault stays fully valid either way. The index is
@@ -22,6 +22,11 @@ from . import blocks as blocks_mod
 from . import hashing, raw_dir
 
 MODEL_NAME = "minishlab/potion-base-8M"
+
+# Bump when the block-id scheme or stored index layout changes, so an index built
+# under an older scheme is detected as stale even when raw *content* is unchanged.
+# 2: content-derived block ids (SPEC v2) — a v1 index held positional ids.
+INDEX_SCHEMA = 2
 
 _model = None
 _model_tried = False
@@ -77,7 +82,12 @@ def _fingerprint(root: Path) -> str:
         "raw/" + p.stem: hashing.content_hash_file(p)
         for p in sorted(raw_dir(root).glob("*.md"))
     }
-    return hashing.input_hash(deps) if deps else "sha256:empty"
+    content = hashing.input_hash(deps) if deps else "sha256:empty"
+    # Fold in the block-id scheme version: raw content alone is not enough, since
+    # the v1→v2 switch changed block ids without changing any source bytes. An
+    # index built under an older scheme therefore reads as stale (drift warned by
+    # `scrip search`) instead of silently returning ids that no longer resolve.
+    return hashing.sha256_text(f"schema:{INDEX_SCHEMA}\n{content}")
 
 
 def build_index(root: Path) -> int:

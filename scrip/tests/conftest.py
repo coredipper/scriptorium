@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from scrip import anchors, frontmatter, hashing
+from scrip import anchors, blocks, frontmatter, hashing
 
 
 class KB:
@@ -27,6 +27,31 @@ class KB:
         rid = f"raw/{slug}"
         self.sources[rid] = text
         return rid
+
+    def block_id(self, slug: str, contains: str) -> str:
+        """Return the block_id of the first block in ``raw/<slug>`` whose sliced
+        text contains ``contains`` (for constructing block-scoped deps)."""
+        text = self.sources[f"raw/{slug}"]
+        for b in blocks.split_blocks(text):
+            s, e = b["span"]
+            if contains in text[s:e]:
+                return b["block_id"]
+        raise KeyError(f"no block containing {contains!r} in raw/{slug}")
+
+    def _dep_hash(self, dep: str) -> str | None:
+        """Resolve a (possibly block-scoped) dep id to its current hash, mirroring
+        ``graph._dep_hash`` so fixture stamps match what status recomputes."""
+        if "#" in dep:
+            base, bid = dep.split("#", 1)
+            text = self.sources.get(base)
+            if text is None:
+                return None
+            for b in blocks.split_blocks(text):
+                if b["block_id"] == bid:
+                    return b["hash"]
+            return None
+        text = self.sources.get(dep)
+        return hashing.sha256_bytes(text.encode("utf-8")) if text is not None else None
 
     def mutate_raw(self, slug: str, text: str) -> None:
         p = self.root / "vault" / "raw" / f"{slug}.md"
@@ -47,9 +72,9 @@ class KB:
         body: str = "Body.\n",
     ) -> str:
         deps = {
-            sid: hashing.sha256_bytes(self.sources[sid].encode("utf-8"))
+            sid: h
             for sid in derived_from
-            if sid in self.sources
+            if (h := self._dep_hash(sid)) is not None
         }
         meta: dict = {
             "id": f"concept/{slug}",

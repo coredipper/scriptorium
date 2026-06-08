@@ -1,0 +1,45 @@
+name: release
+
+# Publishes the `scriptoria` package (the `scrip` CLI) to PyPI when a v* tag is
+# pushed. Uses PyPI Trusted Publishing (OIDC) — configure a trusted publisher for
+# the `scriptoria` project on PyPI pointing at this repo + workflow, so no token
+# secret is stored here. (scrip-harness is not published: it has a path dep.)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # The `pypi` GitHub Environment is the deploy-time protection hook — configure
+    # it in repo Settings → Environments with **required reviewers** (manual
+    # approval before each publish) and ideally a deployment-branch/tag rule
+    # (v* tags on the default branch). This is independent of PyPI's "(Any)"
+    # environment setting, which only scopes the OIDC token; the line below is
+    # what enforces the gate at deploy time, so keep it even with "(Any)".
+    environment: pypi
+    permissions:
+      contents: read # actions/checkout needs repo read access
+      id-token: write # required for OIDC trusted publishing (uv publish auto-detects)
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Build scriptoria (the scrip CLI)
+        working-directory: scrip
+        run: uv build
+
+      - name: Verify the tag matches the package version
+        working-directory: scrip
+        run: |
+          pkg=$(uv version --short)
+          tag="${GITHUB_REF_NAME#v}"
+          test "$pkg" = "$tag" || { echo "tag v$tag != package $pkg"; exit 1; }
+
+      - name: Publish to PyPI (trusted publishing)
+        working-directory: scrip
+        run: uv publish

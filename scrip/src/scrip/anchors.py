@@ -20,21 +20,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import unicodedata
 from collections.abc import Iterator
 from pathlib import Path
 
-from . import facts_dir, raw_dir, wiki_dir
+from . import facts_dir, hashing, raw_dir, wiki_dir
 from .errors import DataError
 
-_WS = re.compile(r"\s+")
 _FOOTNOTE = re.compile(r"^\[\^([^\]]+)\]:\s*anchor=(\S+)")
 
-
-def normalize(text: str) -> str:
-    t = unicodedata.normalize("NFC", text)
-    t = _WS.sub(" ", t).strip()
-    return t.lower()
+# The canonical normalization lives in ``hashing`` so blocks and anchors share
+# one definition; re-exported here for callers that import ``anchors.normalize``.
+normalize = hashing.normalize
 
 
 def _qh(normalized_quote: str) -> str:
@@ -107,6 +103,12 @@ def _source_text(root: Path, source_id: str, cache: dict[str, str]) -> str:
         raise DataError(f"reference to missing source: {source_id}")
     cache[source_id] = p.read_text(encoding="utf-8")
     return cache[source_id]
+
+
+def source_text(root: Path, source_id: str) -> str:
+    """Public read of a raw source's canonical text (raises ``DataError`` if the
+    source id is malformed or the file is missing). Used by ``scrip anchor``."""
+    return _source_text(root, source_id, {})
 
 
 def _iter_footnote_anchors(path: Path) -> Iterator[dict]:
