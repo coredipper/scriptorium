@@ -9,13 +9,14 @@ from scrip_harness.compile import (
 )
 
 
-def test_extract_markers_in_first_appearance_order():
-    assert extract_markers("First.[^a1] Second.[^a2]\n") == [1, 2]
+def test_extract_markers_returns_labels_in_first_appearance_order():
+    assert extract_markers("First.[^a1] Second.[^a2]\n") == ["a1", "a2"]
     assert extract_markers("no markers here") == []
-    # out of order / missing / duplicate references are reported as-seen, distinct
-    assert extract_markers("b[^a2] a[^a1]") == [2, 1]
-    assert extract_markers("x[^a1] y[^a3]") == [1, 3]
-    assert extract_markers("x[^a1] again[^a1]") == [1]
+    assert extract_markers("b[^a2] a[^a1]") == ["a2", "a1"]
+    assert extract_markers("x[^a1] again[^a1]") == ["a1"]
+    # malformed / foreign labels are surfaced verbatim so validation can reject
+    # them — a leading-zero label is NOT the same as a1, and [^b1] is foreign.
+    assert extract_markers("x[^a01] y[^b1]") == ["a01", "b1"]
 
 
 def test_build_user_prompt_includes_the_source():

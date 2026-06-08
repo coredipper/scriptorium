@@ -7,18 +7,21 @@ import re
 
 from pydantic import BaseModel
 
-_MARKER = re.compile(r"\[\^a(\d+)\]")
+# Match ANY footnote reference label, not just well-formed a-markers, so that a
+# foreign ([^b1]) or malformed ([^a01]) reference is surfaced and rejected rather
+# than silently ignored (which would leave an undefined footnote in the page).
+_MARKER = re.compile(r"\[\^([^\]]+)\]")
 
 
-def extract_markers(body: str) -> list[int]:
-    """Footnote marker numbers in ``body``, distinct, in first-appearance order
-    (``[^a1]`` → 1). Used to check the model's prose matches the claims it
-    returned before any page is stamped."""
-    seen: list[int] = []
+def extract_markers(body: str) -> list[str]:
+    """Footnote reference *labels* in ``body``, distinct, in first-appearance order
+    (``[^a1]`` → ``"a1"``). Returned verbatim — the caller requires them to be
+    exactly ``a1..aN`` (no leading zeros, no foreign labels) before stamping."""
+    seen: list[str] = []
     for m in _MARKER.finditer(body):
-        k = int(m.group(1))
-        if k not in seen:
-            seen.append(k)
+        label = m.group(1)
+        if label not in seen:
+            seen.append(label)
     return seen
 
 SYSTEM = (

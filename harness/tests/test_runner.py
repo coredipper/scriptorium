@@ -80,6 +80,40 @@ def test_compile_rejects_marker_mismatch(tmp_path):
         compile_page(root, "topic", draft_fn=stub)
 
 
+def test_compile_rejects_leading_zero_and_foreign_markers(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text(
+        "# T\n\nA real fact in the source.\n", encoding="utf-8"
+    )
+
+    def leading_zero(source_text, *, source_id):
+        return DraftPage(title="T", body="x[^a01]\n", claims=[DraftClaim(quote="a real fact")])
+
+    def foreign(source_text, *, source_id):
+        return DraftPage(
+            title="T", body="ok[^a1] extra[^b1]\n", claims=[DraftClaim(quote="a real fact")]
+        )
+
+    with pytest.raises(CompileError):
+        compile_page(root, "topic", draft_fn=leading_zero)
+    with pytest.raises(CompileError):
+        compile_page(root, "topic", draft_fn=foreign)
+
+
+def test_compile_rejects_slug_with_trailing_newline(tmp_path):
+    root = _vault(tmp_path)
+    called = False
+
+    def stub(source_text, *, source_id):
+        nonlocal called
+        called = True
+        return DraftPage(title="x", body="x[^a1]\n", claims=[DraftClaim(quote="x")])
+
+    with pytest.raises(CompileError):
+        compile_page(root, "topic\n", draft_fn=stub)
+    assert called is False
+
+
 def test_compile_rejects_unsafe_slug(tmp_path):
     root = _vault(tmp_path)
     called = False

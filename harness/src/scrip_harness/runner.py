@@ -44,7 +44,7 @@ def compile_page(
     :class:`CompileError` if any quote fails to resolve or any scrip step errors,
     so a bad draft never produces a stamped-but-broken page."""
     root = Path(root)
-    if not _SLUG_RE.match(slug):
+    if not _SLUG_RE.fullmatch(slug):  # fullmatch: reject a trailing newline (match + $ would not)
         raise CompileError(
             f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
             f"separators, '..', or leading dot"
@@ -57,11 +57,11 @@ def compile_page(
     # claims. scrip verify only checks footnote *definitions* resolve, so without
     # this a misnumbered/missing/extra marker could be stamped with uncited prose.
     markers = extract_markers(draft.body)
-    expected = list(range(1, len(draft.claims) + 1))
+    expected = [f"a{i}" for i in range(1, len(draft.claims) + 1)]
     if markers != expected:
         raise CompileError(
-            f"draft markers {markers} do not match claims {expected} in first-"
-            f"appearance order"
+            f"draft footnote markers {markers} do not match claims {expected} in "
+            f"first-appearance order (foreign or malformed labels are rejected)"
         )
 
     # Mint a verified anchor per claim. scrip anchor exits non-zero on a quote that
