@@ -1,7 +1,9 @@
-"""``scrip-harness compile <slug>`` — run the AGENT.md COMPILE step for one source.
+"""``scrip-harness compile|extract <slug>`` — run the AGENT.md COMPILE or
+EXTRACT step for one source.
 
 This is the model-driven entry point. It resolves the scriptorium root, calls
-Claude to draft the page, and hands every verifiable step to ``scrip``.
+Claude to draft the page or the claims, and hands every verifiable step to
+``scrip``.
 """
 
 from __future__ import annotations
@@ -35,13 +37,44 @@ def main(argv: list[str] | None = None) -> int:
     pc.add_argument("--kind", choices=["concept", "entity"], default="concept")
     pc.add_argument("--root")
     pc.add_argument("--model", help="Claude model id (default: claude-opus-4-8)")
+    pe = sub.add_parser(
+        "extract",
+        help="extract claims from raw/<slug> into facts/ via Claude (anchors minted "
+        "and verified by `scrip fact add`), then stamp + verify",
+    )
+    pe.add_argument("slug")
+    pe.add_argument("--root")
+    pe.add_argument("--model", help="Claude model id (default: claude-opus-4-8)")
     args = p.parse_args(argv)
 
     from . import model as model_mod
-    from .runner import CompileError, compile_page
+    from .runner import CompileError, ExtractError, compile_page, extract_facts
 
     root = _resolve_root(args.root)
     chosen_model = args.model or model_mod.DEFAULT_MODEL
+
+    if args.command == "extract":
+        def extract_draft_fn(text: str, *, source_id: str, failures=None):
+            return model_mod.draft_extraction(
+                text, source_id=source_id, model=chosen_model, failures=failures
+            )
+
+        try:
+            result = extract_facts(root, args.slug, draft_fn=extract_draft_fn)
+        except ExtractError as e:
+            print(f"scrip-harness: {e}", file=sys.stderr)
+            return 1
+        appended, skipped = result["appended"], result["skipped"]
+        print(
+            f"extracted {len(appended)} claim(s) from raw/{args.slug}  (verified"
+            f"{f', {len(skipped)} duplicate(s) skipped' if skipped else ''})"
+        )
+        if result["contradictions"]:
+            print(
+                f"  {len(result['contradictions'])} contradiction candidate(s) — "
+                f"run `scrip query contradictions` and RECONCILE per AGENT.md"
+            )
+        return 0
 
     def draft_fn(text: str, *, source_id: str):
         return model_mod.draft_page(text, source_id=source_id, model=chosen_model)

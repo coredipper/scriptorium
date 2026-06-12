@@ -45,15 +45,24 @@ The data contract these steps assume is normative in [SPEC.md](SPEC.md).
 
 ## EXTRACT — pull structured facts
 
-1. From the `raw/` source(s), append records to:
-   - `facts/entities.ndjson` — one entity per line.
-   - `facts/claims.ndjson` — one claim per line, each with a resolvable `anchor`,
-     a `subject`/`predicate`/`object` triple, and a `polarity`
-     (`asserts`/`denies`/`qualifies`).
-   - `facts/graph.ndjson` — edges (citation/idea relations).
-2. Update `facts/_meta.yaml` `derived-from`, then `scrip stamp vault/facts/_meta.yaml`.
+1. Propose records to `scrip fact add` (NDJSON on `--stdin` or from `--file`)
+   instead of hand-appending — it validates, mints, and appends under the write
+   lock, **all-or-nothing**:
+   - claims (`--table claims`, the default): each proposal carries a **verbatim
+     `quote`** plus a `subject`/`predicate`/`object` triple, a `polarity`
+     (`asserts`/`denies`/`qualifies`), and a `confidence`. scrip mints the
+     `anchor` (a non-unique or absent quote fails the batch, exit 1 listing each
+     failing record — lengthen the quote and retry), assigns
+     `claim_id`/`extracted_at`, skips exact duplicates (safe to re-run), and
+     merges the new sources into `facts/_meta.yaml` `derived-from`.
+   - entities / edges (`--table entities|edges`): schema + id checks, no anchors.
+2. `scrip stamp vault/facts/_meta.yaml` — every append (any table) drops the
+   set's `input-hash`, so it deliberately shows STALE until you stamp it.
 3. `scrip verify` (anchors resolve) and `scrip query contradictions` (catch
    self-conflicts before they harden).
+
+`scrip-harness extract <slug>` runs this loop end-to-end for one source's claims
+(Claude proposes; failed quotes are re-asked with lengthened replacements).
 
 ## ANSWER — the policy ladder
 
@@ -103,6 +112,7 @@ reconciliations.
 | see what's stale / uncompiled | `scrip status` |
 | scaffold a new wiki page | `scrip new concept\|entity <slug> --from raw/…` |
 | mint a provenance anchor for a quote | `scrip anchor "<quote>" --source raw/<slug>` |
+| append validated fact records | `scrip fact add [--table claims\|entities\|edges] --stdin` |
 | record provenance hashes after compiling | `scrip stamp [path…]` |
 | check every citation still resolves | `scrip verify` |
 | query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |

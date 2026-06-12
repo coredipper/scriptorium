@@ -336,6 +336,40 @@ def cmd_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fact_add(args: argparse.Namespace) -> int:
+    from . import facts
+
+    root = resolve_root(args.root)
+    if args.file:
+        try:
+            text = Path(args.file).read_text(encoding="utf-8")
+        except OSError as e:
+            raise errors.UsageError(f"cannot read --file: {e}") from e
+    else:
+        text = sys.stdin.read()
+    result = facts.add(root, args.table, facts.parse_ndjson(text))
+    if args.json:
+        _emit(result)
+    else:
+        for r in result["appended"]:
+            ident = r.get("claim_id") or r.get("entity_id") or f"{r['src']} -> {r['dst']}"
+            print(f"  appended {ident}")
+        for s in result["skipped"]:
+            print(f"  = record {s['index']} skipped (duplicate)")
+        for f in result["failures"]:
+            print(f"  ✗ record {f['index']}: {f['status']} — {f['detail']}")
+        if result["failures"]:
+            print(
+                f"nothing appended: {len(result['failures'])} record(s) failed "
+                f"(the batch is all-or-nothing)"
+            )
+        else:
+            print(f"{len(result['appended'])} record(s) appended to facts/")
+            if result["appended"]:
+                print("  next: `scrip stamp vault/facts/_meta.yaml`, then `scrip verify`")
+    return 1 if result["failures"] else 0
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     from . import ingest, lock
 
@@ -514,6 +548,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pn.add_argument("--title", help="human title (default: the slug)")
     pn.set_defaults(func=cmd_new)
+
+    pfact = sub.add_parser(
+        "fact",
+        help="validated writers for the facts/ layer (claims mint verified anchors)",
+    )
+    fact_sub = pfact.add_subparsers(dest="fact_command", required=True, metavar="<action>")
+    pfa = fact_sub.add_parser(
+        "add",
+        parents=[common],
+        help="validate proposed NDJSON records and append them all-or-nothing; "
+        "claims carry a verbatim `quote` and scrip mints the anchor/id/timestamp",
+    )
+    pfa.add_argument(
+        "--table",
+        choices=["claims", "entities", "edges"],
+        default="claims",
+        help="facts table to append to (default: claims)",
+    )
+    fact_in = pfa.add_mutually_exclusive_group(required=True)
+    fact_in.add_argument("--file", metavar="NDJSON", help="read proposed records from a file")
+    fact_in.add_argument(
+        "--stdin", action="store_true", help="read proposed records from stdin"
+    )
+    pfa.set_defaults(func=cmd_fact_add)
 
     pin = sub.add_parser(
         "ingest",
