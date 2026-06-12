@@ -365,7 +365,7 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
             )
         else:
             print(f"{len(result['appended'])} record(s) appended to facts/")
-            if args.table == "claims" and result["appended"]:
+            if result["appended"]:
                 print("  next: `scrip stamp vault/facts/_meta.yaml`, then `scrip verify`")
     return 1 if result["failures"] else 0
 

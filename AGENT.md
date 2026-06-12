@@ -56,8 +56,8 @@ The data contract these steps assume is normative in [SPEC.md](SPEC.md).
      `claim_id`/`extracted_at`, skips exact duplicates (safe to re-run), and
      merges the new sources into `facts/_meta.yaml` `derived-from`.
    - entities / edges (`--table entities|edges`): schema + id checks, no anchors.
-2. `scrip stamp vault/facts/_meta.yaml` — the facts set deliberately shows STALE
-   until you stamp it.
+2. `scrip stamp vault/facts/_meta.yaml` — every append (any table) drops the
+   set's `input-hash`, so it deliberately shows STALE until you stamp it.
 3. `scrip verify` (anchors resolve) and `scrip query contradictions` (catch
    self-conflicts before they harden).
 

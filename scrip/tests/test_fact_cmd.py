@@ -220,6 +220,40 @@ def test_fact_add_merges_meta_derived_from_without_stamping(kb):
     assert meta["derived-from"] == ["raw/s", "raw/t"]
 
 
+def test_fact_add_invalidates_stamp_even_for_an_already_known_source(kb):
+    """Appending claims must leave the facts set STALE until re-stamped even
+    when the source is already in derived-from — otherwise the recomputed
+    input-hash still matches and status reports OK over unblessed facts."""
+    kb.add_raw("s", SRC)
+    assert _run_add(kb, _ndjson(_claim("The quick brown fox jumps over the lazy dog."))) == 0
+    meta_path = kb.root / "vault" / "facts" / "_meta.yaml"
+    assert cli.main(["stamp", str(meta_path), "--root", str(kb.root)]) == 0
+    assert cli.main(["status", "--root", str(kb.root)]) == 0  # blessed
+
+    # same source, new claim: derived-from is unchanged, but the set is dirty
+    assert _run_add(kb, _ndjson(_claim("Caching answers beats recomputing them."))) == 0
+    assert cli.main(["status", "--root", str(kb.root)]) == 1
+    assert cli.main(["stamp", str(meta_path), "--root", str(kb.root)]) == 0
+    assert cli.main(["status", "--root", str(kb.root)]) == 0
+
+
+def test_fact_add_entities_and_edges_invalidate_the_stamp_too(kb):
+    kb.add_raw("s", SRC)
+    assert _run_add(kb, _ndjson(_claim("The quick brown fox jumps over the lazy dog."))) == 0
+    meta_path = kb.root / "vault" / "facts" / "_meta.yaml"
+    assert cli.main(["stamp", str(meta_path), "--root", str(kb.root)]) == 0
+    assert cli.main(["status", "--root", str(kb.root)]) == 0
+
+    ent = {"entity_id": "entity/fox", "name": "Fox", "kind": "concept"}
+    assert _run_add(kb, _ndjson(ent), "--table", "entities") == 0
+    assert cli.main(["status", "--root", str(kb.root)]) == 1  # members changed, unblessed
+    assert cli.main(["stamp", str(meta_path), "--root", str(kb.root)]) == 0
+
+    edge = {"src": "entity/fox", "dst": "raw/s", "kind": "about"}
+    assert _run_add(kb, _ndjson(edge), "--table", "edges") == 0
+    assert cli.main(["status", "--root", str(kb.root)]) == 1
+
+
 def test_fact_add_malformed_meta_appends_nothing(kb):
     """A malformed _meta.yaml must fail the whole add BEFORE claims land —
     otherwise claims would exist whose source is missing from derived-from,

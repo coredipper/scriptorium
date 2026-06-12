@@ -14,9 +14,10 @@ reference CLI. The file **contract** is versioned separately in
   **verbatim `quote`** (never an anchor/id/timestamp — scrip mints those), the
   anchor is verified to resolve uniquely, the batch is **all-or-nothing** with
   per-record failures reported (exit 1), exact duplicates are skipped so
-  re-extraction is idempotent, and the claim sources are merged into
-  `facts/_meta.yaml` `derived-from` *without* stamping — the facts set honestly
-  shows STALE until `scrip stamp` runs.
+  re-extraction is idempotent, the claim sources are merged into
+  `facts/_meta.yaml` `derived-from`, and every append (any table) drops the
+  set's `input-hash` — the facts set honestly shows STALE until `scrip stamp`
+  re-blesses it.
 - **`scrip-harness extract <slug>`** — makes the AGENT.md EXTRACT step runnable
   for claims: Claude proposes structured claims; `scrip fact add` verifies and
   appends; BROKEN/AMBIGUOUS quotes are re-asked (bounded retries) with

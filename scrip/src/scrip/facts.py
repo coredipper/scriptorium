@@ -11,9 +11,10 @@ mirroring how ``scrip anchor`` mints citations for wiki prose:
   input index so the caller can retry just the failing records;
 - exact duplicates (same source, normalized quote, triple, and polarity) are
   skipped and reported, so re-running an extraction is safe;
-- ids and the append happen under the advisory write lock, and the claim
-  sources are merged into ``facts/_meta.yaml`` ``derived-from`` *without*
-  stamping — the facts set honestly shows STALE until ``scrip stamp`` runs.
+- quote verification, ids, and the append all happen under the advisory write
+  lock; claim sources are merged into ``facts/_meta.yaml`` ``derived-from`` and
+  every append (any table) drops the set's ``input-hash`` — the facts set
+  honestly shows STALE until ``scrip stamp`` re-blesses it.
 """
 
 from __future__ import annotations
@@ -285,8 +286,12 @@ def _write_meta(root: Path, data: dict, new_sources: list[str]) -> None:
         if sid not in derived:
             derived.append(sid)
     data["derived-from"] = derived
-    # input-hash/last-compiled are deliberately untouched: the set must show
-    # STALE until the caller runs `scrip stamp vault/facts/_meta.yaml`.
+    # Drop the stamp on EVERY append: with an unchanged derived-from the
+    # recomputed input-hash would still match the stored one, and status would
+    # report OK over facts nobody has blessed. Removing input-hash forces STALE
+    # ("no input-hash recorded") until `scrip stamp vault/facts/_meta.yaml`.
+    # last-compiled is kept as the historical record of the last bless.
+    data.pop("input-hash", None)
     (facts_dir(root) / "_meta.yaml").write_text(
         yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
@@ -309,7 +314,6 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
 
     failures: list[dict] = []
     resolved: list[dict | None] = [None] * len(proposals)
-    meta: dict | None = None
     path = facts_dir(root) / _FILES[table]
     with lock.write_lock(root):
         if table == "claims":
@@ -328,11 +332,11 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                 return {"table": table, "appended": [], "skipped": [], "failures": failures}
 
         existing, existing_text = _read_table(path)
+        meta = _load_meta(root)  # parse before appending: fail whole, not half
         appended: list[dict] = []
         skipped: list[dict] = []
 
         if table == "claims":
-            meta = _load_meta(root)  # parse before appending: fail whole, not half
             keys = _existing_claim_keys(existing)
             number, width = _next_claim_id(existing)
             now = _now()
@@ -412,12 +416,11 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                 if existing_text and not existing_text.endswith("\n"):
                     f.write("\n")
                 f.write(payload)
+            new_sources: list[str] = []
             if table == "claims":
-                assert meta is not None  # loaded above for the claims table
-                new_sources: list[str] = []
                 for rec in appended:
                     if rec["source_id"] not in new_sources:
                         new_sources.append(rec["source_id"])
-                _write_meta(root, meta, new_sources)
+            _write_meta(root, meta, new_sources)
 
     return {"table": table, "appended": appended, "skipped": skipped, "failures": []}
