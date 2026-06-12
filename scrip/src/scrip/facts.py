@@ -309,19 +309,24 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
 
     failures: list[dict] = []
     resolved: list[dict | None] = [None] * len(proposals)
-    if table == "claims":
-        src_cache: dict[str, str | None] = {}
-        for i, rec in enumerate(proposals):
-            fail, res = _resolve_claim(root, rec, i, src_cache)
-            if fail:
-                failures.append(fail)
-            else:
-                resolved[i] = res
-        if failures:
-            return {"table": table, "appended": [], "skipped": [], "failures": failures}
-
+    meta: dict | None = None
     path = facts_dir(root) / _FILES[table]
     with lock.write_lock(root):
+        if table == "claims":
+            # Resolve quotes INSIDE the lock: raw/ only changes via a *locked*
+            # `ingest --reingest`, so holding the lock from verification through
+            # append closes the window where a re-ingest could land between the
+            # two and silently break the just-minted anchors.
+            src_cache: dict[str, str | None] = {}
+            for i, rec in enumerate(proposals):
+                fail, res = _resolve_claim(root, rec, i, src_cache)
+                if fail:
+                    failures.append(fail)
+                else:
+                    resolved[i] = res
+            if failures:
+                return {"table": table, "appended": [], "skipped": [], "failures": failures}
+
         existing, existing_text = _read_table(path)
         appended: list[dict] = []
         skipped: list[dict] = []
@@ -408,6 +413,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                     f.write("\n")
                 f.write(payload)
             if table == "claims":
+                assert meta is not None  # loaded above for the claims table
                 new_sources: list[str] = []
                 for rec in appended:
                     if rec["source_id"] not in new_sources:

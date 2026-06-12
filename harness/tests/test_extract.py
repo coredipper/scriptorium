@@ -189,6 +189,20 @@ def test_extract_rejects_unsafe_slug(tmp_path):
     assert called is False
 
 
+def test_extract_missing_source_is_a_clean_error(tmp_path):
+    root = _vault(tmp_path)
+    called = False
+
+    def stub(source_text, *, source_id, failures=None):
+        nonlocal called
+        called = True
+        return DraftExtraction(claims=[])
+
+    with pytest.raises(ExtractError, match="raw/absent"):
+        extract_facts(root, "absent", draft_fn=stub)
+    assert called is False  # no model call for a source that does not exist
+
+
 def test_extract_surfaces_contradiction_candidates(tmp_path):
     from scrip import anchors  # the harness depends on scrip; reuse its anchor math
 

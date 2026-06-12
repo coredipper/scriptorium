@@ -284,6 +284,21 @@ def test_fact_add_blocked_by_live_lock(kb):
     assert _claims_lines(kb) == []
 
 
+def test_fact_add_resolves_quotes_under_the_lock(kb):
+    """Anchors must be minted/verified INSIDE the write lock — otherwise a
+    concurrent `ingest --reingest` could rewrite the source between
+    verification and append, landing claims whose anchors no longer resolve.
+    Observable contract: with the lock held, even a bad quote is refused with
+    the lock error (2), never reported as a quote finding (1)."""
+    kb.add_raw("s", SRC)
+    info = lock.acquire(kb.root)
+    try:
+        rc = _run_add(kb, _ndjson(_claim("this sentence is absent from the source")))
+    finally:
+        lock.release(kb.root, info)
+    assert rc == 2
+
+
 # --------------------------------------------------------------------------- #
 # entities / edges tables: schema + id checks, no anchors
 # --------------------------------------------------------------------------- #

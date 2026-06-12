@@ -137,7 +137,10 @@ def extract_facts(
             f"separators, '..', or leading dot"
         )
     source_id = f"raw/{slug}"
-    source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
+    try:
+        source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
+    except OSError as e:
+        raise ExtractError(f"cannot read {source_id}: {e}") from e
     draft = draft_fn(source_text, source_id=source_id)
     claims = list(draft.claims)
     if not claims:
