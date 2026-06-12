@@ -24,6 +24,24 @@ reference CLI. The file **contract** is versioned separately in
   lengthened replacements or dropped; contradiction candidates are surfaced for
   RECONCILE.
 
+### Hardening
+- **CI now tests the support claim**: both suites run on Python 3.10–3.14
+  (previously one unpinned version), with the `[ingest]` extra installed so the
+  HTML/PDF extraction tests actually execute in CI (they had silently skipped).
+- **Lint + typecheck in CI**: `ruff check` (pyflakes/pycodestyle errors, import
+  order, pyupgrade, bugbear) and `pyright` (basic, pinned) over both packages.
+- **The release workflow cuts a GitHub Release** (auto-generated notes) after a
+  successful PyPI publish.
+- **`.kb/manifest.json` is no longer intended for commit**: SPEC §8 already
+  treats it as a regenerable cache that *may* be committed; the repo now
+  gitignores it (its `(mtime, size)` records are wrong on every fresh clone).
+- A missing/unreadable raw source is now a clean `CompileError` in
+  `scrip-harness compile` (parity with `extract`).
+- CLI test coverage for `status`, `index`, `unlock`, the `watch` loop, the
+  embeddings search path (deterministic toy encoder), and `--json` output
+  shapes across commands; packaging metadata (classifiers, URLs) for both
+  packages.
+
 ## [0.2.0] — 2026-06-08
 
 The first complete, releasable cut beyond the v0 end-to-end slice: the contract

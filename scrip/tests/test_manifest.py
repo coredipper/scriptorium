@@ -44,6 +44,7 @@ def test_manifest_written_and_shaped(kb):
 
     assert manifest_path(kb.root).exists()
     data = manifest.load(kb.root)
+    assert data is not None
     assert data["version"] == manifest.VERSION
     assert "raw/a" in data["raw"]
     assert "blocks" in data["raw"]["raw/a"]

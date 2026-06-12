@@ -47,7 +47,7 @@ def _get_model():
 
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     try:
-        from model2vec import StaticModel
+        from model2vec import StaticModel  # pyright: ignore[reportMissingImports]
     except Exception:
         return None
     try:
@@ -95,7 +95,7 @@ def build_index(root: Path) -> int:
     model = _get_model()
     if model is None:
         raise RuntimeError("no embeddings backend available")
-    import numpy as np
+    import numpy as np  # pyright: ignore[reportMissingImports]
 
     items = list(_iter_blocks(root))
     if items:
@@ -126,7 +126,7 @@ def vector_search(root: Path, query: str, k: int = 5):
     d = _embeddings_dir(root)
     if model is None or not (d / "vectors.npy").exists() or not (d / "meta.json").exists():
         return None
-    import numpy as np
+    import numpy as np  # pyright: ignore[reportMissingImports]
 
     meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
     items = meta["items"]

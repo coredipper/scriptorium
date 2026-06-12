@@ -13,9 +13,8 @@ from pathlib import Path
 
 import yaml
 
-from . import facts_dir, hashing, raw_dir, wiki_dir
 from . import blocks as blocks_mod
-from . import frontmatter
+from . import facts_dir, frontmatter, hashing, raw_dir, wiki_dir
 from . import manifest as manifest_mod
 from .errors import DataError
 

@@ -7,10 +7,29 @@ description = "Deterministic scriptorium-keeper (the `scrip` CLI): staleness, pr
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+keywords = ["knowledge-base", "provenance", "staleness", "agent", "markdown", "wiki"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
 dependencies = [
     "duckdb>=1.0",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/coredipper/scriptorium"
+Changelog = "https://github.com/coredipper/scriptorium/blob/main/CHANGELOG.md"
+Issues = "https://github.com/coredipper/scriptorium/issues"
 
 [project.scripts]
 scrip = "scrip.cli:main"
@@ -26,7 +45,9 @@ embeddings = ["model2vec>=0.3", "numpy>=1.24"]
 ingest = ["trafilatura>=1.8", "pypdf>=4.0"]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+# numpy is here so the embeddings index/search path is testable with a toy
+# encoder — the real backend (model2vec) stays an optional [embeddings] extra.
+dev = ["pytest>=8", "numpy>=1.24"]
 
 [build-system]
 requires = ["hatchling"]

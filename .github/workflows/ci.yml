@@ -5,7 +5,35 @@ on:
   pull_request:
 
 jobs:
+  # Both test suites across every Python the package claims to support
+  # (requires-python >=3.10). The [ingest] extra is installed so the HTML/PDF
+  # extraction tests run (they parse local fixture bytes — no network); the
+  # [embeddings] extra stays out because its model load would hit the network,
+  # and the index/search path is covered hermetically by a toy encoder.
   test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Run scrip test suite (hermetic — no network, no LLM)
+        working-directory: scrip
+        run: uv run --locked --extra ingest pytest -q
+
+      - name: Run harness test suite (hermetic — model stubbed, scrip runs for real)
+        working-directory: harness
+        run: uv run --locked pytest -q
+
+  # The dogfooded vault must stay green; one Python version is enough here.
+  vault-health:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -13,16 +41,32 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.2.0
 
-      - name: Run scrip test suite (hermetic — no network, no LLM)
-        working-directory: scrip
-        run: uv run --locked pytest -q
-
       - name: Vault health — staleness, provenance, and facts must be clean
         run: |
           uv run --locked --project scrip scrip status --root .
           uv run --locked --project scrip scrip verify --root .
           uv run --locked --project scrip scrip query --sql "SELECT count(*) AS claims FROM claims" --root .
 
-      - name: Run harness test suite (hermetic — model stubbed, scrip runs for real)
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: ruff (lint only — formatting stays the author's)
+        run: uvx ruff check scrip/src scrip/tests harness/src harness/tests adapters scripts
+
+      # pyright is pinned for reproducible CI; bump deliberately, locally first.
+      - name: pyright — scrip
+        working-directory: scrip
+        run: |
+          uv sync --locked
+          uvx pyright@1.1.405
+
+      - name: pyright — harness
         working-directory: harness
-        run: uv run --locked pytest -q
+        run: |
+          uv sync --locked
+          uvx pyright@1.1.405

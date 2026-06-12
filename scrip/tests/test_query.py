@@ -1,7 +1,7 @@
 import pytest
+from scrip.errors import UsageError
 
 from scrip import query
-from scrip.errors import UsageError
 
 
 def test_named_claims_query(kb):

@@ -21,8 +21,11 @@ build/
 # Advisory write lock: ephemeral runtime state, never committed (see SPEC §11)
 /.kb/lock
 
-# NOTE: .kb/manifest.json is intentionally NOT ignored — it is a committed,
-# regenerable cache (see SPEC §8). On a merge conflict, discard it and run
+# Manifest: a regenerable speed cache. SPEC §8 says it *may* be committed; we
+# choose not to — it stores (mtime, size) that are wrong on every fresh clone
+# anyway, and its hashes/timestamps churn diffs. Rebuild any time with
 # `scrip status --rebuild-manifest`.
+/.kb/manifest.json
+
 # roborev snapshots
 /.roborev/

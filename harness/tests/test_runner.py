@@ -3,7 +3,6 @@ vault, and assert the compiled page is verified and stamped. Hermetic — no net
 no LLM (the draft is stubbed); `scrip` is the path-dependency console script."""
 
 import pytest
-
 from scrip_harness.compile import DraftClaim, DraftPage
 from scrip_harness.runner import CompileError, compile_page
 
@@ -112,6 +111,20 @@ def test_compile_rejects_slug_with_trailing_newline(tmp_path):
     with pytest.raises(CompileError):
         compile_page(root, "topic\n", draft_fn=stub)
     assert called is False
+
+
+def test_compile_missing_source_is_a_clean_error(tmp_path):
+    root = _vault(tmp_path)
+    called = False
+
+    def stub(source_text, *, source_id):
+        nonlocal called
+        called = True
+        return DraftPage(title="x", body="x[^a1]\n", claims=[DraftClaim(quote="x")])
+
+    with pytest.raises(CompileError, match="raw/absent"):
+        compile_page(root, "absent", draft_fn=stub)
+    assert called is False  # no model call for a source that does not exist
 
 
 def test_compile_rejects_unsafe_slug(tmp_path):

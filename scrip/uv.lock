@@ -1161,6 +1161,8 @@ ingest = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pytest" },
 ]
 
@@ -1176,7 +1178,10 @@ requires-dist = [
 provides-extras = ["embeddings", "ingest"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
+dev = [
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "pytest", specifier = ">=8" },
+]
 
 [[package]]
 name = "shellingham"
