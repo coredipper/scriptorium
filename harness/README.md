@@ -27,6 +27,22 @@ valid, fully deterministic vault and CLI behind.
 
 So the model owns *what to say*; `scrip` owns *what is true on disk*.
 
+## How an extract runs
+
+`scrip-harness extract <slug>` (for `vault/raw/<slug>.md`):
+
+1. **Draft** — Claude returns a `DraftExtraction`: structured claims, each with a
+   *verbatim quote*, a subject/predicate/object triple, and a polarity.
+2. **Mint + append** — the claims go to `scrip fact add --stdin`, which verifies
+   every quote (minting anchors), assigns ids and timestamps, skips exact
+   duplicates, and appends **all-or-nothing** under the write lock.
+3. **Retry** — if quotes come back BROKEN/AMBIGUOUS, the failures go back to
+   Claude for one replacement per failure (lengthened until unique, or an empty
+   quote to drop the claim); bounded retries, then the extract fails cleanly.
+4. **Stamp + verify** — `scrip stamp vault/facts/_meta.yaml`, then `scrip verify`;
+   contradiction candidates from `scrip query contradictions` are surfaced for
+   the operator to RECONCILE per [AGENT.md](../AGENT.md).
+
 ## Install & run
 
 ```sh
@@ -49,8 +65,10 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 
 ## Scope & limits (v1)
 
-- Covers **COMPILE** (one source → one wiki page). EXTRACT (claims into
-  `facts/`), PROMOTE (merge/dedup), and RECONCILE (contradictions) are not yet
-  automated here — drive them with `scrip` directly per [AGENT.md](../AGENT.md).
-- Single source per page. Multi-source synthesis and a retry loop that re-asks the
-  model to lengthen an ambiguous quote are future work.
+- Covers **COMPILE** (one source → one wiki page) and **EXTRACT** (one source →
+  claims in `facts/`, with the bounded quote-retry loop). Entities/edges go
+  through `scrip fact add --table entities|edges` by hand; PROMOTE (merge/dedup)
+  and RECONCILE (contradictions) are not yet automated here — drive them with
+  `scrip` directly per [AGENT.md](../AGENT.md).
+- Single source per page/extract. Multi-source synthesis, and adopting the
+  quote-retry loop in COMPILE too, are future work.

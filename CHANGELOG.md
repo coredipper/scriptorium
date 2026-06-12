@@ -5,6 +5,24 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
+## [Unreleased]
+
+### Added
+- **`scrip fact add [--table claims|entities|edges] (--stdin | --file F)`** — a
+  validated, locked writer for the facts/ layer, completing the
+  model-proposes/scrip-verifies pattern for EXTRACT: a proposed claim carries a
+  **verbatim `quote`** (never an anchor/id/timestamp — scrip mints those), the
+  anchor is verified to resolve uniquely, the batch is **all-or-nothing** with
+  per-record failures reported (exit 1), exact duplicates are skipped so
+  re-extraction is idempotent, and the claim sources are merged into
+  `facts/_meta.yaml` `derived-from` *without* stamping — the facts set honestly
+  shows STALE until `scrip stamp` runs.
+- **`scrip-harness extract <slug>`** — makes the AGENT.md EXTRACT step runnable
+  for claims: Claude proposes structured claims; `scrip fact add` verifies and
+  appends; BROKEN/AMBIGUOUS quotes are re-asked (bounded retries) with
+  lengthened replacements or dropped; contradiction candidates are surfaced for
+  RECONCILE.
+
 ## [0.2.0] — 2026-06-08
 
 The first complete, releasable cut beyond the v0 end-to-end slice: the contract
