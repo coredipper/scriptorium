@@ -7,7 +7,6 @@ import json
 import subprocess
 
 import pytest
-
 from scrip_harness.extract import DraftExtraction, DraftFact, to_ndjson
 from scrip_harness.runner import ExtractError, extract_facts
 
@@ -20,9 +19,10 @@ def _vault(tmp_path):
 
 
 def _fact(quote, **kw):
-    base = {"subject": "s", "predicate": "p", "object": "o"}
-    base.update(kw)
-    return DraftFact(quote=quote, **base)
+    kw.setdefault("subject", "s")
+    kw.setdefault("predicate", "p")
+    kw.setdefault("object", "o")
+    return DraftFact(quote=quote, **kw)
 
 
 def _claims_lines(root):

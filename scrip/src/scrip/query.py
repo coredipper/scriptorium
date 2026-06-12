@@ -94,7 +94,7 @@ def run(
             raise DataError(f"query failed: {e}") from e
 
         columns = [d[0] for d in cur.description] if cur.description else []
-        rows = [dict(zip(columns, r)) for r in cur.fetchall()]
+        rows = [dict(zip(columns, r, strict=True)) for r in cur.fetchall()]
         return columns, rows
     finally:
         con.close()

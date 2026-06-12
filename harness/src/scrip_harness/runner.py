@@ -62,7 +62,10 @@ def compile_page(
             f"separators, '..', or leading dot"
         )
     source_id = f"raw/{slug}"
-    source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
+    try:
+        source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
+    except OSError as e:
+        raise CompileError(f"cannot read {source_id}: {e}") from e
     draft = draft_fn(source_text, source_id=source_id)
 
     # The model's inline markers must be exactly [^a1]..[^aN] in order for the N
@@ -191,7 +194,7 @@ def extract_facts(
                 f"drops the claim)"
             )
         dropped: list[int] = []
-        for failure, replacement in zip(failures, replacements):
+        for failure, replacement in zip(failures, replacements, strict=True):
             i = failure["index"]
             if replacement.quote.strip():
                 claims[i] = replacement

@@ -1,7 +1,7 @@
 import pytest
+from scrip.errors import DataError
 
 from scrip import anchors, cli
-from scrip.errors import DataError
 
 
 def test_cli_verify_fails_on_ambiguous_by_default(kb):

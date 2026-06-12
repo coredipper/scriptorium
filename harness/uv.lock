@@ -576,7 +576,10 @@ requires-dist = [
 provides-extras = ["embeddings", "ingest"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
+dev = [
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "pytest", specifier = ">=8" },
+]
 
 [[package]]
 name = "sniffio"

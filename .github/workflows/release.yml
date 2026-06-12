@@ -43,3 +43,22 @@ jobs:
       - name: Publish to PyPI (trusted publishing)
         working-directory: scrip
         run: uv publish
+
+  # Cut the GitHub Release only after the PyPI publish succeeded, with its own
+  # minimal permission grant (the publish job keeps contents: read).
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release create
+    steps:
+      - name: Create the GitHub Release (auto-generated notes)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$REPO" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
