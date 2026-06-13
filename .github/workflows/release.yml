@@ -3,7 +3,8 @@ name: release
 # Publishes the `scriptoria` package (the `scrip` CLI) to PyPI when a v* tag is
 # pushed. Uses PyPI Trusted Publishing (OIDC) — configure a trusted publisher for
 # the `scriptoria` project on PyPI pointing at this repo + workflow, so no token
-# secret is stored here. (scrip-harness is not published: it has a path dep.)
+# secret is stored here. (The `scrip-harness` package has its own `harness-v*`
+# path in release-harness.yml.)
 
 on:
   push:

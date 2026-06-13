@@ -1,0 +1,76 @@
+name: release-harness
+
+# Publishes the `scrip-harness` package to PyPI when a `harness-v*` tag is pushed
+# (the scriptoria CLI has its own `v*` path in release.yml). Uses PyPI Trusted
+# Publishing (OIDC) — configure a trusted publisher for the `scrip-harness`
+# project on PyPI pointing at this repo + this workflow + the `pypi` environment,
+# so no token secret is stored here.
+
+on:
+  push:
+    tags:
+      - "harness-v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Same deploy-time gate as scriptoria: the `pypi` GitHub Environment. Add
+    # required reviewers in repo Settings → Environments to make the publish
+    # manual-approval; it currently runs unattended.
+    environment: pypi
+    permissions:
+      contents: read # actions/checkout needs repo read access
+      id-token: write # required for OIDC trusted publishing (uv publish auto-detects)
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Build scrip-harness
+        working-directory: harness
+        run: uv build
+
+      - name: Verify the tag matches the package version
+        working-directory: harness
+        run: |
+          pkg=$(uv version --short)
+          tag="${GITHUB_REF_NAME#harness-v}"
+          test "$pkg" = "$tag" || { echo "tag harness-v$tag != package $pkg"; exit 1; }
+
+      # The dev path source (tool.uv.sources) must never reach the wheel: an
+      # installed scrip-harness has to pull scriptoria from PyPI by version. Assert
+      # the published metadata carries the version floor, making the path-dep trap
+      # structurally impossible to ship.
+      - name: Assert the wheel pins scriptoria by version, not a path
+        working-directory: harness
+        run: |
+          meta=$(unzip -p dist/*.whl '*/METADATA')
+          echo "$meta" | grep -q '^Requires-Dist: scriptoria>=' || {
+            echo "harness wheel must declare 'Requires-Dist: scriptoria>=…'; got:"
+            echo "$meta" | grep -i scriptoria || echo "  (no scriptoria requirement at all)"
+            exit 1
+          }
+
+      - name: Publish to PyPI (trusted publishing)
+        working-directory: harness
+        run: uv publish
+
+  # Cut the GitHub Release only after the PyPI publish succeeded, with its own
+  # minimal permission grant (the publish job keeps contents: read).
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release create
+    steps:
+      - name: Create the GitHub Release (auto-generated notes)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$REPO" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
