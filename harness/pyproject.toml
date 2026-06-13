@@ -14,6 +14,9 @@ classifiers = [
 ]
 dependencies = [
     "anthropic>=0.40",
+    # Imported directly for the structured-output schemas (compile/extract) — don't
+    # rely on anthropic to pull it in transitively; declare what we import.
+    "pydantic>=2",
     # Version floor (not the dev path source below) is what ships in the wheel's
     # Requires-Dist, so an installed scrip-harness pulls scriptoria from PyPI.
     "scriptoria>=0.3",

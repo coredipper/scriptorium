@@ -51,13 +51,13 @@ and drives it through its own interpreter, so it is self-sufficient — install
 direct use:
 
 ```sh
-uv tool install scrip-harness       # this package → `scrip-harness` (pulls scriptoria)
-uv tool install scriptoria          # optional: also puts `scrip` on PATH for direct use
-export ANTHROPIC_API_KEY=...         # the harness calls Claude; scrip never does
+uv tool install scrip-harness            # this package → `scrip-harness` (pulls scriptoria)
+uv tool install 'scriptoria[ingest]'     # optional: `scrip` on PATH + HTML/PDF ingest
+export ANTHROPIC_API_KEY=...              # the harness calls Claude; scrip never does
 
-scrip-harness compile article        # synthesize + verify a page from raw/article
-scrip-harness extract article        # pull claims into facts/
-scrip ingest <url> --slug article    # (needs the optional scriptoria install)
+scrip-harness compile article            # synthesize + verify a page from raw/article
+scrip-harness extract article            # pull claims into facts/
+scrip ingest <url> --slug article        # bring a source in (needs the install above)
 ```
 
 (From a checkout, `uv tool install ./scrip` and `uv tool install ./harness`
