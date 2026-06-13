@@ -58,6 +58,21 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
    id in `supersedes`, delete the absorbed page, then `scrip stamp` + `scrip
    verify`. `--dry-run` prints the decision and mutates nothing.
 
+## How a reconcile runs
+
+`scrip-harness reconcile` (over every open contradiction):
+
+1. **Find** — `scrip query contradictions` lists the candidate pairs (same
+   subject+predicate, opposing polarity, different sources, not yet adjudicated).
+2. **Read** — for each pair, `scrip span --claim <id>` fetches both verbatim
+   cited spans, and Claude decides **supersede** (with a winner), **qualify**, or
+   **keep-both**, with a rationale.
+3. **Record** — the decisions are written append-only with `scrip fact add
+   --table reconciliations` (existing claim rows are never rewritten), logged to
+   `wiki/log.md`, then `scrip stamp` + `scrip verify`. Adjudicated pairs stop
+   being surfaced by `scrip query contradictions`. `--dry-run` prints the
+   decisions without recording.
+
 ## Install & run
 
 Both packages are on PyPI. `scrip-harness` bundles `scriptoria` as a dependency
@@ -90,11 +105,12 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 ## Scope & limits (v1)
 
 - Covers **COMPILE** (one source → one wiki page), **EXTRACT** (one source →
-  claims in `facts/`, with the bounded quote-retry loop), and **PROMOTE**
-  (score → merge/keep, model only in the middle band). Entities/edges go through
-  `scrip fact add --table entities|edges` by hand; RECONCILE (contradictions) is
-  not yet automated here — drive it with `scrip` directly per
-  [AGENT.md](../AGENT.md).
+  claims in `facts/`, with the bounded quote-retry loop), **PROMOTE** (score →
+  merge/keep, model only in the middle band), and **RECONCILE** (adjudicate every
+  contradiction → record the decision). Entities/edges go through `scrip fact add
+  --table entities|edges` by hand.
 - Single source per page/extract; merge is **append** (not re-synthesis).
-  Multi-source synthesis, and adopting the quote-retry loop in COMPILE too, are
-  future work.
+  `reconcile` records the decision (supersede/qualify/keep-both); for a
+  **qualify**, authoring the nuancing `polarity: qualifies` claim + the page
+  caveat is still operator follow-up. Multi-source synthesis, and adopting the
+  quote-retry loop in COMPILE too, are future work.

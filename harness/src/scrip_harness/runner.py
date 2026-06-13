@@ -17,10 +17,12 @@ from scrip import frontmatter  # reuse the deterministic frontmatter helper
 from .compile import DraftPage, assemble_body, extract_markers
 from .extract import DraftExtraction, to_ndjson
 from .promote import PromotionDecision, merge_bodies
+from .reconcile import ReconciliationDecision
 
 DraftFn = Callable[..., DraftPage]
 ExtractDraftFn = Callable[..., DraftExtraction]
 DecideFn = Callable[..., PromotionDecision]  # (candidate_text, candidates) -> decision
+ReconcileDecideFn = Callable[..., ReconciliationDecision]  # (pair, span_a, span_b) -> decision
 
 # Drive scriptoria through the *running interpreter*, not a bare `scrip` on PATH:
 # `uv tool install scrip-harness` installs scriptoria into the harness's own
@@ -45,6 +47,11 @@ class ExtractError(RuntimeError):
 class PromoteError(RuntimeError):
     """A promote step failed (missing page, a scrip command erred, or the middle
     band was reached with no decider)."""
+
+
+class ReconcileError(RuntimeError):
+    """A reconcile step failed (a scrip command erred, or the model returned an
+    invalid decision such as supersede without a winner)."""
 
 
 def _scrip(
@@ -359,3 +366,85 @@ def promote_page(
     page.unlink()  # absorbed page removed; its id lives on in the target's supersedes
     _append_log(root, f"- PROMOTE: merged {cand_id} into {target_id}")
     return {"action": "merge", "target": target_id, "absorbed": cand_id}
+
+
+def _span(scrip_cmd: Sequence[str], root: Path, claim_id: str) -> dict:
+    """Fetch a claim's resolved span via `scrip span` → ``{status, text}``."""
+    r = _scrip(scrip_cmd, ["span", "--claim", claim_id, "--json", "--root", str(root)])
+    try:
+        return json.loads(r.stdout)
+    except json.JSONDecodeError as e:
+        raise ReconcileError(
+            f"scrip span --claim {claim_id} gave no parseable output: {e}\n{r.stderr}"
+        ) from e
+
+
+def reconcile_contradictions(
+    root,
+    *,
+    decide_fn: ReconcileDecideFn,
+    scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
+    dry_run: bool = False,
+) -> dict:
+    """Adjudicate every open contradiction. For each pair from `scrip query
+    contradictions`, read both cited spans (`scrip span`), ask ``decide_fn`` for a
+    :class:`ReconciliationDecision`, then record them append-only with `scrip fact
+    add --table reconciliations`, log to wiki/log.md, and re-stamp + re-verify.
+    ``dry_run`` reports the decisions without writing. Returns a summary.
+    """
+    root = Path(root)
+    r = _scrip(scrip_cmd, ["query", "contradictions", "--json", "--root", str(root)])
+    if r.returncode != 0:
+        raise ReconcileError(f"scrip query contradictions failed (exit {r.returncode}): {r.stderr.strip()}")
+    pairs = json.loads(r.stdout)
+    if not pairs:
+        return {"pairs": 0, "reconciled": []}
+
+    records: list[dict] = []
+    for pair in pairs:
+        ca, cb = pair["claim_a"], pair["claim_b"]
+        # Read both spans first and refuse unresolved evidence BEFORE asking the
+        # model or recording anything — never adjudicate (and thereby suppress) a
+        # contradiction on an anchor that doesn't resolve uniquely.
+        sa, sb = _span(scrip_cmd, root, ca), _span(scrip_cmd, root, cb)
+        if sa["status"] != "OK" or sb["status"] != "OK":
+            raise ReconcileError(
+                f"cannot reconcile {ca}/{cb}: anchor did not resolve uniquely "
+                f"({ca}={sa['status']}, {cb}={sb['status']}) — fix it first (scrip verify)"
+            )
+        decision = decide_fn(pair, sa["text"], sb["text"])
+        rec = {"decision": decision.decision, "claim_a": ca, "claim_b": cb}
+        if decision.decision == "supersede":
+            if decision.winner not in ("a", "b"):
+                raise ReconcileError(
+                    f"supersede for {ca}/{cb} needs winner 'a' or 'b', got {decision.winner!r}"
+                )
+            rec["winner"] = ca if decision.winner == "a" else cb
+        if decision.rationale:
+            rec["rationale"] = decision.rationale
+        records.append(rec)
+
+    if dry_run:
+        return {"pairs": len(pairs), "dry_run": True, "decisions": records}
+
+    ndjson = "".join(json.dumps(rec, ensure_ascii=False) + "\n" for rec in records)
+    r = _scrip(
+        scrip_cmd,
+        ["fact", "add", "--table", "reconciliations", "--stdin", "--json", "--root", str(root)],
+        input_text=ndjson,
+    )
+    if r.returncode != 0:
+        raise ReconcileError(f"scrip fact add failed (exit {r.returncode}): {r.stderr.strip()}")
+    added = json.loads(r.stdout)
+    for rec in records:
+        tail = f" (winner {rec['winner']})" if rec["decision"] == "supersede" else ""
+        _append_log(root, f"- RECONCILE: {rec['decision']} {rec['claim_a']} vs {rec['claim_b']}{tail}")
+
+    if added["appended"]:
+        r = _scrip(scrip_cmd, ["stamp", str(root / "vault" / "facts" / "_meta.yaml"), "--root", str(root)])
+        if r.returncode != 0:
+            raise ReconcileError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
+    r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
+    if r.returncode != 0:
+        raise ReconcileError(f"scrip verify failed after reconcile:\n{r.stdout}{r.stderr}")
+    return {"pairs": len(pairs), "reconciled": added["appended"], "skipped": added["skipped"]}

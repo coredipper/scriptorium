@@ -108,10 +108,18 @@ absorbed page, then re-stamps and re-verifies.
 1. Triggered by `scrip query contradictions` (opposing `polarity`, same
    subject+predicate, different source) **or** a `verify` `BROKEN` anchor from a
    re-ingested source.
-2. Read both anchored spans. Decide: **supersede** (one wins; record `supersedes`),
-   **qualify** (add a `polarity: qualifies` claim and a caveat in the page), or
-   **keep-both** (note the disagreement explicitly).
-3. Never silent overwrite. Log the decision in `wiki/log.md`.
+2. Read both anchored spans with `scrip span --claim <id>` (or
+   `scrip span "raw/<slug>#<anchor>"`). Decide: **supersede** (one wins),
+   **qualify** (also add a `polarity: qualifies` claim and a caveat in the page),
+   or **keep-both** (acknowledge the disagreement).
+3. Record the decision append-only with
+   `scrip fact add --table reconciliations` (`{decision, claim_a, claim_b,
+   winner?, rationale?}` — scrip mints the id + timestamp). Existing claim rows
+   are never rewritten; `scrip query contradictions` then stops surfacing the
+   adjudicated pair. Log the decision in `wiki/log.md`. Never silent overwrite.
+
+`scrip-harness reconcile` runs this loop: it reads each contradiction's spans,
+asks the model to decide, records the reconciliation, logs it, and re-verifies.
 
 ---
 
@@ -125,6 +133,8 @@ absorbed page, then re-stamps and re-verifies.
 | mint a provenance anchor for a quote | `scrip anchor "<quote>" --source raw/<slug>` |
 | append validated fact records | `scrip fact add [--table claims\|entities\|edges] --stdin` |
 | score overlap before promoting a page | `scrip similar --title "…" --from raw/…` |
+| read the text an anchor cites | `scrip span --claim <id>` \| `scrip span "raw/<slug>#<anchor>"` |
+| record a contradiction decision | `scrip fact add --table reconciliations --stdin` |
 | record provenance hashes after compiling | `scrip stamp [path…]` |
 | check every citation still resolves | `scrip verify` |
 | query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |

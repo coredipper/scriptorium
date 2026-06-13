@@ -36,10 +36,12 @@ _FILES = {
     "claims": "claims.ndjson",
     "entities": "entities.ndjson",
     "edges": "graph.ndjson",
+    "reconciliations": "reconciliations.ndjson",
 }
 
 # Fields scrip mints itself; proposing them is a schema error, not a finding.
 _SCRIP_OWNED = ("claim_id", "anchor", "extracted_at")
+_RECON_OWNED = ("reconciliation_id", "at")
 
 _CLAIM_REQUIRED = ("quote", "source_id", "subject", "predicate", "object", "polarity", "confidence")
 _CLAIM_ALLOWED = frozenset((*_CLAIM_REQUIRED, "claim_text", "tags"))
@@ -47,12 +49,16 @@ _ENTITY_REQUIRED = ("entity_id", "name", "kind")
 _ENTITY_ALLOWED = frozenset((*_ENTITY_REQUIRED, "tags"))
 _EDGE_REQUIRED = ("src", "dst", "kind")
 _EDGE_ALLOWED = frozenset(_EDGE_REQUIRED)
+_DECISIONS = ("supersede", "qualify", "keep-both")
+_RECON_REQUIRED = ("decision", "claim_a", "claim_b")
+_RECON_ALLOWED = frozenset((*_RECON_REQUIRED, "winner", "rationale"))
 
 # Same conservative shape ``cli._safe_slug`` enforces — no path separators,
 # '..', or leading dot — applied to source ids arriving as record *data*.
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 _CLAIM_ID_RE = re.compile(r"clm_(\d+)")
+_RECON_ID_RE = re.compile(r"rec_(\d+)")
 
 
 def _now() -> str:
@@ -96,12 +102,18 @@ def _check_tags(rec: dict, index: int) -> None:
         raise DataError(f"record {index}: 'tags' must be a list of strings")
 
 
-def _check_shape(rec: dict, index: int, required: tuple[str, ...], allowed: frozenset[str]) -> None:
-    owned = [k for k in _SCRIP_OWNED if k in rec]
-    if owned:
+def _check_shape(
+    rec: dict,
+    index: int,
+    required: tuple[str, ...],
+    allowed: frozenset[str],
+    owned: tuple[str, ...] = _SCRIP_OWNED,
+) -> None:
+    present = [k for k in owned if k in rec]
+    if present:
         raise DataError(
-            f"record {index}: scrip mints {', '.join(owned)} itself — propose a "
-            f"verbatim 'quote', not precomputed ids/anchors/timestamps"
+            f"record {index}: scrip mints {', '.join(present)} itself — do not "
+            f"propose precomputed ids/anchors/timestamps"
         )
     unknown = sorted(rec.keys() - allowed)
     if unknown:
@@ -136,10 +148,27 @@ def _validate(table: str, rec: dict, index: int) -> None:
         if not (eid.startswith("entity/") and _SLUG_RE.fullmatch(eid[len("entity/") :])):
             raise DataError(f"record {index}: entity_id must look like entity/<slug>")
         _check_tags(rec, index)
-    else:  # edges
+    elif table == "edges":
         _check_shape(rec, index, _EDGE_REQUIRED, _EDGE_ALLOWED)
         for key in _EDGE_REQUIRED:
             _check_str(rec, key, index)
+    else:  # reconciliations
+        _check_shape(rec, index, _RECON_REQUIRED, _RECON_ALLOWED, owned=_RECON_OWNED)
+        for key in ("decision", "claim_a", "claim_b"):
+            _check_str(rec, key, index)
+        if rec["decision"] not in _DECISIONS:
+            raise DataError(f"record {index}: decision must be one of {', '.join(_DECISIONS)}")
+        if "rationale" in rec:
+            _check_str(rec, "rationale", index, allow_blank=True)
+        # winner is required for (and only for) supersede, and must be one of the pair
+        if rec["decision"] == "supersede":
+            winner = rec.get("winner")
+            if winner not in (rec["claim_a"], rec["claim_b"]):
+                raise DataError(
+                    f"record {index}: supersede needs 'winner' = claim_a or claim_b"
+                )
+        elif "winner" in rec:
+            raise DataError(f"record {index}: 'winner' is only valid for decision 'supersede'")
 
 
 # --------------------------------------------------------------------------- #
@@ -218,6 +247,19 @@ def _read_table(path: Path) -> tuple[list[dict], str]:
     return records, text
 
 
+def claim_source_anchor(root: Path, claim_id: str) -> tuple[str, str]:
+    """Return ``(source_id, anchor)`` for a claim, for `scrip span --claim`.
+    Raises :class:`DataError` if the claim is missing or lacks the fields."""
+    records, _ = _read_table(facts_dir(root) / "claims.ndjson")
+    for rec in records:
+        if rec.get("claim_id") == claim_id:
+            sid, anchor = rec.get("source_id"), rec.get("anchor")
+            if not isinstance(sid, str) or not isinstance(anchor, str):
+                raise DataError(f"claim {claim_id} is missing source_id/anchor")
+            return sid, anchor
+    raise DataError(f"no such claim: {claim_id}")
+
+
 def _claim_key(source_id: str, qh: str, rec: dict) -> tuple:
     return (
         source_id,
@@ -246,6 +288,17 @@ def _next_claim_id(existing: list[dict]) -> tuple[int, int]:
         int(m.group(1))
         for rec in existing
         if (m := _CLAIM_ID_RE.fullmatch(str(rec.get("claim_id", ""))))
+    ]
+    highest = max(numbers, default=0)
+    return highest + 1, max(4, len(str(highest)))
+
+
+def _next_recon_id(existing: list[dict]) -> tuple[int, int]:
+    """Return ``(next_number, pad_width)`` continuing the ``rec_NNNN`` sequence."""
+    numbers = [
+        int(m.group(1))
+        for rec in existing
+        if (m := _RECON_ID_RE.fullmatch(str(rec.get("reconciliation_id", ""))))
     ]
     highest = max(numbers, default=0)
     return highest + 1, max(4, len(str(highest)))
@@ -394,7 +447,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                             "detail": "an entity with this id already exists with different fields",
                         }
                     )
-        else:  # edges
+        elif table == "edges":
             seen_edges = {
                 (rec.get("src"), rec.get("dst"), rec.get("kind")) for rec in existing
             }
@@ -405,6 +458,43 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                     continue
                 seen_edges.add(key)
                 appended.append({"src": rec["src"], "dst": rec["dst"], "kind": rec["kind"]})
+        else:  # reconciliations
+            claim_ids = {c.get("claim_id") for c in _read_table(facts_dir(root) / "claims.ndjson")[0]}
+            for i, rec in enumerate(proposals):
+                refs = [rec["claim_a"], rec["claim_b"]]
+                if rec["decision"] == "supersede":
+                    refs.append(rec["winner"])
+                missing = next((r for r in refs if r not in claim_ids), None)
+                if missing is not None:
+                    failures.append({
+                        "index": i, "status": "MISSING_CLAIM", "claim": missing,
+                        "detail": f"{missing!r} is not a claim in claims.ndjson",
+                    })
+            if failures:
+                return {"table": table, "appended": [], "skipped": [], "failures": failures}
+            seen_pairs = {frozenset((r.get("claim_a"), r.get("claim_b"))) for r in existing}
+            number, width = _next_recon_id(existing)
+            now = _now()
+            for i, rec in enumerate(proposals):
+                pair = frozenset((rec["claim_a"], rec["claim_b"]))
+                if pair in seen_pairs:
+                    skipped.append({"index": i, "reason": "duplicate", "existing_id": None})
+                    continue
+                seen_pairs.add(pair)
+                rid = f"rec_{number:0{width}d}"
+                number += 1
+                full = {
+                    "reconciliation_id": rid,
+                    "decision": rec["decision"],
+                    "claim_a": rec["claim_a"],
+                    "claim_b": rec["claim_b"],
+                }
+                if rec["decision"] == "supersede":
+                    full["winner"] = rec["winner"]
+                if rec.get("rationale"):
+                    full["rationale"] = rec["rationale"]
+                full["at"] = now
+                appended.append(full)
 
         if failures:
             return {"table": table, "appended": [], "skipped": skipped, "failures": failures}

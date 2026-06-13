@@ -66,6 +66,16 @@ def main(argv: list[str] | None = None) -> int:
         "--dry-run", action="store_true",
         help="report the decision without mutating any page",
     )
+    prc = sub.add_parser(
+        "reconcile",
+        help="adjudicate every open contradiction via Claude and record the "
+        "decisions (`scrip fact add --table reconciliations`), then re-verify",
+    )
+    prc.add_argument("--root")
+    prc.add_argument("--model", help="Claude model id (default: claude-opus-4-8)")
+    prc.add_argument(
+        "--dry-run", action="store_true", help="report decisions without recording them"
+    )
     args = p.parse_args(argv)
 
     from . import model as model_mod
@@ -73,13 +83,37 @@ def main(argv: list[str] | None = None) -> int:
         CompileError,
         ExtractError,
         PromoteError,
+        ReconcileError,
         compile_page,
         extract_facts,
         promote_page,
+        reconcile_contradictions,
     )
 
     root = _resolve_root(args.root)
     chosen_model = args.model or model_mod.DEFAULT_MODEL
+
+    if args.command == "reconcile":
+        def reconcile_decide_fn(pair, span_a, span_b):
+            return model_mod.decide_reconciliation(pair, span_a, span_b, model=chosen_model)
+
+        try:
+            result = reconcile_contradictions(
+                root, decide_fn=reconcile_decide_fn, dry_run=args.dry_run
+            )
+        except ReconcileError as e:
+            print(f"scrip-harness: {e}", file=sys.stderr)
+            return 1
+        if result["pairs"] == 0:
+            print("no open contradictions")
+        elif result.get("dry_run"):
+            print(f"{result['pairs']} contradiction(s) — decisions (dry run):")
+            for d in result["decisions"]:
+                tail = f" → {d['winner']}" if d["decision"] == "supersede" else ""
+                print(f"  {d['decision']}: {d['claim_a']} vs {d['claim_b']}{tail}")
+        else:
+            print(f"reconciled {len(result['reconciled'])} of {result['pairs']} contradiction(s)")
+        return 0
 
     if args.command == "promote":
         def decide_fn(candidate_text: str, candidates: list[dict]):
