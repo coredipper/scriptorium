@@ -1,6 +1,6 @@
 [project]
 name = "scrip-harness"
-version = "0.3.0"
+version = "0.4.0"
 description = "Runnable AGENT.md compile loop for scriptorium: drives `scrip` via subprocess + Claude. Not part of the deterministic scrip core."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,7 +19,8 @@ dependencies = [
     "pydantic>=2",
     # Version floor (not the dev path source below) is what ships in the wheel's
     # Requires-Dist, so an installed scrip-harness pulls scriptoria from PyPI.
-    "scriptoria>=0.3",
+    # >=0.4: `scrip-harness promote` shells out to `scrip similar`, added in 0.4.
+    "scriptoria>=0.4",
 ]
 
 [project.urls]

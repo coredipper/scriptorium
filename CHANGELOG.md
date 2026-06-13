@@ -5,7 +5,13 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
-## [Unreleased]
+## [0.4.0] — 2026-06-13
+
+PROMOTE joins the automated loop: a deterministic overlap scorer and a harness
+command that merges duplicate pages or keeps them — leaving RECONCILE as the
+only stage still driven by hand. (scriptoria and scrip-harness both move to
+0.4.0; the harness pins `scriptoria>=0.4`, since `promote` shells out to the new
+`scrip similar`.)
 
 ### Added
 - **`scrip similar --title "…" --from raw/a,raw/b [--kind concept|entity] [--exclude ID] [--top N]`**
@@ -25,11 +31,10 @@ reference CLI. The file **contract** is versioned separately in
   re-verifies. `--dry-run` reports the decision without mutating.
 
 ### Packaging
-- **`scrip-harness` is now published to PyPI** (`uv tool install scrip-harness`),
-  pinning `scriptoria>=0.3`. It has its own `harness-v*` release path
-  (`release-harness.yml`); a CI assertion proves the published wheel declares
-  `scriptoria` by version, never the dev path source. The harness versions
-  independently of the `scrip` CLI from here on.
+- **`scrip-harness` is published to PyPI** (`uv tool install scrip-harness`),
+  with its own `harness-v*` release path (`release-harness.yml`); a CI assertion
+  proves the published wheel declares `scriptoria` by version, never the dev path
+  source. The harness versions independently of the `scrip` CLI.
 
 ## [0.3.0] — 2026-06-13
 
@@ -125,6 +130,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[0.4.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.4.0
 [0.3.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.3.0
 [0.2.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.2.0
 [0.1.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.1.0
