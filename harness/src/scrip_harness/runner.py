@@ -368,14 +368,15 @@ def promote_page(
     return {"action": "merge", "target": target_id, "absorbed": cand_id}
 
 
-def _span_text(scrip_cmd: Sequence[str], root: Path, claim_id: str) -> str | None:
-    """Best-effort fetch of a claim's cited text via `scrip span` (returns None if
-    the anchor does not resolve — span exits 1 but still prints the payload)."""
+def _span(scrip_cmd: Sequence[str], root: Path, claim_id: str) -> dict:
+    """Fetch a claim's resolved span via `scrip span` → ``{status, text}``."""
     r = _scrip(scrip_cmd, ["span", "--claim", claim_id, "--json", "--root", str(root)])
     try:
-        return json.loads(r.stdout).get("text")
-    except json.JSONDecodeError:
-        return None
+        return json.loads(r.stdout)
+    except json.JSONDecodeError as e:
+        raise ReconcileError(
+            f"scrip span --claim {claim_id} gave no parseable output: {e}\n{r.stderr}"
+        ) from e
 
 
 def reconcile_contradictions(
@@ -402,7 +403,16 @@ def reconcile_contradictions(
     records: list[dict] = []
     for pair in pairs:
         ca, cb = pair["claim_a"], pair["claim_b"]
-        decision = decide_fn(pair, _span_text(scrip_cmd, root, ca), _span_text(scrip_cmd, root, cb))
+        # Read both spans first and refuse unresolved evidence BEFORE asking the
+        # model or recording anything — never adjudicate (and thereby suppress) a
+        # contradiction on an anchor that doesn't resolve uniquely.
+        sa, sb = _span(scrip_cmd, root, ca), _span(scrip_cmd, root, cb)
+        if sa["status"] != "OK" or sb["status"] != "OK":
+            raise ReconcileError(
+                f"cannot reconcile {ca}/{cb}: anchor did not resolve uniquely "
+                f"({ca}={sa['status']}, {cb}={sb['status']}) — fix it first (scrip verify)"
+            )
+        decision = decide_fn(pair, sa["text"], sb["text"])
         rec = {"decision": decision.decision, "claim_a": ca, "claim_b": cb}
         if decision.decision == "supersede":
             if decision.winner not in ("a", "b"):

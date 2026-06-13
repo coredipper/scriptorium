@@ -142,6 +142,36 @@ def test_reconcile_no_contradictions_is_noop(tmp_path):
     assert called is False  # no pairs → model never consulted
 
 
+def test_reconcile_refuses_unresolved_span(tmp_path):
+    """A claim whose anchor doesn't resolve must abort the reconcile BEFORE any
+    decision/record — never adjudicate (and suppress) a contradiction on evidence
+    that can't be read."""
+    root = _vault(tmp_path)
+    _raw(root, "a", "# A\n\nFixed-size chunking discards document structure.\n")
+    _raw(root, "b", "# B\n\nChunking does not meaningfully harm retrieval.\n")
+    _claim(root, "clm_0001", "a", "Fixed-size chunking discards document structure.",
+           subject="chunking", predicate="discards", polarity="asserts")
+    # clm_0002 carries a broken anchor (quote absent from source b)
+    with open(root / "vault" / "facts" / "claims.ndjson", "a", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "claim_id": "clm_0002", "source_id": "raw/b",
+            "anchor": anchors.make_anchor("an unrelated document", "unrelated"),
+            "claim_text": "x", "subject": "chunking", "predicate": "discards",
+            "object": "o", "polarity": "denies", "confidence": 0.8, "tags": [],
+        }) + "\n")
+    called = False
+
+    def decide(pair, span_a, span_b):
+        nonlocal called
+        called = True
+        return ReconciliationDecision(decision="keep-both")
+
+    with pytest.raises(ReconcileError):
+        reconcile_contradictions(root, decide_fn=decide)
+    assert called is False  # never asked the model on unreadable evidence
+    assert _recs(root) == []  # nothing recorded
+
+
 def test_reconcile_supersede_without_winner_errors(tmp_path):
     root = _contradiction(tmp_path)
 
