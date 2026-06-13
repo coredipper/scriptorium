@@ -70,6 +70,8 @@ class KB:
         *,
         stamp: bool = True,
         body: str = "Body.\n",
+        title: str | None = None,
+        kind: str = "concept",
     ) -> str:
         deps = {
             sid: h
@@ -77,16 +79,18 @@ class KB:
             if (h := self._dep_hash(sid)) is not None
         }
         meta: dict = {
-            "id": f"concept/{slug}",
-            "type": "wiki.concept",
-            "title": slug,
+            "id": f"{kind}/{slug}",
+            "type": f"wiki.{kind}",
+            "title": title or slug,
             "derived-from": list(derived_from),
         }
         if stamp:
             meta["input-hash"] = hashing.input_hash(deps)
         meta["last-compiled"] = "2026-01-01T00:00:00Z"
         meta["confidence"] = 0.9
-        path = self.root / "vault" / "wiki" / "concepts" / f"{slug}.md"
+        subdir = "concepts" if kind == "concept" else "entities"
+        path = self.root / "vault" / "wiki" / subdir / f"{slug}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(frontmatter.dump(meta, body), encoding="utf-8")
         return meta["id"]
 
