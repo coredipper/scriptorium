@@ -214,6 +214,16 @@ def test_similar_non_object_claim_line_is_data_error(kb):
     assert cli.main(["similar", "--title", "X", "--from", "raw/a", "--root", str(kb.root)]) == 3
 
 
+def test_similar_bad_source_id_is_data_error(kb):
+    # a non-string source_id is malformed facts data → exit 3, not a silent skip
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("p", ["raw/a"], title="P")
+    (kb.root / "vault" / "facts" / "claims.ndjson").write_text(
+        '{"source_id": 1, "tags": "oops"}\n', encoding="utf-8"
+    )
+    assert cli.main(["similar", "--title", "X", "--from", "raw/a", "--root", str(kb.root)]) == 3
+
+
 def test_similar_bad_tags_shape_is_data_error(kb):
     kb.add_raw("a", "# A\n\nAlpha.\n")
     kb.add_wiki("p", ["raw/a"], title="P")

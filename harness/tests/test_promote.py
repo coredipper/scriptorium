@@ -200,3 +200,38 @@ def test_promote_missing_page_errors(tmp_path):
     root = _vault(tmp_path)
     with pytest.raises(PromoteError):
         promote_page(root, "does-not-exist", decide_fn=None)
+
+
+def test_promote_rejects_unsafe_slug(tmp_path):
+    root = _vault(tmp_path)
+    # a traversal slug must be rejected by an explicit guard (not incidentally by
+    # a missing-file check), before any path is built or unlinked
+    with pytest.raises(PromoteError, match="invalid slug"):
+        promote_page(root, "../../etc/passwd", decide_fn=None)
+
+
+def test_promote_preserves_absorbed_page_when_verify_fails(tmp_path):
+    """The absorbed page must not be deleted until stamp+verify succeed: a
+    failure (here, a pre-existing broken anchor elsewhere) must not lose data."""
+    root = _vault(tmp_path)
+    _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
+    _raw(root, "beta", "# B\n\nBeta one sentence.\n")
+    _raw(root, "broken", "# Broken\n\nReal content here.\n")
+    _page(root, "compilation", "Compilation",
+          ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
+    absorbed = _page(root, "compilation-redux", "Compilation",
+                     ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+    # an unrelated page with a BROKEN anchor makes vault-wide `scrip verify` fail
+    broken = root / "vault" / "wiki" / "concepts" / "broken.md"
+    broken.write_text(
+        frontmatter.dump(
+            {"id": "concept/broken", "type": "wiki.concept", "title": "Z page",
+             "derived-from": ["raw/broken"], "confidence": 0.5},
+            'Claim.[^a1]\n\n[^a1]: anchor=raw/broken#qh:deadbeef|loc:0.0|len:99  "absent"\n',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PromoteError):
+        promote_page(root, "compilation-redux", decide_fn=None)
+    assert absorbed.exists()  # not deleted — stamp/verify failed first

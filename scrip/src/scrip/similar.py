@@ -68,7 +68,7 @@ def _source_tags(root: Path) -> dict[str, set[str]]:
             raise DataError(f"claims.ndjson:{lineno}: expected a JSON object")
         sid = rec.get("source_id")
         if not isinstance(sid, str):
-            continue
+            raise DataError(f"claims.ndjson:{lineno}: 'source_id' must be a string")
         tags = rec.get("tags")
         if tags is None:
             continue

@@ -273,6 +273,11 @@ def promote_page(
     re-verified. Returns a dict describing the action.
     """
     root = Path(root)
+    if not _SLUG_RE.fullmatch(slug):  # guard before building any path we might unlink
+        raise PromoteError(
+            f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
+            f"separators, '..', or leading dot"
+        )
     page = root / "vault" / "wiki" / f"{kind}s" / f"{slug}.md"
     if not page.exists():
         raise PromoteError(f"no such {kind} page: {page.relative_to(root)}")
@@ -333,13 +338,16 @@ def promote_page(
     if confs:
         t_meta["confidence"] = min(confs)
     target_page.write_text(frontmatter.dump(t_meta, new_body), encoding="utf-8")
-    page.unlink()  # absorbed page removed; its id lives on in the target's supersedes
 
+    # Delete the absorbed page only AFTER stamp + verify succeed: a failure must
+    # never leave it deleted (data loss). Until then both pages exist and verify
+    # cleanly (their footnotes resolve against raw/, not each other).
     r = _scrip(scrip_cmd, ["stamp", str(target_page), "--root", str(root)])
     if r.returncode != 0:
         raise PromoteError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
     r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
     if r.returncode != 0:
         raise PromoteError(f"scrip verify failed after merge:\n{r.stdout}{r.stderr}")
+    page.unlink()  # absorbed page removed; its id lives on in the target's supersedes
     _append_log(root, f"- PROMOTE: merged {cand_id} into {target_id}")
     return {"action": "merge", "target": target_id, "absorbed": cand_id}
