@@ -16,6 +16,12 @@ reference CLI. The file **contract** is versioned separately in
   supersede|qualify|keep-both, claim_a, claim_b, winner?, rationale?}`; scrip
   mints `reconciliation_id` + `at`, validates the claims exist, dedups the pair).
   Existing claim rows are never rewritten.
+- **`scrip-harness reconcile`** — makes AGENT.md RECONCILE runnable: for every
+  open contradiction it reads both cited spans (`scrip span`), asks the model to
+  decide supersede/qualify/keep-both, records the decisions
+  (`scrip fact add --table reconciliations`), logs to `wiki/log.md`, and
+  re-verifies. `--dry-run` reports without recording. (A `qualify`'s nuancing
+  claim is still operator follow-up.)
 
 ### Changed
 - **`scrip query contradictions` now converges**: it excludes any pair that has a

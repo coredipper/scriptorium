@@ -14,6 +14,7 @@ from .extract import (
     build_retry_prompt,
 )
 from .promote import PROMOTE_SYSTEM, PromotionDecision, build_promote_prompt
+from .reconcile import RECONCILE_SYSTEM, ReconciliationDecision, build_reconcile_prompt
 
 DEFAULT_MODEL = "claude-opus-4-8"
 
@@ -103,4 +104,31 @@ def decide_promotion(
     out = resp.parsed_output
     if out is None:
         raise RuntimeError("model returned no parseable promotion decision")
+    return out
+
+
+def decide_reconciliation(
+    pair: dict,
+    span_a: str | None,
+    span_b: str | None,
+    *,
+    model: str = DEFAULT_MODEL,
+    client=None,
+) -> ReconciliationDecision:
+    """Ask Claude to adjudicate one contradiction pair from its two cited spans.
+    Lazy SDK import."""
+    import anthropic
+
+    client = client or anthropic.Anthropic()
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=2000,
+        thinking={"type": "adaptive"},
+        system=RECONCILE_SYSTEM,
+        messages=[{"role": "user", "content": build_reconcile_prompt(pair, span_a, span_b)}],
+        output_format=ReconciliationDecision,
+    )
+    out = resp.parsed_output
+    if out is None:
+        raise RuntimeError("model returned no parseable reconciliation decision")
     return out
