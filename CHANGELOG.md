@@ -5,7 +5,13 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
-## [Unreleased]
+## [0.5.0] — 2026-06-13
+
+RECONCILE joins the automated loop — the last AGENT.md stage — so the full
+six-stage pipeline (INGEST · COMPILE · EXTRACT · ANSWER · PROMOTE · RECONCILE) is
+now automated. (scriptoria and scrip-harness both move to 0.5.0; the harness pins
+`scriptoria>=0.5`, since `reconcile` shells out to the new `scrip span` and
+`scrip fact add --table reconciliations`.)
 
 ### Added
 - **`scrip span "raw/<slug>#<anchor>" | --claim <id>`** — resolve an anchor and
@@ -157,6 +163,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[0.5.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.5.0
 [0.4.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.4.0
 [0.3.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.3.0
 [0.2.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.2.0

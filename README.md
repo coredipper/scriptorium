@@ -108,18 +108,17 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 
 ## Status
 
-**Latest release: v0.4** (see [CHANGELOG.md](CHANGELOG.md)) — **PROMOTE**:
-`scrip similar` scores topic overlap and `scrip-harness promote` merges a page
-into the best match or keeps it. (0.3 added EXTRACT automation — `scrip fact
-add` — plus a hardened CI/release pipeline and published both packages to PyPI:
-`scriptoria`, the `scrip` CLI, and the optional
+**Latest release: v0.5** (see [CHANGELOG.md](CHANGELOG.md)) — **RECONCILE**:
+`scrip span` reads both sides of a contradiction and `scrip-harness reconcile`
+adjudicates it, recording the decision append-only in
+`facts/reconciliations.ndjson`. With this the **whole maintaining loop is
+automated** — every [AGENT.md](AGENT.md) stage (**INGEST · COMPILE · EXTRACT ·
+ANSWER · PROMOTE · RECONCILE**) has a deterministic `scrip` primitive plus, where
+a model is involved, a runnable `scrip-harness` step. (0.4 added PROMOTE; 0.3
+added EXTRACT, a hardened CI/release pipeline, and published both packages to
+PyPI: `scriptoria`, the `scrip` CLI, and the optional
 [`scrip-harness`](harness/README.md).)
 
-By the [AGENT.md](AGENT.md) protocol, the maintaining loop is now automated end
-to end except the last stage: **INGEST · COMPILE · EXTRACT · ANSWER · PROMOTE**
-have deterministic `scrip` primitives (and runnable `scrip-harness` steps where a
-model is involved); **RECONCILE** — adjudicating a contradiction — remains the
-agent's judgment (`scrip query contradictions` surfaces the candidates). The
-contract is hardened (content-derived block ids, **SPEC v2**), with an advisory
-write lock, `scrip watch`, and an optional `[embeddings]` retrieval rung; an
-Obsidian browsing layer remains an adapter.
+The contract is hardened (content-derived block ids, **SPEC v2**), with an
+advisory write lock, `scrip watch`, and an optional `[embeddings]` retrieval rung;
+an Obsidian browsing layer remains an adapter.
