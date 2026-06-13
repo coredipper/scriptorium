@@ -5,6 +5,15 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
+## [Unreleased]
+
+### Packaging
+- **`scrip-harness` is now published to PyPI** (`uv tool install scrip-harness`),
+  pinning `scriptoria>=0.3`. It has its own `harness-v*` release path
+  (`release-harness.yml`); a CI assertion proves the published wheel declares
+  `scriptoria` by version, never the dev path source. The harness versions
+  independently of the `scrip` CLI from here on.
+
 ## [0.3.0] — 2026-06-13
 
 EXTRACT joins the automated loop — the facts layer gets its missing

@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -18,6 +19,12 @@ from .extract import DraftExtraction, to_ndjson
 
 DraftFn = Callable[..., DraftPage]
 ExtractDraftFn = Callable[..., DraftExtraction]
+
+# Drive scriptoria through the *running interpreter*, not a bare `scrip` on PATH:
+# `uv tool install scrip-harness` installs scriptoria into the harness's own
+# environment but only exposes the harness's entry point, so a PATH `scrip` may be
+# missing or a different version. `-m scrip.cli` always runs the bundled one.
+DEFAULT_SCRIP_CMD = (sys.executable, "-m", "scrip.cli")
 
 # Same conservative shape scrip enforces — no path separators, '..', or leading dot.
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -47,7 +54,7 @@ def compile_page(
     *,
     kind: str = "concept",
     draft_fn: DraftFn,
-    scrip_cmd: Sequence[str] = ("scrip",),
+    scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
 ) -> Path:
     """Compile ``raw/<slug>`` into ``wiki/<kind>s/<slug>.md`` and leave it green.
 
@@ -121,7 +128,7 @@ def extract_facts(
     slug: str,
     *,
     draft_fn: ExtractDraftFn,
-    scrip_cmd: Sequence[str] = ("scrip",),
+    scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
     max_quote_retries: int = 2,
 ) -> dict:
     """Extract claims from ``raw/<slug>`` into ``facts/`` and leave the vault green.

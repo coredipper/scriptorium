@@ -1,6 +1,6 @@
 [project]
 name = "scrip-harness"
-version = "0.2.0"
+version = "0.3.0"
 description = "Runnable AGENT.md compile loop for scriptorium: drives `scrip` via subprocess + Claude. Not part of the deterministic scrip core."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,7 +14,12 @@ classifiers = [
 ]
 dependencies = [
     "anthropic>=0.40",
-    "scriptoria",
+    # Imported directly for the structured-output schemas (compile/extract) — don't
+    # rely on anthropic to pull it in transitively; declare what we import.
+    "pydantic>=2",
+    # Version floor (not the dev path source below) is what ships in the wheel's
+    # Requires-Dist, so an installed scrip-harness pulls scriptoria from PyPI.
+    "scriptoria>=0.3",
 ]
 
 [project.urls]

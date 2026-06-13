@@ -45,14 +45,23 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
 
 ## Install & run
 
-```sh
-uv tool install ./scrip            # the deterministic keeper (must be on PATH)
-uv tool install ./harness          # this package → `scrip-harness`
-export ANTHROPIC_API_KEY=...        # the harness calls Claude; scrip never does
+Both packages are on PyPI. `scrip-harness` bundles `scriptoria` as a dependency
+and drives it through its own interpreter, so it is self-sufficient — install
+`scriptoria` as a tool too only if you want the `scrip` command on PATH for
+direct use:
 
-scrip ingest https://example.com/article --slug article   # bring a source in
-scrip-harness compile article                             # synthesize + verify a page
+```sh
+uv tool install scrip-harness            # this package → `scrip-harness` (pulls scriptoria)
+uv tool install 'scriptoria[ingest]'     # optional: `scrip` on PATH + HTML/PDF ingest
+export ANTHROPIC_API_KEY=...              # the harness calls Claude; scrip never does
+
+scrip-harness compile article            # synthesize + verify a page from raw/article
+scrip-harness extract article            # pull claims into facts/
+scrip ingest <url> --slug article        # bring a source in (needs the install above)
 ```
+
+(From a checkout, `uv tool install ./scrip` and `uv tool install ./harness`
+install the local versions instead.)
 
 ## Develop / test
 

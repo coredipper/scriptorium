@@ -1,10 +1,30 @@
 """Integration smoke test: stub the model, drive the REAL `scrip` CLI over a temp
 vault, and assert the compiled page is verified and stamped. Hermetic — no network,
-no LLM (the draft is stubbed); `scrip` is the path-dependency console script."""
+no LLM (the draft is stubbed); `scrip` runs from the harness's own scriptoria."""
+
+import subprocess
+import sys
 
 import pytest
+from scrip_harness import runner
 from scrip_harness.compile import DraftClaim, DraftPage
 from scrip_harness.runner import CompileError, compile_page
+
+
+def test_default_scrip_cmd_runs_the_bundled_scriptoria():
+    """The harness must drive its OWN installed scriptoria, not a bare `scrip` on
+    PATH: a `uv tool install scrip-harness` exposes scrip-harness's entry point but
+    not its dependency's, so a PATH `scrip` may be absent or a different version.
+    Invoking via the running interpreter (`-m scrip.cli`) pins both."""
+    import scrip
+
+    assert runner.DEFAULT_SCRIP_CMD == (sys.executable, "-m", "scrip.cli")
+    r = subprocess.run(
+        [*runner.DEFAULT_SCRIP_CMD, "--version"], capture_output=True, text=True
+    )
+    assert r.returncode == 0
+    # exactly the scriptoria the harness imports — no PATH version skew
+    assert scrip.__version__ in r.stdout
 
 
 def _vault(tmp_path):
