@@ -217,8 +217,8 @@ def test_promote_preserves_absorbed_page_when_verify_fails(tmp_path):
     _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
     _raw(root, "beta", "# B\n\nBeta one sentence.\n")
     _raw(root, "broken", "# Broken\n\nReal content here.\n")
-    _page(root, "compilation", "Compilation",
-          ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
+    target = _page(root, "compilation", "Compilation",
+                   ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
     absorbed = _page(root, "compilation-redux", "Compilation",
                      ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
     # an unrelated page with a BROKEN anchor makes vault-wide `scrip verify` fail
@@ -231,7 +231,11 @@ def test_promote_preserves_absorbed_page_when_verify_fails(tmp_path):
         ),
         encoding="utf-8",
     )
+    target_before = target.read_text(encoding="utf-8")
 
     with pytest.raises(PromoteError):
         promote_page(root, "compilation-redux", decide_fn=None)
-    assert absorbed.exists()  # not deleted — stamp/verify failed first
+    # the merge is atomic: on stamp/verify failure BOTH pages are left untouched,
+    # so a rerun after fixing the failure cannot duplicate the absorbed content
+    assert absorbed.exists()
+    assert target.read_text(encoding="utf-8") == target_before

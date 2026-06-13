@@ -322,6 +322,7 @@ def promote_page(
                 "score": score, "absorbed": cand_id}
 
     target_page = root / target["path"]
+    original_target = target_page.read_text(encoding="utf-8")
     t_meta, t_body = frontmatter.load(target_page)
     new_body = merge_bodies(t_body, body)
     df = list(t_meta.get("derived-from") or [])
@@ -339,15 +340,22 @@ def promote_page(
         t_meta["confidence"] = min(confs)
     target_page.write_text(frontmatter.dump(t_meta, new_body), encoding="utf-8")
 
-    # Delete the absorbed page only AFTER stamp + verify succeed: a failure must
-    # never leave it deleted (data loss). Until then both pages exist and verify
-    # cleanly (their footnotes resolve against raw/, not each other).
-    r = _scrip(scrip_cmd, ["stamp", str(target_page), "--root", str(root)])
-    if r.returncode != 0:
-        raise PromoteError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
-    r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
-    if r.returncode != 0:
-        raise PromoteError(f"scrip verify failed after merge:\n{r.stdout}{r.stderr}")
+    # The merge is atomic. The absorbed page is deleted only after stamp + verify
+    # succeed (no data loss), and on failure the target is restored to its
+    # original bytes — so a failed promote leaves the vault byte-for-byte
+    # unchanged and a rerun after fixing the cause cannot duplicate content. Until
+    # the unlink both pages exist and verify cleanly (footnotes resolve against
+    # raw/, not each other).
+    try:
+        r = _scrip(scrip_cmd, ["stamp", str(target_page), "--root", str(root)])
+        if r.returncode != 0:
+            raise PromoteError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
+        r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
+        if r.returncode != 0:
+            raise PromoteError(f"scrip verify failed after merge:\n{r.stdout}{r.stderr}")
+    except PromoteError:
+        target_page.write_text(original_target, encoding="utf-8")  # roll back the merge
+        raise
     page.unlink()  # absorbed page removed; its id lives on in the target's supersedes
     _append_log(root, f"- PROMOTE: merged {cand_id} into {target_id}")
     return {"action": "merge", "target": target_id, "absorbed": cand_id}
