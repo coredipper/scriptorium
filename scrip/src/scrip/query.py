@@ -66,11 +66,14 @@ def _connect(root: Path) -> duckdb.DuckDBPyConnection:
                 f"SELECT * FROM read_ndjson_auto('{p.as_posix()}')"
             )
         elif view == "reconciliations":
-            # Always present (empty stub) so `contradictions` can anti-join it
-            # even before any reconciliation has been recorded.
+            # Always present (empty stub) so `contradictions` can anti-join it and
+            # raw SQL over its columns works even before any reconciliation exists.
             con.execute(
-                "CREATE VIEW reconciliations AS "
-                "SELECT NULL::VARCHAR AS claim_a, NULL::VARCHAR AS claim_b WHERE FALSE"
+                "CREATE VIEW reconciliations AS SELECT "
+                "NULL::VARCHAR AS reconciliation_id, NULL::VARCHAR AS decision, "
+                "NULL::VARCHAR AS claim_a, NULL::VARCHAR AS claim_b, "
+                "NULL::VARCHAR AS winner, NULL::VARCHAR AS rationale, "
+                "NULL::VARCHAR AS at WHERE FALSE"
             )
     return con
 

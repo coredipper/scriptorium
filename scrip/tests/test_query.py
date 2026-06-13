@@ -1,7 +1,7 @@
 import pytest
 from scrip.errors import UsageError
 
-from scrip import query
+from scrip import cli, query
 
 
 def test_named_claims_query(kb):
@@ -72,6 +72,20 @@ def test_contradictions_works_without_reconciliations_file(kb):
     # the reconciliations view is an empty stub when the file is absent
     _contradiction_pair(kb)
     assert len(query.run(kb.root, name="contradictions")[1]) == 1
+
+
+def test_query_reconciliations_cli_choice(kb):
+    # the named query must be a valid CLI `query` choice, not just in query.run
+    _contradiction_pair(kb)
+    assert cli.main(["query", "reconciliations", "--json", "--root", str(kb.root)]) == 0
+
+
+def test_reconciliations_stub_exposes_full_schema(kb):
+    # before the file exists, raw SQL over the stub's columns must still work
+    _contradiction_pair(kb)
+    cols, rows = query.run(kb.root, sql="SELECT decision, winner, reconciliation_id FROM reconciliations")
+    assert rows == []
+    assert "decision" in cols
 
 
 def test_where_and_limit(kb):

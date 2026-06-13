@@ -547,7 +547,7 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument(
         "name",
         nargs="?",
-        choices=["claims", "entities", "edges", "contradictions"],
+        choices=["claims", "entities", "edges", "contradictions", "reconciliations"],
         help="a named query (omit when using --sql)",
     )
     pq.add_argument("--sql", help="raw DuckDB SQL (views: claims, entities, edges)")
