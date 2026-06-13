@@ -96,6 +96,13 @@ reconciliations.
 3. Entity pages are strictly 1:1 with `entities.ndjson` rows. Re-`stamp` and
    `verify` after.
 
+`scrip-harness promote <slug>` runs this end-to-end for a compiled page: it
+scores via `scrip similar`, merges into the top match when overlap is high
+(deterministically) or keeps the page when it is low, and asks the model only in
+the middle band. A merge appends the absorbed page (footnotes renumbered),
+folds its sources/​id into the target's `derived-from`/`supersedes`, deletes the
+absorbed page, then re-stamps and re-verifies.
+
 ## RECONCILE — resolve a contradiction
 
 1. Triggered by `scrip query contradictions` (opposing `polarity`, same

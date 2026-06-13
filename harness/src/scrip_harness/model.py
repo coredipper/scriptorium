@@ -13,6 +13,7 @@ from .extract import (
     build_extract_prompt,
     build_retry_prompt,
 )
+from .promote import PROMOTE_SYSTEM, PromotionDecision, build_promote_prompt
 
 DEFAULT_MODEL = "claude-opus-4-8"
 
@@ -75,4 +76,31 @@ def draft_extraction(
     out = resp.parsed_output
     if out is None:
         raise RuntimeError(f"model returned no parseable extraction for {source_id}")
+    return out
+
+
+def decide_promotion(
+    candidate_text: str,
+    candidates: list[dict],
+    *,
+    model: str = DEFAULT_MODEL,
+    client=None,
+) -> PromotionDecision:
+    """Ask Claude whether a candidate page duplicates one of the pre-scored
+    existing pages (merge into it) or should stand alone (keep). The only model
+    call in PROMOTE — used for the middle overlap band. Lazy SDK import."""
+    import anthropic
+
+    client = client or anthropic.Anthropic()
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=2000,
+        thinking={"type": "adaptive"},
+        system=PROMOTE_SYSTEM,
+        messages=[{"role": "user", "content": build_promote_prompt(candidate_text, candidates)}],
+        output_format=PromotionDecision,
+    )
+    out = resp.parsed_output
+    if out is None:
+        raise RuntimeError("model returned no parseable promotion decision")
     return out

@@ -43,6 +43,21 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
    contradiction candidates from `scrip query contradictions` are surfaced for
    the operator to RECONCILE per [AGENT.md](../AGENT.md).
 
+## How a promote runs
+
+`scrip-harness promote <slug>` (for a compiled `vault/wiki/<kind>s/<slug>.md`):
+
+1. **Score** — `scrip similar` ranks existing pages by overlap (shared sources +
+   title tokens + derived tags) with the candidate, excluding itself.
+2. **Band** the top score: **≥ `--merge-threshold`** (0.5) → merge into it,
+   **deterministically (no model)**; **< `--keep-threshold`** (0.25) → keep the
+   page as its own; **in between** → Claude decides merge-vs-keep over the small
+   candidate set (the *only* model call in PROMOTE).
+3. **Merge** — append the candidate into the target (its `[^a1]..` footnotes
+   renumbered to avoid collision), union the `derived-from`, record the absorbed
+   id in `supersedes`, delete the absorbed page, then `scrip stamp` + `scrip
+   verify`. `--dry-run` prints the decision and mutates nothing.
+
 ## Install & run
 
 Both packages are on PyPI. `scrip-harness` bundles `scriptoria` as a dependency
@@ -74,10 +89,12 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 
 ## Scope & limits (v1)
 
-- Covers **COMPILE** (one source → one wiki page) and **EXTRACT** (one source →
-  claims in `facts/`, with the bounded quote-retry loop). Entities/edges go
-  through `scrip fact add --table entities|edges` by hand; PROMOTE (merge/dedup)
-  and RECONCILE (contradictions) are not yet automated here — drive them with
-  `scrip` directly per [AGENT.md](../AGENT.md).
-- Single source per page/extract. Multi-source synthesis, and adopting the
-  quote-retry loop in COMPILE too, are future work.
+- Covers **COMPILE** (one source → one wiki page), **EXTRACT** (one source →
+  claims in `facts/`, with the bounded quote-retry loop), and **PROMOTE**
+  (score → merge/keep, model only in the middle band). Entities/edges go through
+  `scrip fact add --table entities|edges` by hand; RECONCILE (contradictions) is
+  not yet automated here — drive it with `scrip` directly per
+  [AGENT.md](../AGENT.md).
+- Single source per page/extract; merge is **append** (not re-synthesis).
+  Multi-source synthesis, and adopting the quote-retry loop in COMPILE too, are
+  future work.

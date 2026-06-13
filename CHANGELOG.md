@@ -16,6 +16,14 @@ reference CLI. The file **contract** is versioned separately in
   (always exit 0); the High/Middle/Low merge decision stays the caller's,
   mirroring `query contradictions`.
 
+- **`scrip-harness promote <slug>`** — makes AGENT.md PROMOTE runnable: scores a
+  compiled page against existing pages with `scrip similar`, then merges into the
+  best match (high overlap, deterministic), keeps it (low), or asks the model
+  (middle band — the only model use). A merge appends the absorbed page with its
+  footnotes renumbered, folds its sources/​id into the target's
+  `derived-from`/`supersedes`, deletes the absorbed page, and re-stamps +
+  re-verifies. `--dry-run` reports the decision without mutating.
+
 ### Packaging
 - **`scrip-harness` is now published to PyPI** (`uv tool install scrip-harness`),
   pinning `scriptoria>=0.3`. It has its own `harness-v*` release path

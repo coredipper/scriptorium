@@ -45,13 +45,61 @@ def main(argv: list[str] | None = None) -> int:
     pe.add_argument("slug")
     pe.add_argument("--root")
     pe.add_argument("--model", help="Claude model id (default: claude-opus-4-8)")
+    pp = sub.add_parser(
+        "promote",
+        help="score a compiled page against existing pages (`scrip similar`) and "
+        "merge it into the best match or keep it — model used only in the middle band",
+    )
+    pp.add_argument("slug")
+    pp.add_argument("--kind", choices=["concept", "entity"], default="concept")
+    pp.add_argument("--root")
+    pp.add_argument("--model", help="Claude model id (default: claude-opus-4-8)")
+    pp.add_argument(
+        "--merge-threshold", type=float, default=0.5,
+        help="combined score at/above which to merge without asking the model (default 0.5)",
+    )
+    pp.add_argument(
+        "--keep-threshold", type=float, default=0.25,
+        help="combined score below which to keep the page as-is (default 0.25)",
+    )
+    pp.add_argument(
+        "--dry-run", action="store_true",
+        help="report the decision without mutating any page",
+    )
     args = p.parse_args(argv)
 
     from . import model as model_mod
-    from .runner import CompileError, ExtractError, compile_page, extract_facts
+    from .runner import (
+        CompileError,
+        ExtractError,
+        PromoteError,
+        compile_page,
+        extract_facts,
+        promote_page,
+    )
 
     root = _resolve_root(args.root)
     chosen_model = args.model or model_mod.DEFAULT_MODEL
+
+    if args.command == "promote":
+        def decide_fn(candidate_text: str, candidates: list[dict]):
+            return model_mod.decide_promotion(candidate_text, candidates, model=chosen_model)
+
+        try:
+            result = promote_page(
+                root, args.slug, kind=args.kind, decide_fn=decide_fn,
+                merge_threshold=args.merge_threshold, keep_threshold=args.keep_threshold,
+                dry_run=args.dry_run,
+            )
+        except PromoteError as e:
+            print(f"scrip-harness: {e}", file=sys.stderr)
+            return 1
+        if result["action"] == "merge":
+            verb = "would merge" if result.get("dry_run") else "merged"
+            print(f"{verb} {args.kind}/{args.slug} into {result['target']}")
+        else:
+            print(f"kept {args.kind}/{args.slug} as its own page ({result.get('reason', '')})")
+        return 0
 
     if args.command == "extract":
         def extract_draft_fn(text: str, *, source_id: str, failures=None):
