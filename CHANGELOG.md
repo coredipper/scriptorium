@@ -5,7 +5,11 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
-## [Unreleased]
+## [0.3.0] — 2026-06-13
+
+EXTRACT joins the automated loop — the facts layer gets its missing
+deterministic writer — and the release pipeline is hardened so this cut ships
+through a matrix-tested, lint-gated build.
 
 ### Added
 - **`scrip fact add [--table claims|entities|edges] (--stdin | --file F)`** — a
@@ -95,5 +99,6 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[0.3.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.3.0
 [0.2.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.2.0
 [0.1.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.1.0
