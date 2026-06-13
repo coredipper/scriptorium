@@ -90,6 +90,33 @@ def resolve(source_text: str, anchor: str) -> str:
     return "OK" if matches == 1 else "AMBIGUOUS"
 
 
+def span(source_text: str, anchor: str) -> tuple[str, str | None]:
+    """Return ``(status, cited_text)`` for ``anchor`` in ``source_text``.
+
+    Same verdicts as :func:`resolve`, but also returns the matched span (the
+    normalized cited text) so a caller can *read* what an anchor cites. For
+    ``AMBIGUOUS`` the window nearest the anchor's ``loc`` hint is returned; for
+    ``BROKEN`` the text is ``None``.
+    """
+    a = parse_anchor(anchor)
+    ns = normalize(source_text)
+    n, target, loc = a["len"], a["qh"], a["loc"]
+    length = len(ns)
+    if n <= 0 or n > length:
+        return "BROKEN", None
+    hits = [
+        start
+        for start in range(length - n + 1)
+        if hashlib.sha256(ns[start : start + n].encode("utf-8")).hexdigest() == target
+    ]
+    if not hits:
+        return "BROKEN", None
+    if len(hits) == 1:
+        return "OK", ns[hits[0] : hits[0] + n]
+    nearest = min(hits, key=lambda s: abs(s - loc * length))
+    return "AMBIGUOUS", ns[nearest : nearest + n]
+
+
 # --------------------------------------------------------------------------- #
 # Vault-wide verification
 # --------------------------------------------------------------------------- #

@@ -352,6 +352,31 @@ def _parse_source_ids(raw: str) -> list[str]:
     return ids
 
 
+def cmd_span(args: argparse.Namespace) -> int:
+    from . import anchors
+
+    root = resolve_root(args.root)
+    if args.claim:
+        from . import facts
+
+        source_id, anchor = facts.claim_source_anchor(root, args.claim)
+    else:
+        if "#" not in args.target:
+            raise errors.UsageError("target must be raw/<slug>#<anchor>")
+        source_id, anchor = args.target.split("#", 1)
+        source_id = source_id if source_id.startswith("raw/") else f"raw/{source_id}"
+        _safe_slug(source_id[len("raw/") :], "source")
+    text = anchors.source_text(root, source_id)
+    status, cited = anchors.span(text, anchor)
+    if args.json:
+        _emit({"target": f"{source_id}#{anchor}", "status": status, "text": cited})
+    else:
+        print(f"[{status}] {source_id}")
+        if cited is not None:
+            print(cited)
+    return 0 if status == "OK" else 1
+
+
 def cmd_similar(args: argparse.Namespace) -> int:
     from . import similar
 
@@ -388,7 +413,12 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
         _emit(result)
     else:
         for r in result["appended"]:
-            ident = r.get("claim_id") or r.get("entity_id") or f"{r['src']} -> {r['dst']}"
+            ident = (
+                r.get("claim_id")
+                or r.get("entity_id")
+                or r.get("reconciliation_id")
+                or f"{r.get('src')} -> {r.get('dst')}"
+            )
             print(f"  appended {ident}")
         for s in result["skipped"]:
             print(f"  = record {s['index']} skipped (duplicate)")
@@ -585,6 +615,16 @@ def build_parser() -> argparse.ArgumentParser:
     pn.add_argument("--title", help="human title (default: the slug)")
     pn.set_defaults(func=cmd_new)
 
+    psp = sub.add_parser(
+        "span",
+        parents=[common],
+        help="resolve an anchor and print the cited text (read both sides of a contradiction)",
+    )
+    span_src = psp.add_mutually_exclusive_group(required=True)
+    span_src.add_argument("target", nargs="?", metavar="raw/<slug>#<anchor>", help="anchor target")
+    span_src.add_argument("--claim", metavar="ID", help="resolve this claim's anchor instead")
+    psp.set_defaults(func=cmd_span)
+
     psim = sub.add_parser(
         "similar",
         parents=[common],
@@ -629,7 +669,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pfa.add_argument(
         "--table",
-        choices=["claims", "entities", "edges"],
+        choices=["claims", "entities", "edges", "reconciliations"],
         default="claims",
         help="facts table to append to (default: claims)",
     )

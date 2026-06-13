@@ -61,6 +61,8 @@ Newline-delimited JSON (one record per line), queryable directly as data:
 - `facts/entities.ndjson` — entities (people, works, organizations, systems).
 - `facts/claims.ndjson` — the claims table (§5).
 - `facts/graph.ndjson` — edges between entities/sources (citation/idea graph).
+- `facts/reconciliations.ndjson` — RECONCILE decisions over contradiction pairs
+  (§9.2). Optional: absent until the first reconciliation is recorded.
 - `facts/_meta.yaml` — the **facts-set frontmatter**: this set's `derived-from`,
   `input-hash`, `last-compiled` (so the facts layer goes stale independently of
   the wiki).
@@ -275,6 +277,28 @@ Only *adjudication* (decide supersede / qualify / keep-both) is the agent's
 judgment, applied to that bounded candidate set. This trades recall (claims
 phrased with different subjects are missed) for precision and reproducibility.
 
+### 9.2 Reconciliation
+Adjudicating a contradiction is recorded **append-only** in
+`facts/reconciliations.ndjson`, one record per pair:
+
+```json
+{"reconciliation_id":"rec_0001","decision":"supersede","claim_a":"clm_0009","claim_b":"clm_0003","winner":"clm_0009","rationale":"newer source measured it directly","at":"2026-06-13T10:00:00Z"}
+```
+
+| field | required | meaning |
+|---|---|---|
+| `reconciliation_id` | ✓ | stable, unique id (minted, not authored) |
+| `decision` | ✓ | `supersede` \| `qualify` \| `keep-both` |
+| `claim_a`, `claim_b` | ✓ | the adjudicated pair (existing claim ids) |
+| `winner` | for `supersede` | the surviving claim (`claim_a` or `claim_b`); absent otherwise |
+| `rationale` | | why this decision |
+| `at` | ✓ | ISO-8601 UTC (minted) |
+
+Existing claim rows are **never rewritten** (the loser of a `supersede` stays in
+`claims.ndjson`; the record marks it superseded). Contradiction detection (§9.1)
+**excludes any pair that has a reconciliation record** (either order), so the
+candidate set converges as decisions are recorded.
+
 ---
 
 ## 10. Conformance
@@ -296,6 +320,10 @@ behaviours; their exit codes are part of the contract surface
 ## 11. Versioning
 
 - This document is `version: 2`; the manifest carries the same.
+- **Reconciliations (additive).** `facts/reconciliations.ndjson` (§9.2) was added
+  as an optional facts file. It is backward-compatible: instances without it are
+  unaffected, and it does not change block ids, so the manifest `version` stays
+  `2` (no cache invalidation).
 - **v1 → v2 (block ids).** Block ids became content-derived (a digest of the
   normalized block text) instead of positional `b0,b1,…`, making block-precise
   dependencies insertion-stable (§7.2). The id *form* is the only change: a

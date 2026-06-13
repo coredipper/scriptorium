@@ -5,6 +5,27 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
+## [Unreleased]
+
+### Added
+- **`scrip span "raw/<slug>#<anchor>" | --claim <id>`** — resolve an anchor and
+  print the cited text (read both sides of a contradiction without
+  re-implementing anchor resolution). Read-only; exit 0 OK / 1 ambiguous-or-broken.
+- **`scrip fact add --table reconciliations`** — records a RECONCILE decision
+  append-only in the new `facts/reconciliations.ndjson` (`{decision:
+  supersede|qualify|keep-both, claim_a, claim_b, winner?, rationale?}`; scrip
+  mints `reconciliation_id` + `at`, validates the claims exist, dedups the pair).
+  Existing claim rows are never rewritten.
+
+### Changed
+- **`scrip query contradictions` now converges**: it excludes any pair that has a
+  reconciliation record (either order), so adjudicated contradictions stop being
+  re-surfaced. New `reconciliations` query view.
+
+### Contract (SPEC, additive)
+- `facts/reconciliations.ndjson` added as an optional facts file (SPEC §2.2, §9.2);
+  backward-compatible, no manifest version bump (block ids unchanged).
+
 ## [0.4.0] — 2026-06-13
 
 PROMOTE joins the automated loop: a deterministic overlap scorer and a harness

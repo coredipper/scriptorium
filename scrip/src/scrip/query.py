@@ -22,15 +22,18 @@ _VIEWS = {
     "claims": "claims.ndjson",
     "entities": "entities.ndjson",
     "edges": "graph.ndjson",
+    "reconciliations": "reconciliations.ndjson",
 }
 
 _NAMED = {
     "claims": "SELECT * FROM claims",
     "entities": "SELECT * FROM entities",
     "edges": "SELECT * FROM edges",
+    "reconciliations": "SELECT * FROM reconciliations",
     # contradiction *candidates*: same subject+predicate, opposing polarity,
-    # from different sources. Detection is deterministic; adjudication is the
-    # agent's job.
+    # from different sources, AND not yet adjudicated (no reconciliation record
+    # for the pair, either order) — so RECONCILE makes the set converge.
+    # Detection is deterministic; adjudication is the agent's job.
     "contradictions": """
         SELECT a.claim_id AS claim_a, b.claim_id AS claim_b,
                a.subject, a.predicate,
@@ -41,10 +44,15 @@ _NAMED = {
         WHERE a.polarity = 'asserts'
           AND b.polarity = 'denies'
           AND a.source_id <> b.source_id
+          AND NOT EXISTS (
+            SELECT 1 FROM reconciliations r
+            WHERE (r.claim_a = a.claim_id AND r.claim_b = b.claim_id)
+               OR (r.claim_a = b.claim_id AND r.claim_b = a.claim_id)
+          )
     """,
 }
 
-_FILTERABLE = {"claims", "entities", "edges"}
+_FILTERABLE = {"claims", "entities", "edges", "reconciliations"}
 
 
 def _connect(root: Path) -> duckdb.DuckDBPyConnection:
@@ -56,6 +64,13 @@ def _connect(root: Path) -> duckdb.DuckDBPyConnection:
             con.execute(
                 f"CREATE VIEW {view} AS "
                 f"SELECT * FROM read_ndjson_auto('{p.as_posix()}')"
+            )
+        elif view == "reconciliations":
+            # Always present (empty stub) so `contradictions` can anti-join it
+            # even before any reconciliation has been recorded.
+            con.execute(
+                "CREATE VIEW reconciliations AS "
+                "SELECT NULL::VARCHAR AS claim_a, NULL::VARCHAR AS claim_b WHERE FALSE"
             )
     return con
 

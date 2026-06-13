@@ -48,6 +48,122 @@ def _claims_lines(kb):
     return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
 
 
+def _recs_lines(kb):
+    p = kb.root / "vault" / "facts" / "reconciliations.ndjson"
+    if not p.exists():
+        return []
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+
+
+def _two_claims(kb):
+    """Seed a contradiction pair to reconcile."""
+    kb.add_raw("s", SRC)
+    kb.add_claim("clm_0001", "s", "The quick brown fox jumps over the lazy dog.",
+                 subject="chunking", predicate="discards", polarity="asserts")
+    kb.add_claim("clm_0002", "s", "Caching answers beats recomputing them.",
+                 subject="chunking", predicate="discards", polarity="denies")
+
+
+def _recon(decision, **kw):
+    rec = {"decision": decision, "claim_a": "clm_0001", "claim_b": "clm_0002"}
+    rec.update(kw)
+    return rec
+
+
+# --------------------------------------------------------------------------- #
+# Reconciliations table
+# --------------------------------------------------------------------------- #
+def test_fact_add_reconciliation_supersede(kb, capsys):
+    _two_claims(kb)
+    rc = _run_add(
+        kb,
+        _ndjson(_recon("supersede", winner="clm_0001", rationale="newer source wins")),
+        "--table", "reconciliations", "--json",
+    )
+    assert rc == 0
+    [rec] = _recs_lines(kb)
+    assert rec["reconciliation_id"] == "rec_0001"
+    assert rec["decision"] == "supersede"
+    assert rec["winner"] == "clm_0001"
+    assert rec["claim_a"] == "clm_0001" and rec["claim_b"] == "clm_0002"
+    assert rec["rationale"] == "newer source wins"
+    assert ISO_Z.fullmatch(rec["at"])
+    assert json.loads(capsys.readouterr().out)["appended"][0]["reconciliation_id"] == "rec_0001"
+
+
+def test_fact_add_reconciliation_qualify_and_keep_both(kb):
+    _two_claims(kb)
+    kb.add_claim("clm_0003", "s", "Caching answers beats recomputing them.", subject="x")
+    assert _run_add(kb, _ndjson(_recon("qualify")), "--table", "reconciliations") == 0
+    # a *different* pair so dedup doesn't skip it
+    assert _run_add(kb, _ndjson(_recon("keep-both", claim_b="clm_0003")),
+                    "--table", "reconciliations") == 0
+    recs = _recs_lines(kb)
+    assert [r["decision"] for r in recs] == ["qualify", "keep-both"]
+    assert [r["reconciliation_id"] for r in recs] == ["rec_0001", "rec_0002"]
+    assert all("winner" not in r for r in recs)  # winner only for supersede
+
+
+def test_fact_add_reconciliation_supersede_requires_valid_winner(kb):
+    _two_claims(kb)
+    assert _run_add(kb, _ndjson(_recon("supersede")), "--table", "reconciliations") == 3  # no winner
+    assert _run_add(kb, _ndjson(_recon("supersede", winner="clm_9999")),
+                    "--table", "reconciliations") == 3  # winner not in pair
+
+
+def test_fact_add_reconciliation_winner_forbidden_unless_supersede(kb):
+    _two_claims(kb)
+    assert _run_add(kb, _ndjson(_recon("qualify", winner="clm_0001")),
+                    "--table", "reconciliations") == 3
+
+
+def test_fact_add_reconciliation_bad_decision_is_data_error(kb):
+    _two_claims(kb)
+    assert _run_add(kb, _ndjson(_recon("ignore-it")), "--table", "reconciliations") == 3
+
+
+def test_fact_add_reconciliation_rejects_minted_fields(kb):
+    _two_claims(kb)
+    assert _run_add(kb, _ndjson(_recon("qualify", reconciliation_id="rec_0001")),
+                    "--table", "reconciliations") == 3
+    assert _run_add(kb, _ndjson(_recon("qualify", at="2026-01-01T00:00:00Z")),
+                    "--table", "reconciliations") == 3
+
+
+def test_fact_add_reconciliation_missing_claim_fails(kb, capsys):
+    _two_claims(kb)
+    rc = _run_add(kb, _ndjson(_recon("qualify", claim_b="clm_9999")),
+                  "--table", "reconciliations", "--json")
+    assert rc == 1
+    assert _recs_lines(kb) == []
+    [failure] = json.loads(capsys.readouterr().out)["failures"]
+    assert failure["status"] == "MISSING_CLAIM"
+
+
+def test_fact_add_reconciliation_dedups_unordered_pair(kb, capsys):
+    _two_claims(kb)
+    assert _run_add(kb, _ndjson(_recon("qualify")), "--table", "reconciliations") == 0
+    capsys.readouterr()
+    # same pair, reversed order → already adjudicated → skipped, not re-appended
+    rc = _run_add(
+        kb,
+        _ndjson({"decision": "supersede", "claim_a": "clm_0002", "claim_b": "clm_0001", "winner": "clm_0002"}),
+        "--table", "reconciliations", "--json",
+    )
+    assert rc == 0
+    assert len(_recs_lines(kb)) == 1
+    assert json.loads(capsys.readouterr().out)["skipped"][0]["reason"] == "duplicate"
+
+
+def test_fact_add_reconciliation_id_sequencing(kb):
+    _two_claims(kb)
+    kb.add_claim("clm_0003", "s", "The quick brown fox jumps over the lazy dog.", subject="x")
+    assert _run_add(kb, _ndjson(_recon("qualify")), "--table", "reconciliations") == 0
+    assert _run_add(kb, _ndjson(_recon("keep-both", claim_a="clm_0001", claim_b="clm_0003")),
+                    "--table", "reconciliations") == 0
+    assert [r["reconciliation_id"] for r in _recs_lines(kb)] == ["rec_0001", "rec_0002"]
+
+
 # --------------------------------------------------------------------------- #
 # Happy path
 # --------------------------------------------------------------------------- #
