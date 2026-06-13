@@ -239,3 +239,31 @@ def test_promote_preserves_absorbed_page_when_verify_fails(tmp_path):
     # so a rerun after fixing the failure cannot duplicate the absorbed content
     assert absorbed.exists()
     assert target.read_text(encoding="utf-8") == target_before
+
+
+def test_promote_rollback_is_byte_exact_for_crlf(tmp_path):
+    """Rollback must restore the target byte-for-byte, including CRLF newlines —
+    text-mode read/write would normalize them, so the snapshot uses bytes."""
+    root = _vault(tmp_path)
+    _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
+    _raw(root, "beta", "# B\n\nBeta one sentence.\n")
+    _raw(root, "broken", "# Broken\n\nReal content here.\n")
+    target = _page(root, "compilation", "Compilation",
+                   ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
+    _page(root, "compilation-redux", "Compilation",
+          ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+    (root / "vault" / "wiki" / "concepts" / "broken.md").write_text(
+        frontmatter.dump(
+            {"id": "concept/broken", "type": "wiki.concept", "title": "Z page",
+             "derived-from": ["raw/broken"], "confidence": 0.5},
+            'Claim.[^a1]\n\n[^a1]: anchor=raw/broken#qh:deadbeef|loc:0.0|len:99  "absent"\n',
+        ),
+        encoding="utf-8",
+    )
+    # give the target CRLF newlines, then capture its exact bytes
+    target.write_bytes(target.read_text(encoding="utf-8").replace("\n", "\r\n").encode("utf-8"))
+    before = target.read_bytes()
+
+    with pytest.raises(PromoteError):
+        promote_page(root, "compilation-redux", decide_fn=None)
+    assert target.read_bytes() == before  # CRLF preserved — rollback is byte-exact

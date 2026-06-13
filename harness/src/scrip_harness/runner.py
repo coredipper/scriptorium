@@ -322,7 +322,7 @@ def promote_page(
                 "score": score, "absorbed": cand_id}
 
     target_page = root / target["path"]
-    original_target = target_page.read_text(encoding="utf-8")
+    original_target = target_page.read_bytes()  # bytes: rollback must be exact (CRLF, encoding)
     t_meta, t_body = frontmatter.load(target_page)
     new_body = merge_bodies(t_body, body)
     df = list(t_meta.get("derived-from") or [])
@@ -354,7 +354,7 @@ def promote_page(
         if r.returncode != 0:
             raise PromoteError(f"scrip verify failed after merge:\n{r.stdout}{r.stderr}")
     except PromoteError:
-        target_page.write_text(original_target, encoding="utf-8")  # roll back the merge
+        target_page.write_bytes(original_target)  # roll back the merge, byte-for-byte
         raise
     page.unlink()  # absorbed page removed; its id lives on in the target's supersedes
     _append_log(root, f"- PROMOTE: merged {cand_id} into {target_id}")
