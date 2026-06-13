@@ -534,7 +534,7 @@ wheels = [
 
 [[package]]
 name = "scrip-harness"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -559,7 +559,7 @@ dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "scriptoria"
-version = "0.3.0"
+version = "0.4.0"
 source = { directory = "../scrip" }
 dependencies = [
     { name = "duckdb" },
