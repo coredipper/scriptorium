@@ -10,4 +10,4 @@ rejects a quote that is not verbatim and unique) and recording provenance with
 way. The harness is optional and lives outside the deterministic core.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
