@@ -204,3 +204,21 @@ def test_similar_malformed_claims_is_data_error(kb):
     kb.add_wiki("p", ["raw/a"], title="P")
     (kb.root / "vault" / "facts" / "claims.ndjson").write_text("{not json}\n", encoding="utf-8")
     assert cli.main(["similar", "--title", "X", "--from", "raw/a", "--root", str(kb.root)]) == 3
+
+
+def test_similar_non_object_claim_line_is_data_error(kb):
+    # a valid-JSON non-object must be a clean data error (3), not an internal one (4)
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("p", ["raw/a"], title="P")
+    (kb.root / "vault" / "facts" / "claims.ndjson").write_text("[]\n", encoding="utf-8")
+    assert cli.main(["similar", "--title", "X", "--from", "raw/a", "--root", str(kb.root)]) == 3
+
+
+def test_similar_bad_tags_shape_is_data_error(kb):
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("p", ["raw/a"], title="P")
+    (kb.root / "vault" / "facts" / "claims.ndjson").write_text(
+        '{"claim_id": "clm_0001", "source_id": "raw/a", "anchor": "qh:x|loc:0|len:1", "tags": "oops"}\n',
+        encoding="utf-8",
+    )
+    assert cli.main(["similar", "--title", "X", "--from", "raw/a", "--root", str(kb.root)]) == 3
