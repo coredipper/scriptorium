@@ -83,14 +83,25 @@ reconciliations.
 
 ## PROMOTE — turn a good answer into a page
 
-1. Before creating a page, list existing `wiki/concepts/` + `entities/` and score
-   overlap with the new topic: normalized-title token overlap + shared `tags` +
-   shared `derived-from`.
+1. Before creating a page, score overlap with existing pages:
+   `scrip similar --title "…" --from raw/a,raw/b [--kind concept|entity]` ranks
+   them deterministically by normalized-title token overlap + shared
+   `derived-from` + shared `tags` (tags derived from the claims on those
+   sources, since pages carry no tags). Pass `--exclude <id>` when re-scoring an
+   existing page so it does not match itself.
 2. **High overlap** → MERGE into the existing page (append, extend `derived-from`,
    record the absorbed id in `supersedes`). **Low** → create a new page.
-   **Middle** → you decide, but only over that small candidate set.
+   **Middle** → you decide, but only over that small candidate set. (The
+   threshold cutoffs are yours: `scrip similar` reports scores, not a verdict.)
 3. Entity pages are strictly 1:1 with `entities.ndjson` rows. Re-`stamp` and
    `verify` after.
+
+`scrip-harness promote <slug>` runs this end-to-end for a compiled page: it
+scores via `scrip similar`, merges into the top match when overlap is high
+(deterministically) or keeps the page when it is low, and asks the model only in
+the middle band. A merge appends the absorbed page (footnotes renumbered),
+folds its sources/​id into the target's `derived-from`/`supersedes`, deletes the
+absorbed page, then re-stamps and re-verifies.
 
 ## RECONCILE — resolve a contradiction
 
@@ -113,6 +124,7 @@ reconciliations.
 | scaffold a new wiki page | `scrip new concept\|entity <slug> --from raw/…` |
 | mint a provenance anchor for a quote | `scrip anchor "<quote>" --source raw/<slug>` |
 | append validated fact records | `scrip fact add [--table claims\|entities\|edges] --stdin` |
+| score overlap before promoting a page | `scrip similar --title "…" --from raw/…` |
 | record provenance hashes after compiling | `scrip stamp [path…]` |
 | check every citation still resolves | `scrip verify` |
 | query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |

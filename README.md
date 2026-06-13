@@ -34,6 +34,7 @@ vault/          a real, dogfooded instance (reading notes on the 3 designs above
   facts/        structured extractions, queryable as data (NDJSON)
   wiki/         synthesized concept & entity pages, with provenance footnotes
 scrip/          the reference CLI: the deterministic keeper (Python, uv)
+harness/        optional LLM loop (scrip-harness): runnable COMPILE / EXTRACT / PROMOTE
 scripts/        seed_vault.py — reproducibly regenerates the example vault
 adapters/       deferred bindings (Obsidian, embeddings) — see adapters/README.md
 ```
@@ -48,8 +49,8 @@ The package is published to PyPI as **`scriptoria`**; the command it installs an
 the import package are both `scrip` (`pip install scriptoria` → run `scrip`).
 
 ```sh
-# install the deterministic keeper (from this checkout)
-uv tool install ./scrip
+# install the deterministic keeper
+uv tool install scriptoria        # or: pip install scriptoria   (from a checkout: ./scrip)
 
 # what's stale / what's uncompiled
 scrip status
@@ -64,6 +65,10 @@ scrip query --sql "SELECT source_id, count(*) AS n FROM claims GROUP BY 1 ORDER 
 
 # rung 4 — retrieve source blocks for an uncompiled question (grep by default)
 scrip search "what makes adding one document expensive?"
+
+# before creating a page, score its overlap with existing ones (PROMOTE step 1)
+# — PROMOTE ships in the next release; available now from a checkout install
+scrip similar --title "Compilation over retrieval" --from raw/karpathy-llm-wiki
 ```
 
 ### Optional: semantic retrieval
@@ -81,9 +86,13 @@ scrip search "keeping citations trustworthy when sources change"
 The maintaining loop (for an agent or a human): **ingest** a source into `raw/`
 (`scrip ingest <url|file>` — extracts canonical text; HTML/PDF need the optional
 `[ingest]` extra, markdown/text need nothing), **compile** a page into `wiki/`
-(`scrip new` + `scrip anchor` to mint verified citations) and **extract** claims
-into `facts/`, then `scrip stamp` to record provenance and `scrip verify` to prove
-citations resolve. Full protocol in **[AGENT.md](AGENT.md)**.
+(`scrip new` + `scrip anchor` to mint verified citations), **extract** claims into
+`facts/` (`scrip fact add` — validates each quote and mints its anchor), and
+**promote** to dedup against existing pages (`scrip similar` scores overlap — the
+newest stage, landing in the next release), each followed by `scrip stamp`
+(record provenance) and `scrip verify` (prove citations resolve). The optional [`scrip-harness`](harness/README.md) makes the
+COMPILE, EXTRACT, and PROMOTE steps runnable with a model while `scrip` itself
+stays deterministic and model-free. Full protocol in **[AGENT.md](AGENT.md)**.
 
 ## Regenerate the example vault
 
@@ -100,10 +109,19 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 
 ## Status
 
-**v0.2** — the first complete cut beyond the v0 slice (see [CHANGELOG.md](CHANGELOG.md)).
-The contract is hardened (content-derived block ids, **SPEC v2**), the input side is
-automated (`scrip ingest`), the agent COMPILE step is runnable (the optional
-[`scrip-harness`](harness/README.md), which keeps `scrip` itself model-free), and
-there's an advisory write lock plus `scrip watch`. The embeddings retrieval rung
-ships as the optional `[embeddings]` extra; an Obsidian browsing layer remains an
-adapter.
+**Latest release: v0.3** (see [CHANGELOG.md](CHANGELOG.md)) — EXTRACT automation
+(`scrip fact add`, the validated facts writer), a hardened CI/release pipeline
+(Python 3.10–3.14 matrix, ruff + pyright), and **both packages published to
+PyPI**: `scriptoria` (the `scrip` CLI) and the optional
+[`scrip-harness`](harness/README.md). Since then (next release): **PROMOTE** —
+`scrip similar` scores topic overlap and `scrip-harness promote` merges a page
+into the best match or keeps it.
+
+By the [AGENT.md](AGENT.md) protocol, the maintaining loop is now automated end
+to end except the last stage: **INGEST · COMPILE · EXTRACT · ANSWER · PROMOTE**
+have deterministic `scrip` primitives (and runnable `scrip-harness` steps where a
+model is involved); **RECONCILE** — adjudicating a contradiction — remains the
+agent's judgment (`scrip query contradictions` surfaces the candidates). The
+contract is hardened (content-derived block ids, **SPEC v2**), with an advisory
+write lock, `scrip watch`, and an optional `[embeddings]` retrieval rung; an
+Obsidian browsing layer remains an adapter.

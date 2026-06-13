@@ -336,6 +336,42 @@ def cmd_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_source_ids(raw: str) -> list[str]:
+    """Parse a comma-separated `--from` value into validated source ids, WITHOUT
+    requiring the sources to exist (unlike `cmd_new`): scoring a not-yet-ingested
+    proposed topic is legitimate. Keeps the traversal-safety check."""
+    ids: list[str] = []
+    for s in (part.strip() for part in raw.split(",")):
+        if not s:
+            continue
+        sid = s if s.startswith("raw/") else f"raw/{s}"
+        _safe_slug(sid.split("#", 1)[0][len("raw/") :], "source")
+        ids.append(sid)
+    if not ids:
+        raise errors.UsageError("--from requires at least one source id")
+    return ids
+
+
+def cmd_similar(args: argparse.Namespace) -> int:
+    from . import similar
+
+    root = resolve_root(args.root)
+    sources = _parse_source_ids(args.sources)
+    result = similar.compute_similar(
+        root,
+        title=args.title,
+        sources=sources,
+        kind=args.kind,
+        exclude=set(args.exclude),
+        top=args.top,
+    )
+    if args.json:
+        _emit(result)
+    else:
+        similar.print_similar(result)
+    return 0
+
+
 def cmd_fact_add(args: argparse.Namespace) -> int:
     from . import facts
 
@@ -548,6 +584,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pn.add_argument("--title", help="human title (default: the slug)")
     pn.set_defaults(func=cmd_new)
+
+    psim = sub.add_parser(
+        "similar",
+        parents=[common],
+        help="score existing wiki pages by topic overlap with a proposed page (PROMOTE step 1)",
+    )
+    psim.add_argument(
+        "--title", required=True, help="proposed page title (tokenized for title overlap)"
+    )
+    psim.add_argument(
+        "--from",
+        dest="sources",
+        required=True,
+        metavar="raw/a,raw/b",
+        help="comma-separated source ids the proposed page would derive from",
+    )
+    psim.add_argument(
+        "--kind",
+        choices=["concept", "entity"],
+        default="concept",
+        help="score only candidates of this kind (default: concept)",
+    )
+    psim.add_argument(
+        "--exclude",
+        metavar="ID",
+        action="append",
+        default=[],
+        help="page id to skip (repeatable); use when re-scoring an existing page",
+    )
+    psim.add_argument("--top", type=int, metavar="N", help="limit to the N highest-scoring candidates")
+    psim.set_defaults(func=cmd_similar)
 
     pfact = sub.add_parser(
         "fact",

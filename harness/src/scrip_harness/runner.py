@@ -16,9 +16,11 @@ from scrip import frontmatter  # reuse the deterministic frontmatter helper
 
 from .compile import DraftPage, assemble_body, extract_markers
 from .extract import DraftExtraction, to_ndjson
+from .promote import PromotionDecision, merge_bodies
 
 DraftFn = Callable[..., DraftPage]
 ExtractDraftFn = Callable[..., DraftExtraction]
+DecideFn = Callable[..., PromotionDecision]  # (candidate_text, candidates) -> decision
 
 # Drive scriptoria through the *running interpreter*, not a bare `scrip` on PATH:
 # `uv tool install scrip-harness` installs scriptoria into the harness's own
@@ -38,6 +40,11 @@ class CompileError(RuntimeError):
 class ExtractError(RuntimeError):
     """An extract step failed (bad slug, quotes still failing after the bounded
     retries, or a scrip command erred)."""
+
+
+class PromoteError(RuntimeError):
+    """A promote step failed (missing page, a scrip command erred, or the middle
+    band was reached with no decider)."""
 
 
 def _scrip(
@@ -234,3 +241,121 @@ def extract_facts(
         "skipped": added["skipped"],
         "contradictions": json.loads(r.stdout),
     }
+
+
+def _append_log(root: Path, line: str) -> None:
+    log = root / "vault" / "wiki" / "log.md"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "a", encoding="utf-8") as f:
+        f.write(line.rstrip() + "\n")
+
+
+def promote_page(
+    root,
+    slug: str,
+    *,
+    kind: str = "concept",
+    decide_fn: DecideFn | None = None,
+    merge_threshold: float = 0.5,
+    keep_threshold: float = 0.25,
+    scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
+    dry_run: bool = False,
+) -> dict:
+    """Promote a freshly compiled page: score it against existing pages with
+    ``scrip similar``, then keep it or merge it into the best match.
+
+    Banding on the top candidate's combined score: ``>= merge_threshold`` →
+    merge (deterministic, no model); ``< keep_threshold`` → keep; in between →
+    ``decide_fn(candidate_text, candidates)`` returns a ``PromotionDecision``
+    (the only model use). On merge the absorbed page is appended into the target
+    (footnotes renumbered), its sources/​id folded into the target's
+    ``derived-from``/``supersedes``, then the target is re-stamped and the vault
+    re-verified. Returns a dict describing the action.
+    """
+    root = Path(root)
+    if not _SLUG_RE.fullmatch(slug):  # guard before building any path we might unlink
+        raise PromoteError(
+            f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
+            f"separators, '..', or leading dot"
+        )
+    page = root / "vault" / "wiki" / f"{kind}s" / f"{slug}.md"
+    if not page.exists():
+        raise PromoteError(f"no such {kind} page: {page.relative_to(root)}")
+    meta, body = frontmatter.load(page)
+    cand_id = meta.get("id") or f"{kind}/{slug}"
+    title = meta.get("title") or slug
+    sources = list(meta.get("derived-from") or [])
+
+    r = _scrip(
+        scrip_cmd,
+        ["similar", "--title", title, "--from", ",".join(sources), "--kind", kind,
+         "--exclude", cand_id, "--top", "5", "--json", "--root", str(root)],
+    )
+    if r.returncode != 0:
+        raise PromoteError(f"scrip similar failed (exit {r.returncode}): {r.stderr.strip()}")
+    candidates = json.loads(r.stdout)["candidates"]
+    if not candidates:
+        return {"action": "keep", "target": None, "reason": "no candidates"}
+
+    top = candidates[0]
+    score = top["scores"]["combined"]
+    if score >= merge_threshold:
+        target_id = top["id"]
+    elif score < keep_threshold:
+        return {"action": "keep", "target": None, "reason": f"top score {score:.3f} below keep threshold"}
+    else:
+        if decide_fn is None:
+            raise PromoteError(
+                f"middle band (top score {score:.3f}) needs a decider; none given"
+            )
+        decision = decide_fn(page.read_text(encoding="utf-8"), candidates)
+        if decision.decision != "merge":
+            return {"action": "keep", "target": None, "reason": "decided keep"}
+        target_id = decision.target_id
+
+    target = next((c for c in candidates if c["id"] == target_id), None)
+    if target is None:
+        raise PromoteError(f"merge target {target_id!r} is not among the scored candidates")
+
+    if dry_run:
+        return {"action": "merge", "target": target_id, "dry_run": True,
+                "score": score, "absorbed": cand_id}
+
+    target_page = root / target["path"]
+    original_target = target_page.read_bytes()  # bytes: rollback must be exact (CRLF, encoding)
+    t_meta, t_body = frontmatter.load(target_page)
+    new_body = merge_bodies(t_body, body)
+    df = list(t_meta.get("derived-from") or [])
+    for s in sources:
+        if s not in df:
+            df.append(s)
+    t_meta["derived-from"] = df
+    sup = list(t_meta.get("supersedes") or [])
+    if cand_id not in sup:
+        sup.append(cand_id)
+    t_meta["supersedes"] = sup
+    confs = [c for c in (t_meta.get("confidence"), meta.get("confidence"))
+             if isinstance(c, (int, float))]
+    if confs:
+        t_meta["confidence"] = min(confs)
+    target_page.write_text(frontmatter.dump(t_meta, new_body), encoding="utf-8")
+
+    # The merge is atomic. The absorbed page is deleted only after stamp + verify
+    # succeed (no data loss), and on failure the target is restored to its
+    # original bytes — so a failed promote leaves the vault byte-for-byte
+    # unchanged and a rerun after fixing the cause cannot duplicate content. Until
+    # the unlink both pages exist and verify cleanly (footnotes resolve against
+    # raw/, not each other).
+    try:
+        r = _scrip(scrip_cmd, ["stamp", str(target_page), "--root", str(root)])
+        if r.returncode != 0:
+            raise PromoteError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
+        r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
+        if r.returncode != 0:
+            raise PromoteError(f"scrip verify failed after merge:\n{r.stdout}{r.stderr}")
+    except PromoteError:
+        target_page.write_bytes(original_target)  # roll back the merge, byte-for-byte
+        raise
+    page.unlink()  # absorbed page removed; its id lives on in the target's supersedes
+    _append_log(root, f"- PROMOTE: merged {cand_id} into {target_id}")
+    return {"action": "merge", "target": target_id, "absorbed": cand_id}
