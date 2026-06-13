@@ -67,6 +67,7 @@ scrip query --sql "SELECT source_id, count(*) AS n FROM claims GROUP BY 1 ORDER 
 scrip search "what makes adding one document expensive?"
 
 # before creating a page, score its overlap with existing ones (PROMOTE step 1)
+# — PROMOTE ships in the next release; available now from a checkout install
 scrip similar --title "Compilation over retrieval" --from raw/karpathy-llm-wiki
 ```
 
@@ -87,9 +88,9 @@ The maintaining loop (for an agent or a human): **ingest** a source into `raw/`
 `[ingest]` extra, markdown/text need nothing), **compile** a page into `wiki/`
 (`scrip new` + `scrip anchor` to mint verified citations), **extract** claims into
 `facts/` (`scrip fact add` — validates each quote and mints its anchor), and
-**promote** to dedup against existing pages (`scrip similar` scores overlap),
-each followed by `scrip stamp` (record provenance) and `scrip verify` (prove
-citations resolve). The optional [`scrip-harness`](harness/README.md) makes the
+**promote** to dedup against existing pages (`scrip similar` scores overlap — the
+newest stage, landing in the next release), each followed by `scrip stamp`
+(record provenance) and `scrip verify` (prove citations resolve). The optional [`scrip-harness`](harness/README.md) makes the
 COMPILE, EXTRACT, and PROMOTE steps runnable with a model while `scrip` itself
 stays deterministic and model-free. Full protocol in **[AGENT.md](AGENT.md)**.
 
