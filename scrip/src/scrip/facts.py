@@ -133,9 +133,7 @@ def _validate(table: str, rec: dict, index: int) -> None:
         if "claim_text" in rec:
             _check_str(rec, "claim_text", index, allow_blank=True)
         if rec["polarity"] not in _POLARITIES:
-            raise DataError(
-                f"record {index}: polarity must be one of {', '.join(_POLARITIES)}"
-            )
+            raise DataError(f"record {index}: polarity must be one of {', '.join(_POLARITIES)}")
         c = rec["confidence"]
         if isinstance(c, bool) or not isinstance(c, (int, float)) or not 0 <= c <= 1:
             raise DataError(f"record {index}: confidence must be a number in [0, 1]")
@@ -164,9 +162,7 @@ def _validate(table: str, rec: dict, index: int) -> None:
         if rec["decision"] == "supersede":
             winner = rec.get("winner")
             if winner not in (rec["claim_a"], rec["claim_b"]):
-                raise DataError(
-                    f"record {index}: supersede needs 'winner' = claim_a or claim_b"
-                )
+                raise DataError(f"record {index}: supersede needs 'winner' = claim_a or claim_b")
         elif "winner" in rec:
             raise DataError(f"record {index}: 'winner' is only valid for decision 'supersede'")
 
@@ -228,23 +224,33 @@ def _resolve_claim(
 # --------------------------------------------------------------------------- #
 # Existing-table reads & keys
 # --------------------------------------------------------------------------- #
-def _read_table(path: Path) -> tuple[list[dict], str]:
-    """Read an NDJSON table, returning ``(records, raw_text)``. Malformed lines
+def _ends_with_newline(path: Path) -> bool:
+    """Efficiently check if a file ends with a newline character."""
+    if not path.exists() or path.stat().st_size == 0:
+        return True  # Treat empty file as not needing a prepended newline
+    with path.open("rb") as f:
+        f.seek(-1, 2)
+        return f.read(1) == b"\n"
+
+
+def _read_table(path: Path) -> tuple[list[dict], bool]:
+    """Read an NDJSON table, returning ``(records, ends_with_newline)``. Malformed lines
     are a :class:`DataError` — the vault on disk violates the contract."""
     if not path.exists():
-        return [], ""
-    text = path.read_text(encoding="utf-8")
+        return [], True
+    ends_newline = _ends_with_newline(path)
     records: list[dict] = []
-    for lineno, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError as e:
-            raise DataError(f"{path.name}:{lineno}: invalid JSON: {e}") from e
-        records.append(rec)
-    return records, text
+    with path.open(encoding="utf-8") as f:
+        for lineno, raw_line in enumerate(f, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise DataError(f"{path.name}:{lineno}: invalid JSON: {e}") from e
+            records.append(rec)
+    return records, ends_newline
 
 
 def claim_source_anchor(root: Path, claim_id: str) -> tuple[str, str]:
@@ -384,7 +390,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
             if failures:
                 return {"table": table, "appended": [], "skipped": [], "failures": failures}
 
-        existing, existing_text = _read_table(path)
+        existing, ends_with_newline = _read_table(path)
         meta = _load_meta(root)  # parse before appending: fail whole, not half
         appended: list[dict] = []
         skipped: list[dict] = []
@@ -418,6 +424,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                 keys[key] = cid
                 appended.append(full)
         elif table == "entities":
+
             def canon(rec: dict) -> dict:
                 return {
                     "entity_id": rec["entity_id"],
@@ -426,8 +433,13 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                     "tags": rec.get("tags") or [],
                 }
 
-            byid = {rec.get("entity_id"): canon(rec) for rec in existing if "entity_id" in rec
-                    and isinstance(rec.get("name"), str) and isinstance(rec.get("kind"), str)}
+            byid = {
+                rec.get("entity_id"): canon(rec)
+                for rec in existing
+                if "entity_id" in rec
+                and isinstance(rec.get("name"), str)
+                and isinstance(rec.get("kind"), str)
+            }
             for i, rec in enumerate(proposals):
                 new = canon(rec)
                 seen = byid.get(new["entity_id"])
@@ -448,9 +460,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                         }
                     )
         elif table == "edges":
-            seen_edges = {
-                (rec.get("src"), rec.get("dst"), rec.get("kind")) for rec in existing
-            }
+            seen_edges = {(rec.get("src"), rec.get("dst"), rec.get("kind")) for rec in existing}
             for i, rec in enumerate(proposals):
                 key = (rec["src"], rec["dst"], rec["kind"])
                 if key in seen_edges:
@@ -459,17 +469,23 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                 seen_edges.add(key)
                 appended.append({"src": rec["src"], "dst": rec["dst"], "kind": rec["kind"]})
         else:  # reconciliations
-            claim_ids = {c.get("claim_id") for c in _read_table(facts_dir(root) / "claims.ndjson")[0]}
+            claim_ids = {
+                c.get("claim_id") for c in _read_table(facts_dir(root) / "claims.ndjson")[0]
+            }
             for i, rec in enumerate(proposals):
                 refs = [rec["claim_a"], rec["claim_b"]]
                 if rec["decision"] == "supersede":
                     refs.append(rec["winner"])
                 missing = next((r for r in refs if r not in claim_ids), None)
                 if missing is not None:
-                    failures.append({
-                        "index": i, "status": "MISSING_CLAIM", "claim": missing,
-                        "detail": f"{missing!r} is not a claim in claims.ndjson",
-                    })
+                    failures.append(
+                        {
+                            "index": i,
+                            "status": "MISSING_CLAIM",
+                            "claim": missing,
+                            "detail": f"{missing!r} is not a claim in claims.ndjson",
+                        }
+                    )
             if failures:
                 return {"table": table, "appended": [], "skipped": [], "failures": failures}
             seen_pairs = {frozenset((r.get("claim_a"), r.get("claim_b"))) for r in existing}
@@ -503,7 +519,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
             path.parent.mkdir(parents=True, exist_ok=True)
             payload = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in appended)
             with open(path, "a", encoding="utf-8") as f:
-                if existing_text and not existing_text.endswith("\n"):
+                if not ends_with_newline:
                     f.write("\n")
                 f.write(payload)
             new_sources: list[str] = []

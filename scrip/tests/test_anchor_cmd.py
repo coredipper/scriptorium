@@ -10,8 +10,14 @@ def test_anchor_emits_resolving_anchor_and_footnote(kb, capsys):
     src = "# H\n\nThe quick brown fox jumps over the lazy dog.\n"
     kb.add_raw("s", src)
     rc = cli.main(
-        ["anchor", "The quick brown fox jumps over the lazy dog.",
-         "--source", "raw/s", "--root", str(kb.root)]
+        [
+            "anchor",
+            "The quick brown fox jumps over the lazy dog.",
+            "--source",
+            "raw/s",
+            "--root",
+            str(kb.root),
+        ]
     )
     out = capsys.readouterr().out
     assert rc == 0
@@ -23,8 +29,15 @@ def test_anchor_json_anchor_actually_resolves(kb, capsys):
     src = "# H\n\nA unique and unambiguous sentence.\n"
     kb.add_raw("s", src)
     rc = cli.main(
-        ["anchor", "A unique and unambiguous sentence.",
-         "--source", "raw/s", "--root", str(kb.root), "--json"]
+        [
+            "anchor",
+            "A unique and unambiguous sentence.",
+            "--source",
+            "raw/s",
+            "--root",
+            str(kb.root),
+            "--json",
+        ]
     )
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
@@ -61,8 +74,16 @@ def test_anchor_rejects_unsafe_source_exit_2(kb):
 def test_anchor_custom_footnote_label(kb, capsys):
     kb.add_raw("s", "# H\n\nDistinct labelled line.\n")
     rc = cli.main(
-        ["anchor", "Distinct labelled line.", "--source", "raw/s",
-         "--label", "b7", "--root", str(kb.root)]
+        [
+            "anchor",
+            "Distinct labelled line.",
+            "--source",
+            "raw/s",
+            "--label",
+            "b7",
+            "--root",
+            str(kb.root),
+        ]
     )
     assert rc == 0
     assert "[^b7]: anchor=raw/s#qh:" in capsys.readouterr().out

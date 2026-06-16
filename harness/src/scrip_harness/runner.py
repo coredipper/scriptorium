@@ -57,9 +57,7 @@ class ReconcileError(RuntimeError):
 def _scrip(
     cmd: Sequence[str], args: list[str], input_text: str | None = None
 ) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        [*cmd, *args], capture_output=True, text=True, input=input_text
-    )
+    return subprocess.run([*cmd, *args], capture_output=True, text=True, input=input_text)
 
 
 def compile_page(
@@ -106,8 +104,17 @@ def compile_page(
     for i, claim in enumerate(draft.claims, 1):
         r = _scrip(
             scrip_cmd,
-            ["anchor", claim.quote, "--source", source_id, "--label", f"a{i}",
-             "--json", "--root", str(root)],
+            [
+                "anchor",
+                claim.quote,
+                "--source",
+                source_id,
+                "--label",
+                f"a{i}",
+                "--json",
+                "--root",
+                str(root),
+            ],
         )
         if r.returncode != 0:
             raise CompileError(
@@ -183,24 +190,16 @@ def extract_facts(
             try:
                 added = json.loads(r.stdout)
             except json.JSONDecodeError as e:
-                raise ExtractError(
-                    f"could not parse scrip fact add output: {e}\n{r.stdout}"
-                ) from e
+                raise ExtractError(f"could not parse scrip fact add output: {e}\n{r.stdout}") from e
             break
         if r.returncode != 1:
-            raise ExtractError(
-                f"scrip fact add failed (exit {r.returncode}): {r.stderr.strip()}"
-            )
+            raise ExtractError(f"scrip fact add failed (exit {r.returncode}): {r.stderr.strip()}")
         try:
             failures = json.loads(r.stdout)["failures"]
         except (json.JSONDecodeError, KeyError) as e:
-            raise ExtractError(
-                f"could not parse scrip fact add failures: {e}\n{r.stdout}"
-            ) from e
+            raise ExtractError(f"could not parse scrip fact add failures: {e}\n{r.stdout}") from e
         if retries >= max_quote_retries:
-            detail = "; ".join(
-                f"{f['status']} {f.get('quote', '')!r}" for f in failures
-            )
+            detail = "; ".join(f"{f['status']} {f.get('quote', '')!r}" for f in failures)
             raise ExtractError(
                 f"{len(failures)} quote(s) still failed after {retries} retr"
                 f"{'y' if retries == 1 else 'ies'}: {detail}"
@@ -295,8 +294,22 @@ def promote_page(
 
     r = _scrip(
         scrip_cmd,
-        ["similar", "--title", title, "--from", ",".join(sources), "--kind", kind,
-         "--exclude", cand_id, "--top", "5", "--json", "--root", str(root)],
+        [
+            "similar",
+            "--title",
+            title,
+            "--from",
+            ",".join(sources),
+            "--kind",
+            kind,
+            "--exclude",
+            cand_id,
+            "--top",
+            "5",
+            "--json",
+            "--root",
+            str(root),
+        ],
     )
     if r.returncode != 0:
         raise PromoteError(f"scrip similar failed (exit {r.returncode}): {r.stderr.strip()}")
@@ -309,12 +322,14 @@ def promote_page(
     if score >= merge_threshold:
         target_id = top["id"]
     elif score < keep_threshold:
-        return {"action": "keep", "target": None, "reason": f"top score {score:.3f} below keep threshold"}
+        return {
+            "action": "keep",
+            "target": None,
+            "reason": f"top score {score:.3f} below keep threshold",
+        }
     else:
         if decide_fn is None:
-            raise PromoteError(
-                f"middle band (top score {score:.3f}) needs a decider; none given"
-            )
+            raise PromoteError(f"middle band (top score {score:.3f}) needs a decider; none given")
         decision = decide_fn(page.read_text(encoding="utf-8"), candidates)
         if decision.decision != "merge":
             return {"action": "keep", "target": None, "reason": "decided keep"}
@@ -325,8 +340,13 @@ def promote_page(
         raise PromoteError(f"merge target {target_id!r} is not among the scored candidates")
 
     if dry_run:
-        return {"action": "merge", "target": target_id, "dry_run": True,
-                "score": score, "absorbed": cand_id}
+        return {
+            "action": "merge",
+            "target": target_id,
+            "dry_run": True,
+            "score": score,
+            "absorbed": cand_id,
+        }
 
     target_page = root / target["path"]
     original_target = target_page.read_bytes()  # bytes: rollback must be exact (CRLF, encoding)
@@ -341,8 +361,9 @@ def promote_page(
     if cand_id not in sup:
         sup.append(cand_id)
     t_meta["supersedes"] = sup
-    confs = [c for c in (t_meta.get("confidence"), meta.get("confidence"))
-             if isinstance(c, (int, float))]
+    confs = [
+        c for c in (t_meta.get("confidence"), meta.get("confidence")) if isinstance(c, (int, float))
+    ]
     if confs:
         t_meta["confidence"] = min(confs)
     target_page.write_text(frontmatter.dump(t_meta, new_body), encoding="utf-8")
@@ -395,7 +416,9 @@ def reconcile_contradictions(
     root = Path(root)
     r = _scrip(scrip_cmd, ["query", "contradictions", "--json", "--root", str(root)])
     if r.returncode != 0:
-        raise ReconcileError(f"scrip query contradictions failed (exit {r.returncode}): {r.stderr.strip()}")
+        raise ReconcileError(
+            f"scrip query contradictions failed (exit {r.returncode}): {r.stderr.strip()}"
+        )
     pairs = json.loads(r.stdout)
     if not pairs:
         return {"pairs": 0, "reconciled": []}
@@ -438,10 +461,14 @@ def reconcile_contradictions(
     added = json.loads(r.stdout)
     for rec in records:
         tail = f" (winner {rec['winner']})" if rec["decision"] == "supersede" else ""
-        _append_log(root, f"- RECONCILE: {rec['decision']} {rec['claim_a']} vs {rec['claim_b']}{tail}")
+        _append_log(
+            root, f"- RECONCILE: {rec['decision']} {rec['claim_a']} vs {rec['claim_b']}{tail}"
+        )
 
     if added["appended"]:
-        r = _scrip(scrip_cmd, ["stamp", str(root / "vault" / "facts" / "_meta.yaml"), "--root", str(root)])
+        r = _scrip(
+            scrip_cmd, ["stamp", str(root / "vault" / "facts" / "_meta.yaml"), "--root", str(root)]
+        )
         if r.returncode != 0:
             raise ReconcileError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
     r = _scrip(scrip_cmd, ["verify", "--root", str(root)])

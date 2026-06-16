@@ -61,10 +61,7 @@ def _connect(root: Path) -> duckdb.DuckDBPyConnection:
     for view, fname in _VIEWS.items():
         p = fd / fname
         if p.exists():
-            con.execute(
-                f"CREATE VIEW {view} AS "
-                f"SELECT * FROM read_ndjson_auto('{p.as_posix()}')"
-            )
+            con.execute(f"CREATE VIEW {view} AS SELECT * FROM read_ndjson_auto('{p.as_posix()}')")
         elif view == "reconciliations":
             # Always present (empty stub) so `contradictions` can anti-join it and
             # raw SQL over its columns works even before any reconciliation exists.

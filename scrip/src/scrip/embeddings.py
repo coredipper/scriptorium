@@ -79,8 +79,7 @@ def _iter_blocks(root: Path):
 
 def _fingerprint(root: Path) -> str:
     deps = {
-        "raw/" + p.stem: hashing.content_hash_file(p)
-        for p in sorted(raw_dir(root).glob("*.md"))
+        "raw/" + p.stem: hashing.content_hash_file(p) for p in sorted(raw_dir(root).glob("*.md"))
     }
     content = hashing.input_hash(deps) if deps else "sha256:empty"
     # Fold in the block-id scheme version: raw content alone is not enough, since

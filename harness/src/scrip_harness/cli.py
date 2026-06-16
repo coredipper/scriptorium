@@ -55,15 +55,20 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("--root")
     pp.add_argument("--model", help="Claude model id (default: claude-opus-4-8)")
     pp.add_argument(
-        "--merge-threshold", type=float, default=0.5,
+        "--merge-threshold",
+        type=float,
+        default=0.5,
         help="combined score at/above which to merge without asking the model (default 0.5)",
     )
     pp.add_argument(
-        "--keep-threshold", type=float, default=0.25,
+        "--keep-threshold",
+        type=float,
+        default=0.25,
         help="combined score below which to keep the page as-is (default 0.25)",
     )
     pp.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="report the decision without mutating any page",
     )
     prc = sub.add_parser(
@@ -94,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     chosen_model = args.model or model_mod.DEFAULT_MODEL
 
     if args.command == "reconcile":
+
         def reconcile_decide_fn(pair, span_a, span_b):
             return model_mod.decide_reconciliation(pair, span_a, span_b, model=chosen_model)
 
@@ -116,13 +122,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "promote":
+
         def decide_fn(candidate_text: str, candidates: list[dict]):
             return model_mod.decide_promotion(candidate_text, candidates, model=chosen_model)
 
         try:
             result = promote_page(
-                root, args.slug, kind=args.kind, decide_fn=decide_fn,
-                merge_threshold=args.merge_threshold, keep_threshold=args.keep_threshold,
+                root,
+                args.slug,
+                kind=args.kind,
+                decide_fn=decide_fn,
+                merge_threshold=args.merge_threshold,
+                keep_threshold=args.keep_threshold,
                 dry_run=args.dry_run,
             )
         except PromoteError as e:
@@ -136,6 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "extract":
+
         def extract_draft_fn(text: str, *, source_id: str, failures=None):
             return model_mod.draft_extraction(
                 text, source_id=source_id, model=chosen_model, failures=failures

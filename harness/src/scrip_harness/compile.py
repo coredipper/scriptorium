@@ -24,6 +24,7 @@ def extract_markers(body: str) -> list[str]:
             seen.append(label)
     return seen
 
+
 SYSTEM = (
     "You are the scribe for a scriptorium knowledge base. From the single source "
     "you are given, synthesize a concise, accurate concept page in markdown.\n"

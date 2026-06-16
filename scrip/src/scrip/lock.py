@@ -205,8 +205,7 @@ def unlock(root: Path, force: bool = False) -> bool:
     info = _read(p)
     if not force and not is_stale(info):
         raise UsageError(
-            f"refusing to remove a live lock ({_describe(info)}); pass --force to "
-            f"override."
+            f"refusing to remove a live lock ({_describe(info)}); pass --force to override."
         )
     try:
         p.unlink()

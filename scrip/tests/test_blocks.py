@@ -1,13 +1,6 @@
 from scrip import blocks, hashing
 
-SAMPLE = (
-    "# Title\n"
-    "\n"
-    "First paragraph line one.\n"
-    "line two.\n"
-    "\n"
-    "Second paragraph.\n"
-)
+SAMPLE = "# Title\n\nFirst paragraph line one.\nline two.\n\nSecond paragraph.\n"
 
 
 def _by_content(text: str) -> dict[str, str]:
@@ -80,11 +73,7 @@ def test_editing_a_block_changes_only_its_id():
 def test_duplicate_blocks_get_distinct_ids():
     text = "# T\n\nrepeat me.\n\nrepeat me.\n"
     bs = blocks.split_blocks(text)
-    dup_ids = [
-        b["block_id"]
-        for b in bs
-        if "repeat me" in text[b["span"][0] : b["span"][1]]
-    ]
+    dup_ids = [b["block_id"] for b in bs if "repeat me" in text[b["span"][0] : b["span"][1]]]
     assert len(dup_ids) == 2
     assert dup_ids[0] != dup_ids[1]
     # the first occurrence keeps the bare id so it stays stable when a duplicate
@@ -136,9 +125,7 @@ def test_edit_shifts_later_spans_but_not_their_hash_or_id():
     """Editing an earlier paragraph moves the char-spans of later blocks but
     leaves their sliced content — hash and id — intact."""
     bs1 = blocks.split_blocks(SAMPLE)
-    edited = SAMPLE.replace(
-        "First paragraph line one.", "First paragraph line one EXTENDED."
-    )
+    edited = SAMPLE.replace("First paragraph line one.", "First paragraph line one EXTENDED.")
     bs2 = blocks.split_blocks(edited)
     assert bs1[1]["hash"] != bs2[1]["hash"]  # edited paragraph changed
     assert bs1[2]["hash"] == bs2[2]["hash"]  # later paragraph unchanged

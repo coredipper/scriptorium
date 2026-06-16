@@ -126,9 +126,23 @@ def _canonical(text: str) -> str:
 # 0x80–0x9F) into C1 controls. Match WHATWG: trim + lowercase, then exact-match.
 _CP1252_ALIASES = frozenset(
     {
-        "ansi_x3.4-1968", "ascii", "cp1252", "cp819", "csisolatin1", "ibm819",
-        "iso-8859-1", "iso-ir-100", "iso8859-1", "iso88591", "iso_8859-1",
-        "iso_8859-1:1987", "l1", "latin1", "us-ascii", "windows-1252", "x-cp1252",
+        "ansi_x3.4-1968",
+        "ascii",
+        "cp1252",
+        "cp819",
+        "csisolatin1",
+        "ibm819",
+        "iso-8859-1",
+        "iso-ir-100",
+        "iso8859-1",
+        "iso88591",
+        "iso_8859-1",
+        "iso_8859-1:1987",
+        "l1",
+        "latin1",
+        "us-ascii",
+        "windows-1252",
+        "x-cp1252",
     }
 )
 

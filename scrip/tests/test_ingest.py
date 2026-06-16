@@ -20,6 +20,7 @@ needs_pypdf = pytest.mark.skipif(
     importlib.util.find_spec("pypdf") is None, reason="needs the [ingest] extra"
 )
 
+
 def _make_pdf(text: str) -> bytes:
     """Build a valid one-page PDF whose content stream draws ``text`` (with a
     correct xref table + startxref, which pypdf requires)."""

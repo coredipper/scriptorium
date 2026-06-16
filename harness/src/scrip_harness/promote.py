@@ -88,7 +88,7 @@ def build_promote_prompt(candidate_text: str, candidates: list[dict]) -> str:
     listing = "\n".join(
         f"- {c['id']}  (combined={c['scores']['combined']:.2f}, "
         f"sources={c['scores']['sources']:.2f}, title={c['scores']['title']:.2f})"
-        f"  \"{c['title']}\""
+        f'  "{c["title"]}"'
         for c in candidates
     )
     return (

@@ -21,7 +21,7 @@ RECONCILE_SYSTEM = (
     "between two extracted claims (same subject+predicate, opposing polarity, "
     "different sources). You are given each claim's verbatim cited span. Decide:\n"
     "- `supersede` — one claim is right and the other should be retired; set "
-    "`winner` to \"a\" or \"b\".\n"
+    '`winner` to "a" or "b".\n'
     "- `qualify` — both hold under different conditions; the disagreement should be "
     "nuanced rather than resolved.\n"
     "- `keep-both` — the sources genuinely disagree and both should stand on record.\n"

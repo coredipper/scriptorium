@@ -1,10 +1,6 @@
 from scrip import anchors
 
-SRC = (
-    "# Heading\n"
-    "\n"
-    "The quick brown fox jumps over the lazy dog. Another sentence here.\n"
-)
+SRC = "# Heading\n\nThe quick brown fox jumps over the lazy dog. Another sentence here.\n"
 
 
 def test_anchor_resolves_in_its_source():

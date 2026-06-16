@@ -73,11 +73,7 @@ class KB:
         title: str | None = None,
         kind: str = "concept",
     ) -> str:
-        deps = {
-            sid: h
-            for sid in derived_from
-            if (h := self._dep_hash(sid)) is not None
-        }
+        deps = {sid: h for sid in derived_from if (h := self._dep_hash(sid)) is not None}
         meta: dict = {
             "id": f"{kind}/{slug}",
             "type": f"wiki.{kind}",

@@ -9,8 +9,17 @@ from scrip import cli, frontmatter, graph, lock_path
 def test_new_scaffolds_concept_page(kb):
     kb.add_raw("a", "# A\n\nAlpha.\n")
     rc = cli.main(
-        ["new", "concept", "my-topic", "--from", "raw/a",
-         "--title", "My Topic", "--root", str(kb.root)]
+        [
+            "new",
+            "concept",
+            "my-topic",
+            "--from",
+            "raw/a",
+            "--title",
+            "My Topic",
+            "--root",
+            str(kb.root),
+        ]
     )
     assert rc == 0
     path = kb.root / "vault" / "wiki" / "concepts" / "my-topic.md"

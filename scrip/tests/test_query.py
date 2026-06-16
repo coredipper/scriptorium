@@ -24,11 +24,19 @@ def test_contradictions_detected(kb):
     kb.add_raw("a", "# A\n\nThe sky is blue.\n")
     kb.add_raw("b", "# B\n\nThe sky is not blue.\n")
     kb.add_claim(
-        "clm_1", "a", "the sky is blue", subject="sky", predicate="color",
+        "clm_1",
+        "a",
+        "the sky is blue",
+        subject="sky",
+        predicate="color",
         polarity="asserts",
     )
     kb.add_claim(
-        "clm_2", "b", "the sky is not blue", subject="sky", predicate="color",
+        "clm_2",
+        "b",
+        "the sky is not blue",
+        subject="sky",
+        predicate="color",
         polarity="denies",
     )
     cols, rows = query.run(kb.root, name="contradictions")
@@ -40,8 +48,12 @@ def test_contradictions_detected(kb):
 def _contradiction_pair(kb):
     kb.add_raw("a", "# A\n\nThe sky is blue.\n")
     kb.add_raw("b", "# B\n\nThe sky is not blue.\n")
-    kb.add_claim("clm_1", "a", "the sky is blue", subject="sky", predicate="color", polarity="asserts")
-    kb.add_claim("clm_2", "b", "the sky is not blue", subject="sky", predicate="color", polarity="denies")
+    kb.add_claim(
+        "clm_1", "a", "the sky is blue", subject="sky", predicate="color", polarity="asserts"
+    )
+    kb.add_claim(
+        "clm_2", "b", "the sky is not blue", subject="sky", predicate="color", polarity="denies"
+    )
 
 
 def test_contradictions_excludes_reconciled_pairs(kb):
@@ -83,7 +95,9 @@ def test_query_reconciliations_cli_choice(kb):
 def test_reconciliations_stub_exposes_full_schema(kb):
     # before the file exists, raw SQL over the stub's columns must still work
     _contradiction_pair(kb)
-    cols, rows = query.run(kb.root, sql="SELECT decision, winner, reconciliation_id FROM reconciliations")
+    cols, rows = query.run(
+        kb.root, sql="SELECT decision, winner, reconciliation_id FROM reconciliations"
+    )
     assert rows == []
     assert "decision" in cols
 

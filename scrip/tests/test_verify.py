@@ -56,7 +56,7 @@ def test_verify_wiki_footnote_anchor(kb):
     anchor = anchors.make_anchor(src, "markdown is good middleware")
     body = (
         "Agents love markdown.[^a1]\n\n"
-        f"[^a1]: anchor=raw/a#{anchor}  \"markdown is good middleware\"\n"
+        f'[^a1]: anchor=raw/a#{anchor}  "markdown is good middleware"\n'
     )
     kb.add_wiki("md", ["raw/a"], body=body)
     res = anchors.verify_vault(kb.root)

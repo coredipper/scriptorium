@@ -19,9 +19,7 @@ def test_default_scrip_cmd_runs_the_bundled_scriptoria():
     import scrip
 
     assert runner.DEFAULT_SCRIP_CMD == (sys.executable, "-m", "scrip.cli")
-    r = subprocess.run(
-        [*runner.DEFAULT_SCRIP_CMD, "--version"], capture_output=True, text=True
-    )
+    r = subprocess.run([*runner.DEFAULT_SCRIP_CMD, "--version"], capture_output=True, text=True)
     assert r.returncode == 0
     # exactly the scriptoria the harness imports — no PATH version skew
     assert scrip.__version__ in r.stdout

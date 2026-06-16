@@ -50,9 +50,7 @@ def resolve_root(root_arg: str | None) -> Path:
 
     cur = Path.cwd().resolve()
     for cand in (cur, *cur.parents):
-        if (cand / "vault").is_dir() and (
-            (cand / "SPEC.md").exists() or (cand / ".kb").is_dir()
-        ):
+        if (cand / "vault").is_dir() and ((cand / "SPEC.md").exists() or (cand / ".kb").is_dir()):
             return cand
     raise errors.UsageError(
         "could not locate a scriptorium root (looked for a parent with vault/ and "
@@ -158,9 +156,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         anchors.print_verify(result)
     # Ambiguous anchors fail by default: a citation that does not resolve
     # *uniquely* is a provenance weakness the protocol requires fixing.
-    failed = bool(result["broken"]) or (
-        not args.allow_ambiguous and bool(result["ambiguous"])
-    )
+    failed = bool(result["broken"]) or (not args.allow_ambiguous and bool(result["ambiguous"]))
     return 1 if failed else 0
 
 
@@ -228,7 +224,9 @@ def cmd_search(args: argparse.Namespace) -> int:
     if args.json:
         _emit(out)
     else:
-        tag = out["method"] + (" — INDEX STALE, rebuild with `scrip index`" if out["stale_index"] else "")
+        tag = out["method"] + (
+            " — INDEX STALE, rebuild with `scrip index`" if out["stale_index"] else ""
+        )
         print(f"[{tag}] top {len(out['results'])} for: {args.query!r}")
         for r in out["results"]:
             score = f"{r['score']:.3f}" if isinstance(r["score"], float) else str(r["score"])
@@ -464,12 +462,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------- #
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument(
-        "--root", metavar="DIR", help="scriptorium root (default: auto-detect)"
-    )
-    common.add_argument(
-        "--json", action="store_true", help="machine-readable JSON output"
-    )
+    common.add_argument("--root", metavar="DIR", help="scriptorium root (default: auto-detect)")
+    common.add_argument("--json", action="store_true", help="machine-readable JSON output")
 
     p = argparse.ArgumentParser(
         prog="scrip",
@@ -510,9 +504,7 @@ def build_parser() -> argparse.ArgumentParser:
     pw.add_argument(
         "--interval", type=float, default=2.0, help="poll interval in seconds (default 2)"
     )
-    pw.add_argument(
-        "--fast", action="store_true", help="use the --fast status path while watching"
-    )
+    pw.add_argument("--fast", action="store_true", help="use the --fast status path while watching")
     pw.set_defaults(func=cmd_watch)
 
     pv = sub.add_parser(
@@ -653,7 +645,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="page id to skip (repeatable); use when re-scoring an existing page",
     )
-    psim.add_argument("--top", type=int, metavar="N", help="limit to the N highest-scoring candidates")
+    psim.add_argument(
+        "--top", type=int, metavar="N", help="limit to the N highest-scoring candidates"
+    )
     psim.set_defaults(func=cmd_similar)
 
     pfact = sub.add_parser(
@@ -675,9 +669,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fact_in = pfa.add_mutually_exclusive_group(required=True)
     fact_in.add_argument("--file", metavar="NDJSON", help="read proposed records from a file")
-    fact_in.add_argument(
-        "--stdin", action="store_true", help="read proposed records from stdin"
-    )
+    fact_in.add_argument("--stdin", action="store_true", help="read proposed records from stdin")
     pfa.set_defaults(func=cmd_fact_add)
 
     pin = sub.add_parser(

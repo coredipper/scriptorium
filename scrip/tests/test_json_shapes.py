@@ -40,8 +40,15 @@ def test_query_json_is_a_row_list(kb, capsys):
 def test_anchor_json_shape(kb, capsys):
     kb.add_raw("a", "# A\n\nA unique cited sentence.\n")
     rc = cli.main(
-        ["anchor", "A unique cited sentence.", "--source", "raw/a", "--json",
-         "--root", str(kb.root)]
+        [
+            "anchor",
+            "A unique cited sentence.",
+            "--source",
+            "raw/a",
+            "--json",
+            "--root",
+            str(kb.root),
+        ]
     )
     assert rc == 0
     data = _out(capsys)
@@ -50,8 +57,10 @@ def test_anchor_json_shape(kb, capsys):
 
 def test_new_json_shape(kb, capsys):
     kb.add_raw("a", "# A\n\nAlpha.\n")
-    assert cli.main(["new", "concept", "thing", "--from", "raw/a", "--json",
-                     "--root", str(kb.root)]) == 0
+    assert (
+        cli.main(["new", "concept", "thing", "--from", "raw/a", "--json", "--root", str(kb.root)])
+        == 0
+    )
     data = _out(capsys)
     assert set(data) == {"created", "id"}
     assert data["id"] == "concept/thing"

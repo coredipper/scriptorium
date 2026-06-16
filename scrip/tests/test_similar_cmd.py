@@ -37,7 +37,9 @@ def test_similar_high_overlap_ranks_first(kb, capsys):
     assert data["candidates"][0]["scores"]["title"] == 1.0
     # the unrelated page is present but ranked strictly lower
     assert data["candidates"][-1]["id"] == "concept/unrelated"
-    assert data["candidates"][-1]["scores"]["combined"] < data["candidates"][0]["scores"]["combined"]
+    assert (
+        data["candidates"][-1]["scores"]["combined"] < data["candidates"][0]["scores"]["combined"]
+    )
 
 
 def test_similar_partial_source_overlap_scores_between(kb, capsys):
@@ -196,7 +198,10 @@ def test_similar_empty_from_is_usage_error(kb):
 
 
 def test_similar_outside_a_vault_is_usage_error(tmp_path):
-    assert cli.main(["similar", "--title", "X", "--from", "raw/a", "--root", str(tmp_path / "no")]) == 2
+    assert (
+        cli.main(["similar", "--title", "X", "--from", "raw/a", "--root", str(tmp_path / "no")])
+        == 2
+    )
 
 
 def test_similar_malformed_claims_is_data_error(kb):

@@ -26,10 +26,16 @@ def _raw(root, slug, text):
 def _claim(root, claim_id, slug, quote, *, subject, predicate, polarity):
     src = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
     rec = {
-        "claim_id": claim_id, "source_id": f"raw/{slug}",
-        "anchor": anchors.make_anchor(src, quote), "claim_text": quote,
-        "subject": subject, "predicate": predicate, "object": "o",
-        "polarity": polarity, "confidence": 0.8, "tags": [],
+        "claim_id": claim_id,
+        "source_id": f"raw/{slug}",
+        "anchor": anchors.make_anchor(src, quote),
+        "claim_text": quote,
+        "subject": subject,
+        "predicate": predicate,
+        "object": "o",
+        "polarity": polarity,
+        "confidence": 0.8,
+        "tags": [],
     }
     with open(root / "vault" / "facts" / "claims.ndjson", "a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
@@ -40,10 +46,24 @@ def _contradiction(tmp_path):
     root = _vault(tmp_path)
     _raw(root, "a", "# A\n\nFixed-size chunking discards document structure.\n")
     _raw(root, "b", "# B\n\nChunking does not meaningfully harm retrieval.\n")
-    _claim(root, "clm_0001", "a", "Fixed-size chunking discards document structure.",
-           subject="chunking", predicate="discards", polarity="asserts")
-    _claim(root, "clm_0002", "b", "Chunking does not meaningfully harm retrieval.",
-           subject="chunking", predicate="discards", polarity="denies")
+    _claim(
+        root,
+        "clm_0001",
+        "a",
+        "Fixed-size chunking discards document structure.",
+        subject="chunking",
+        predicate="discards",
+        polarity="asserts",
+    )
+    _claim(
+        root,
+        "clm_0002",
+        "b",
+        "Chunking does not meaningfully harm retrieval.",
+        subject="chunking",
+        predicate="discards",
+        polarity="denies",
+    )
     (root / "vault" / "facts" / "_meta.yaml").write_text(
         "id: facts/core\ntype: facts.set\nderived-from:\n- raw/a\n- raw/b\n", encoding="utf-8"
     )
@@ -52,13 +72,27 @@ def _contradiction(tmp_path):
 
 def _recs(root):
     p = root / "vault" / "facts" / "reconciliations.ndjson"
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()] if p.exists() else []
+    return (
+        [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+        if p.exists()
+        else []
+    )
 
 
 def _contradictions(root):
     r = subprocess.run(
-        [sys.executable, "-m", "scrip.cli", "query", "contradictions", "--json", "--root", str(root)],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            "-m",
+            "scrip.cli",
+            "query",
+            "contradictions",
+            "--json",
+            "--root",
+            str(root),
+        ],
+        capture_output=True,
+        text=True,
     )
     return json.loads(r.stdout)
 
@@ -67,8 +101,14 @@ def _contradictions(root):
 # Pure prompt
 # --------------------------------------------------------------------------- #
 def test_build_reconcile_prompt_includes_both_spans():
-    pair = {"claim_a": "clm_0001", "claim_b": "clm_0002", "subject": "chunking",
-            "predicate": "discards", "source_a": "raw/a", "source_b": "raw/b"}
+    pair = {
+        "claim_a": "clm_0001",
+        "claim_b": "clm_0002",
+        "subject": "chunking",
+        "predicate": "discards",
+        "source_a": "raw/a",
+        "source_b": "raw/b",
+    }
     prompt = build_reconcile_prompt(pair, "chunking discards structure", "chunking does not harm")
     assert "chunking discards structure" in prompt
     assert "chunking does not harm" in prompt
@@ -97,8 +137,18 @@ def test_reconcile_records_supersede_and_converges(tmp_path):
     # contradiction is now adjudicated → no longer surfaced
     assert _contradictions(root) == []
     # vault left green
-    assert subprocess.run([sys.executable, "-m", "scrip.cli", "verify", "--root", str(root)]).returncode == 0
-    assert subprocess.run([sys.executable, "-m", "scrip.cli", "status", "--root", str(root)]).returncode == 0
+    assert (
+        subprocess.run(
+            [sys.executable, "-m", "scrip.cli", "verify", "--root", str(root)]
+        ).returncode
+        == 0
+    )
+    assert (
+        subprocess.run(
+            [sys.executable, "-m", "scrip.cli", "status", "--root", str(root)]
+        ).returncode
+        == 0
+    )
 
 
 def test_reconcile_keep_both(tmp_path):
@@ -128,8 +178,15 @@ def test_reconcile_dry_run_records_nothing(tmp_path):
 def test_reconcile_no_contradictions_is_noop(tmp_path):
     root = _vault(tmp_path)
     _raw(root, "a", "# A\n\nFixed-size chunking discards document structure.\n")
-    _claim(root, "clm_0001", "a", "Fixed-size chunking discards document structure.",
-           subject="chunking", predicate="discards", polarity="asserts")
+    _claim(
+        root,
+        "clm_0001",
+        "a",
+        "Fixed-size chunking discards document structure.",
+        subject="chunking",
+        predicate="discards",
+        polarity="asserts",
+    )
     called = False
 
     def decide(pair, span_a, span_b):
@@ -149,16 +206,34 @@ def test_reconcile_refuses_unresolved_span(tmp_path):
     root = _vault(tmp_path)
     _raw(root, "a", "# A\n\nFixed-size chunking discards document structure.\n")
     _raw(root, "b", "# B\n\nChunking does not meaningfully harm retrieval.\n")
-    _claim(root, "clm_0001", "a", "Fixed-size chunking discards document structure.",
-           subject="chunking", predicate="discards", polarity="asserts")
+    _claim(
+        root,
+        "clm_0001",
+        "a",
+        "Fixed-size chunking discards document structure.",
+        subject="chunking",
+        predicate="discards",
+        polarity="asserts",
+    )
     # clm_0002 carries a broken anchor (quote absent from source b)
     with open(root / "vault" / "facts" / "claims.ndjson", "a", encoding="utf-8") as f:
-        f.write(json.dumps({
-            "claim_id": "clm_0002", "source_id": "raw/b",
-            "anchor": anchors.make_anchor("an unrelated document", "unrelated"),
-            "claim_text": "x", "subject": "chunking", "predicate": "discards",
-            "object": "o", "polarity": "denies", "confidence": 0.8, "tags": [],
-        }) + "\n")
+        f.write(
+            json.dumps(
+                {
+                    "claim_id": "clm_0002",
+                    "source_id": "raw/b",
+                    "anchor": anchors.make_anchor("an unrelated document", "unrelated"),
+                    "claim_text": "x",
+                    "subject": "chunking",
+                    "predicate": "discards",
+                    "object": "o",
+                    "polarity": "denies",
+                    "confidence": 0.8,
+                    "tags": [],
+                }
+            )
+            + "\n"
+        )
     called = False
 
     def decide(pair, span_a, span_b):

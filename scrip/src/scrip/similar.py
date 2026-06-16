@@ -56,25 +56,26 @@ def _source_tags(root: Path) -> dict[str, set[str]]:
     p = facts_dir(root) / "claims.ndjson"
     if not p.exists():
         return out
-    for lineno, raw_line in enumerate(p.read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError as e:
-            raise DataError(f"claims.ndjson:{lineno}: invalid JSON: {e}") from e
-        if not isinstance(rec, dict):
-            raise DataError(f"claims.ndjson:{lineno}: expected a JSON object")
-        sid = rec.get("source_id")
-        if not isinstance(sid, str):
-            raise DataError(f"claims.ndjson:{lineno}: 'source_id' must be a string")
-        tags = rec.get("tags")
-        if tags is None:
-            continue
-        if not isinstance(tags, list) or any(not isinstance(t, str) for t in tags):
-            raise DataError(f"claims.ndjson:{lineno}: 'tags' must be a list of strings")
-        out.setdefault(sid, set()).update(tags)
+    with p.open(encoding="utf-8") as f:
+        for lineno, raw_line in enumerate(f, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise DataError(f"claims.ndjson:{lineno}: invalid JSON: {e}") from e
+            if not isinstance(rec, dict):
+                raise DataError(f"claims.ndjson:{lineno}: expected a JSON object")
+            sid = rec.get("source_id")
+            if not isinstance(sid, str):
+                raise DataError(f"claims.ndjson:{lineno}: 'source_id' must be a string")
+            tags = rec.get("tags")
+            if tags is None:
+                continue
+            if not isinstance(tags, list) or any(not isinstance(t, str) for t in tags):
+                raise DataError(f"claims.ndjson:{lineno}: 'tags' must be a list of strings")
+            out.setdefault(sid, set()).update(tags)
     return out
 
 
@@ -162,7 +163,7 @@ def print_similar(result: dict) -> None:
         s = c["scores"]
         print(f'  {s["combined"]:.3f}  {c["id"]}  "{c["title"]}"')
         print(
-            f'         sources {s["sources"]:.2f}  tags {s["tags"]:.2f}  title {s["title"]:.2f}'
-            f'   shared sources: {len(c["shared"]["sources"])}, tags: {len(c["shared"]["tags"])}'
+            f"         sources {s['sources']:.2f}  tags {s['tags']:.2f}  title {s['title']:.2f}"
+            f"   shared sources: {len(c['shared']['sources'])}, tags: {len(c['shared']['tags'])}"
         )
     print(f"({len(cands)} candidate(s))")

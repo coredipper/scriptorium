@@ -80,7 +80,8 @@ def _page(root, slug, title, sources, cites, *, kind="concept"):
 def _verify(root):
     return subprocess.run(
         [sys.executable, "-m", "scrip.cli", "verify", "--root", str(root)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).returncode
 
 
@@ -91,10 +92,20 @@ def test_promote_high_band_merges_without_a_model(tmp_path):
     root = _vault(tmp_path)
     _raw(root, "alpha", "# A\n\nAlpha one sentence.\n\nAlpha two sentence.\n")
     _raw(root, "beta", "# B\n\nBeta one sentence.\n")
-    target = _page(root, "compilation", "Compilation",
-                   ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
-    absorbed = _page(root, "compilation-redux", "Compilation",
-                     ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+    target = _page(
+        root,
+        "compilation",
+        "Compilation",
+        ["raw/alpha", "raw/beta"],
+        [("Alpha one sentence.", "alpha")],
+    )
+    absorbed = _page(
+        root,
+        "compilation-redux",
+        "Compilation",
+        ["raw/alpha", "raw/beta"],
+        [("Beta one sentence.", "beta")],
+    )
 
     # high band (shared sources + same title → combined 0.75) needs no decider
     result = promote_page(root, "compilation-redux", decide_fn=None)
@@ -117,10 +128,10 @@ def test_promote_low_band_keeps(tmp_path):
     _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
     _raw(root, "b1", "# B1\n\nB one sentence.\n")
     _raw(root, "b2", "# B2\n\nB two sentence.\n")
-    _page(root, "existing", "Totally different",
-          ["raw/b1", "raw/b2"], [("B one sentence.", "b1")])
-    candidate = _page(root, "newbie", "Fresh topic", ["raw/alpha"],
-                      [("Alpha one sentence.", "alpha")])
+    _page(root, "existing", "Totally different", ["raw/b1", "raw/b2"], [("B one sentence.", "b1")])
+    candidate = _page(
+        root, "newbie", "Fresh topic", ["raw/alpha"], [("Alpha one sentence.", "alpha")]
+    )
 
     result = promote_page(root, "newbie", decide_fn=None)
     assert result["action"] == "keep"
@@ -136,8 +147,7 @@ def _middle_vault(tmp_path):
     _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
     _raw(root, "beta", "# B\n\nBeta one sentence.\n")
     # existing shares 1 of {alpha} → sources Jaccard 0.5 → combined 0.25 (middle)
-    _page(root, "pair", "Pair page", ["raw/alpha", "raw/beta"],
-          [("Alpha one sentence.", "alpha")])
+    _page(root, "pair", "Pair page", ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
     _page(root, "solo", "Solo page", ["raw/alpha"], [("Alpha one sentence.", "alpha")])
     return root
 
@@ -154,7 +164,9 @@ def test_promote_middle_band_merges_on_model_decision(tmp_path):
     assert len(calls) == 1  # model consulted exactly once, in the middle band
     assert result["action"] == "merge" and result["target"] == "concept/pair"
     assert not (root / "vault/wiki/concepts/solo.md").exists()
-    assert frontmatter.load(root / "vault/wiki/concepts/pair.md")[0]["supersedes"] == ["concept/solo"]
+    assert frontmatter.load(root / "vault/wiki/concepts/pair.md")[0]["supersedes"] == [
+        "concept/solo"
+    ]
     assert _verify(root) == 0
 
 
@@ -182,10 +194,20 @@ def test_promote_dry_run_mutates_nothing(tmp_path):
     root = _vault(tmp_path)
     _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
     _raw(root, "beta", "# B\n\nBeta one sentence.\n")
-    target = _page(root, "compilation", "Compilation",
-                   ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
-    absorbed = _page(root, "compilation-redux", "Compilation",
-                     ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+    target = _page(
+        root,
+        "compilation",
+        "Compilation",
+        ["raw/alpha", "raw/beta"],
+        [("Alpha one sentence.", "alpha")],
+    )
+    absorbed = _page(
+        root,
+        "compilation-redux",
+        "Compilation",
+        ["raw/alpha", "raw/beta"],
+        [("Beta one sentence.", "beta")],
+    )
     before_target = target.read_text(encoding="utf-8")
     before_absorbed = absorbed.read_text(encoding="utf-8")
 
@@ -217,16 +239,31 @@ def test_promote_preserves_absorbed_page_when_verify_fails(tmp_path):
     _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
     _raw(root, "beta", "# B\n\nBeta one sentence.\n")
     _raw(root, "broken", "# Broken\n\nReal content here.\n")
-    target = _page(root, "compilation", "Compilation",
-                   ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
-    absorbed = _page(root, "compilation-redux", "Compilation",
-                     ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+    target = _page(
+        root,
+        "compilation",
+        "Compilation",
+        ["raw/alpha", "raw/beta"],
+        [("Alpha one sentence.", "alpha")],
+    )
+    absorbed = _page(
+        root,
+        "compilation-redux",
+        "Compilation",
+        ["raw/alpha", "raw/beta"],
+        [("Beta one sentence.", "beta")],
+    )
     # an unrelated page with a BROKEN anchor makes vault-wide `scrip verify` fail
     broken = root / "vault" / "wiki" / "concepts" / "broken.md"
     broken.write_text(
         frontmatter.dump(
-            {"id": "concept/broken", "type": "wiki.concept", "title": "Z page",
-             "derived-from": ["raw/broken"], "confidence": 0.5},
+            {
+                "id": "concept/broken",
+                "type": "wiki.concept",
+                "title": "Z page",
+                "derived-from": ["raw/broken"],
+                "confidence": 0.5,
+            },
             'Claim.[^a1]\n\n[^a1]: anchor=raw/broken#qh:deadbeef|loc:0.0|len:99  "absent"\n',
         ),
         encoding="utf-8",
@@ -248,14 +285,29 @@ def test_promote_rollback_is_byte_exact_for_crlf(tmp_path):
     _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
     _raw(root, "beta", "# B\n\nBeta one sentence.\n")
     _raw(root, "broken", "# Broken\n\nReal content here.\n")
-    target = _page(root, "compilation", "Compilation",
-                   ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
-    _page(root, "compilation-redux", "Compilation",
-          ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+    target = _page(
+        root,
+        "compilation",
+        "Compilation",
+        ["raw/alpha", "raw/beta"],
+        [("Alpha one sentence.", "alpha")],
+    )
+    _page(
+        root,
+        "compilation-redux",
+        "Compilation",
+        ["raw/alpha", "raw/beta"],
+        [("Beta one sentence.", "beta")],
+    )
     (root / "vault" / "wiki" / "concepts" / "broken.md").write_text(
         frontmatter.dump(
-            {"id": "concept/broken", "type": "wiki.concept", "title": "Z page",
-             "derived-from": ["raw/broken"], "confidence": 0.5},
+            {
+                "id": "concept/broken",
+                "type": "wiki.concept",
+                "title": "Z page",
+                "derived-from": ["raw/broken"],
+                "confidence": 0.5,
+            },
             'Claim.[^a1]\n\n[^a1]: anchor=raw/broken#qh:deadbeef|loc:0.0|len:99  "absent"\n',
         ),
         encoding="utf-8",

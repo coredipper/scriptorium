@@ -9,8 +9,7 @@ def _v1_fingerprint(root):
     """The pre-v2 fingerprint: a hash of raw *content* only, with no block-id
     schema marker. An index built this way carried positional block ids."""
     deps = {
-        "raw/" + p.stem: hashing.content_hash_file(p)
-        for p in sorted(raw_dir(root).glob("*.md"))
+        "raw/" + p.stem: hashing.content_hash_file(p) for p in sorted(raw_dir(root).glob("*.md"))
     }
     return hashing.input_hash(deps) if deps else "sha256:empty"
 
