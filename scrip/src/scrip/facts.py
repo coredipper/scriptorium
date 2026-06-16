@@ -228,23 +228,35 @@ def _resolve_claim(
 # --------------------------------------------------------------------------- #
 # Existing-table reads & keys
 # --------------------------------------------------------------------------- #
-def _read_table(path: Path) -> tuple[list[dict], str]:
-    """Read an NDJSON table, returning ``(records, raw_text)``. Malformed lines
-    are a :class:`DataError` — the vault on disk violates the contract."""
+def _ends_with_newline(path: Path) -> bool:
+    """Whether the file's final byte is a newline (an empty/absent file counts as
+    terminated, so no separator is prepended before the next append)."""
+    if not path.exists() or path.stat().st_size == 0:
+        return True
+    with path.open("rb") as f:
+        f.seek(-1, 2)
+        return f.read(1) == b"\n"
+
+
+def _read_table(path: Path) -> tuple[list[dict], bool]:
+    """Read an NDJSON table, returning ``(records, ends_with_newline)``. Streams the
+    file line-by-line rather than loading it whole. Malformed lines are a
+    :class:`DataError` — the vault on disk violates the contract."""
     if not path.exists():
-        return [], ""
-    text = path.read_text(encoding="utf-8")
+        return [], True
+    ends_newline = _ends_with_newline(path)
     records: list[dict] = []
-    for lineno, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError as e:
-            raise DataError(f"{path.name}:{lineno}: invalid JSON: {e}") from e
-        records.append(rec)
-    return records, text
+    with path.open(encoding="utf-8") as f:
+        for lineno, raw_line in enumerate(f, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise DataError(f"{path.name}:{lineno}: invalid JSON: {e}") from e
+            records.append(rec)
+    return records, ends_newline
 
 
 def claim_source_anchor(root: Path, claim_id: str) -> tuple[str, str]:
@@ -384,7 +396,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
             if failures:
                 return {"table": table, "appended": [], "skipped": [], "failures": failures}
 
-        existing, existing_text = _read_table(path)
+        existing, ends_with_newline = _read_table(path)
         meta = _load_meta(root)  # parse before appending: fail whole, not half
         appended: list[dict] = []
         skipped: list[dict] = []
@@ -503,7 +515,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
             path.parent.mkdir(parents=True, exist_ok=True)
             payload = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in appended)
             with open(path, "a", encoding="utf-8") as f:
-                if existing_text and not existing_text.endswith("\n"):
+                if not ends_with_newline:
                     f.write("\n")
                 f.write(payload)
             new_sources: list[str] = []

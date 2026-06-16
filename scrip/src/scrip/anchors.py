@@ -139,15 +139,16 @@ def source_text(root: Path, source_id: str) -> str:
 
 
 def _iter_footnote_anchors(path: Path) -> Iterator[dict]:
-    for line in path.read_text(encoding="utf-8").splitlines():
-        m = _FOOTNOTE.match(line)
-        if not m:
-            continue
-        target = m.group(2)
-        if "#" not in target:
-            continue
-        source_id, anchor = target.split("#", 1)
-        yield {"fn": m.group(1), "source_id": source_id, "anchor": anchor}
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            m = _FOOTNOTE.match(line)
+            if not m:
+                continue
+            target = m.group(2)
+            if "#" not in target:
+                continue
+            source_id, anchor = target.split("#", 1)
+            yield {"fn": m.group(1), "source_id": source_id, "anchor": anchor}
 
 
 def verify_vault(root: Path) -> dict:
@@ -179,25 +180,24 @@ def verify_vault(root: Path) -> dict:
     claims_path = facts_dir(root) / "claims.ndjson"
     if claims_path.exists():
         seen: set[str] = set()
-        for lineno, raw_line in enumerate(
-            claims_path.read_text(encoding="utf-8").splitlines(), start=1
-        ):
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError as e:
-                raise DataError(f"claims.ndjson:{lineno}: invalid JSON: {e}") from e
-            for key in ("claim_id", "source_id", "anchor"):
-                if key not in rec:
-                    raise DataError(f"claims.ndjson:{lineno}: missing '{key}'")
-            cid = rec["claim_id"]
-            if cid in seen:
-                raise DataError(f"duplicate claim_id: {cid}")
-            seen.add(cid)
-            text = _source_text(root, rec["source_id"], src_cache)
-            record(f"claim:{cid}", rec, resolve(text, rec["anchor"]))
+        with claims_path.open(encoding="utf-8") as f:
+            for lineno, raw_line in enumerate(f, start=1):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError as e:
+                    raise DataError(f"claims.ndjson:{lineno}: invalid JSON: {e}") from e
+                for key in ("claim_id", "source_id", "anchor"):
+                    if key not in rec:
+                        raise DataError(f"claims.ndjson:{lineno}: missing '{key}'")
+                cid = rec["claim_id"]
+                if cid in seen:
+                    raise DataError(f"duplicate claim_id: {cid}")
+                seen.add(cid)
+                text = _source_text(root, rec["source_id"], src_cache)
+                record(f"claim:{cid}", rec, resolve(text, rec["anchor"]))
 
     wd = wiki_dir(root)
     if wd.is_dir():
