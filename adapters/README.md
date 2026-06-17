@@ -1,15 +1,19 @@
 # adapters (deferred — post-v0)
 
 The scriptorium contract is technology-agnostic. Concrete bindings to specific
-tools live here as *adapters* so the core stays swappable. None are implemented
-in v0; this directory documents the intended seams.
+tools live here as *adapters* so the core stays swappable. Some seams are now
+partially implemented (embeddings, obsidian views); the rest document intended
+seams.
 
 ## Planned adapters
 
 - **obsidian/** — treat `vault/` as an Obsidian vault for browsing: `[[wiki-links]]`
   already match the contract's ids, and footnote anchors render as citations. No
-  plugin required to read; an optional command could surface `scrip status`/`verify`
-  results in-app.
+  plugin required to read. **Partially implemented**: two optional view generators
+  surface `scrip` state in-app — `dashboard.py` writes `wiki/_status.md` (staleness
+  + broken citations) and `graph_view.py` writes `wiki/_graph.md` (the
+  `facts/graph.ndjson` relationship map as clickable links). Both are
+  frontmatter-less views — deleting them leaves a fully valid vault.
 
 - **embeddings/** — the retrieval rung (rung 4 of the answer ladder). **Now
   implemented** as the optional `[embeddings]` extra (`scrip/src/scrip/embeddings.py`,
