@@ -44,6 +44,30 @@ Keep it fresh by wiring the one-liner into:
 - a **Claude Code hook** / skill that runs it after each compile, or
 - a manual run before you sit down to read.
 
+## Relationship graph
+
+The typed edges in `facts/graph.ndjson` (`builds-on`, `cites`, `about`,
+`made-by` …) are the vault's most connected structure, but they live in NDJSON
+and Obsidian's graph view never sees them — it only follows `[[wiki-links]]` and
+footnote targets. Run:
+
+```sh
+uv run --project scrip python adapters/obsidian/graph_view.py
+```
+
+It writes `vault/wiki/_graph.md` — a clickable map of every edge, grouped by
+node, with outbound (`→`) and inbound (`←`) typed links. Like the dashboard it
+has no frontmatter, so it is a pure *view*: never a tracked artifact, never
+affects the dependency graph.
+
+One honest caveat: because every link lives in this single note, Obsidian's
+*graph view* renders `_graph` as one hub, not true page-to-page edges — making
+the pages link to each other directly would mean editing them, which would make
+their `input-hash` lie. For an interactive relationship graph, query the edges
+with `scrip query edges` (backlinks are just `scrip query edges --where "dst =
+'<id>'"`) or render them with Dataview. `_graph.md` is the zero-plugin,
+always-valid map.
+
 ## The adapter rule
 
 This adapter only makes the vault nicer to browse. It is not the source of truth,
