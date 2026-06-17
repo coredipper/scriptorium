@@ -114,10 +114,10 @@ def _dep_hash(dep_id: str, raw: dict) -> str | None:
         r = raw.get(base)
         if not r:
             return None
-        for b in r["blocks"]:
-            if b["block_id"] == block_id:
-                return b["hash"]
-        return None
+        # ⚡ Bolt: Replace O(n) loop with O(1) hash map lookup for blocks
+        if "_blocks_map" not in r:
+            r["_blocks_map"] = {b["block_id"]: b["hash"] for b in r["blocks"]}
+        return r["_blocks_map"].get(block_id)
     r = raw.get(dep_id)
     return r["content_hash"] if r else None
 
