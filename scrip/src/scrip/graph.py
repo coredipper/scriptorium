@@ -80,28 +80,35 @@ def scan_derived(root: Path) -> dict:
             meta, _ = frontmatter.load(path)
             if not meta or "derived-from" not in meta:
                 continue  # index.md, log.md, hand notes: not tracked artifacts
-            did = meta.get("id") or str(path.relative_to(root))
+            where = str(path.relative_to(root))
+            did = frontmatter.as_str(meta, "id", where) or where
             out[did] = {
-                "path": str(path.relative_to(root)),
-                "type": meta.get("type", "wiki"),
-                "derived_from": list(meta.get("derived-from") or []),
-                "input_hash": meta.get("input-hash"),
-                "last_compiled": meta.get("last-compiled"),
+                "path": where,
+                "type": frontmatter.as_str(meta, "type", where) or "wiki",
+                "derived_from": frontmatter.as_str_list(meta, "derived-from", where),
+                "input_hash": frontmatter.as_str(meta, "input-hash", where),
+                "last_compiled": frontmatter.as_str(meta, "last-compiled", where),
             }
     fmeta = facts_dir(root) / "_meta.yaml"
     if fmeta.exists():
         try:
-            data = yaml.safe_load(fmeta.read_text(encoding="utf-8")) or {}
+            data = yaml.safe_load(fmeta.read_text(encoding="utf-8"))
         except yaml.YAMLError as e:
             raise DataError(f"invalid facts/_meta.yaml: {e}") from e
-        if isinstance(data, dict) and "derived-from" in data:
-            did = data.get("id") or "facts/core"
+        if data is None:
+            data = {}  # empty / null file: legitimately "no facts set"
+        elif not isinstance(data, dict):
+            # don't let `or {}` mask falsey non-mappings ([], false, 0, '')
+            raise DataError("facts/_meta.yaml must be a YAML mapping")
+        if "derived-from" in data:
+            where = str(fmeta.relative_to(root))
+            did = frontmatter.as_str(data, "id", where) or "facts/core"
             out[did] = {
-                "path": str(fmeta.relative_to(root)),
-                "type": data.get("type", "facts.set"),
-                "derived_from": list(data.get("derived-from") or []),
-                "input_hash": data.get("input-hash"),
-                "last_compiled": data.get("last-compiled"),
+                "path": where,
+                "type": frontmatter.as_str(data, "type", where) or "facts.set",
+                "derived_from": frontmatter.as_str_list(data, "derived-from", where),
+                "input_hash": frontmatter.as_str(data, "input-hash", where),
+                "last_compiled": frontmatter.as_str(data, "last-compiled", where),
             }
     return out
 

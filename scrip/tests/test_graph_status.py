@@ -1,6 +1,83 @@
 import os
 
-from scrip import cli, graph
+import pytest
+from scrip.errors import DataError
+
+from scrip import cli, frontmatter, graph
+
+
+def _write_wiki(kb, slug, meta, body="Body.\n"):
+    """Write a wiki page with arbitrary (possibly malformed) frontmatter."""
+    p = kb.root / "vault" / "wiki" / "concepts" / f"{slug}.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(frontmatter.dump(meta, body), encoding="utf-8")
+
+
+def test_derived_from_as_string_raises_not_silent_stale(kb):
+    """A bare string derived-from would char-split into per-character dep ids and
+    silently mark the page STALE; it must raise a clear, file-named error."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    _write_wiki(kb, "x", {
+        "id": "concept/x",
+        "type": "wiki.concept",
+        "derived-from": "raw/a",  # STRING, not a list
+        "input-hash": "sha256:dead",
+        "last-compiled": "2026-01-01T00:00:00Z",
+    })
+    with pytest.raises(DataError) as ei:
+        graph.compute_status(kb.root, use_cache=False)
+    assert "x.md" in str(ei.value)
+
+
+def test_wrong_typed_id_raises(kb):
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    _write_wiki(kb, "x", {
+        "id": ["concept/x"],  # non-string id
+        "derived-from": ["raw/a"],
+        "input-hash": "sha256:dead",
+        "last-compiled": "2026-01-01T00:00:00Z",
+    })
+    with pytest.raises(DataError):
+        graph.compute_status(kb.root, use_cache=False)
+
+
+def test_facts_meta_derived_from_as_string_raises(kb):
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    (kb.root / "vault" / "facts" / "_meta.yaml").write_text(
+        "id: facts/core\nderived-from: raw/a\n", encoding="utf-8",
+    )
+    with pytest.raises(DataError):
+        graph.compute_status(kb.root, use_cache=False)
+
+
+def test_facts_meta_non_mapping_raises(kb):
+    """A facts/_meta.yaml that parses to a non-mapping must fail loudly, not
+    silently drop the facts set from the graph (roborev 1251)."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    (kb.root / "vault" / "facts" / "_meta.yaml").write_text(
+        "- not\n- a\n- mapping\n", encoding="utf-8",
+    )
+    with pytest.raises(DataError):
+        graph.compute_status(kb.root, use_cache=False)
+
+
+def test_facts_meta_falsey_non_mapping_raises(kb):
+    """`[]`/`false`/`''` are falsey, so `safe_load(...) or {}` used to mask them as
+    an empty mapping and silently drop the facts set (roborev 1253)."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    (kb.root / "vault" / "facts" / "_meta.yaml").write_text("[]\n", encoding="utf-8")
+    with pytest.raises(DataError):
+        graph.compute_status(kb.root, use_cache=False)
+
+
+def test_facts_meta_empty_is_not_an_error(kb):
+    """An empty / null facts/_meta.yaml is legitimately 'no facts set' — None must
+    still map to {} and not raise (guards against over-correcting)."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("x", ["raw/a"])
+    (kb.root / "vault" / "facts" / "_meta.yaml").write_text("", encoding="utf-8")
+    res = graph.compute_status(kb.root, use_cache=False)
+    assert res["stale"] == []
 
 
 def test_fresh_vault_all_ok(kb):
