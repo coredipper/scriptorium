@@ -6,6 +6,7 @@ import {
   nodeIdToPath,
   pathToNodeId,
 } from "./graphIndex.ts";
+import { formatFindings } from "./types.ts";
 
 export const VIEW_TYPE = "scriptorium-relationships";
 
@@ -76,8 +77,7 @@ export class RelationshipView extends ItemView {
         line.setText(`✓ fresh — ${sum.ok} artifact(s), citations resolve`);
       } else {
         line.addClass("has-findings");
-        const amb = sum.ambiguous ? ` · ${sum.ambiguous} ambiguous` : "";
-        line.setText(`⚠ ${sum.stale} stale · ${sum.broken} broken${amb}`);
+        line.setText(`⚠ ${formatFindings(sum)}`);
       }
     }
     for (const s of h.status?.stale ?? []) {

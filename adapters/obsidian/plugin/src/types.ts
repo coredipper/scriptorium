@@ -41,6 +41,13 @@ export interface HealthSummary {
   clean: boolean;
 }
 
+// Single formatter for the findings line, shared by the panel and the
+// check-health command so the two can't drift (ambiguous shown only when > 0).
+export function formatFindings(summary: HealthSummary): string {
+  const amb = summary.ambiguous ? ` · ${summary.ambiguous} ambiguous` : "";
+  return `${summary.stale} stale · ${summary.broken} broken${amb}`;
+}
+
 export function summarizeHealth(
   status: StatusResult,
   verify: VerifyResult,

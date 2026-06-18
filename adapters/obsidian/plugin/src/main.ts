@@ -15,6 +15,7 @@ import {
 } from "./settings.ts";
 import { buildGraphIndex, type GraphIndex } from "./graphIndex.ts";
 import { resolveRoot, type Resolved } from "./root.ts";
+import { formatFindings } from "./types.ts";
 
 export default class ScriptoriumPlugin extends Plugin {
   settings: ScriptoriumSettings = DEFAULT_SETTINGS;
@@ -61,10 +62,7 @@ export default class ScriptoriumPlugin extends Plugin {
             "Scriptorium: health check unavailable — needs Obsidian desktop + a resolvable scriptorium root",
           );
         else if (s.summary.clean) new Notice("Scriptorium: all fresh ✓");
-        else
-          new Notice(
-            `Scriptorium: ${s.summary.stale} stale · ${s.summary.broken} broken`,
-          );
+        else new Notice(`Scriptorium: ${formatFindings(s.summary)}`);
       },
     });
 
