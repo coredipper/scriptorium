@@ -105,7 +105,12 @@ export default class ScriptoriumPlugin extends Plugin {
     const adapter = this.app.vault.adapter;
     const override = this.settings.rootOverride || null;
     if (Platform.isDesktopApp && adapter instanceof FileSystemAdapter) {
-      const fs = await import("node:fs");
+      // require works in Obsidian's desktop (Electron) renderer; dynamic
+      // import() of node builtins does not.
+      const fs =
+        typeof require === "function"
+          ? (require("node:fs") as typeof import("node:fs"))
+          : await import("node:fs");
       const base = adapter.getBasePath();
       this.resolved = resolveRoot(base, (p) => fs.existsSync(p), override);
     } else {

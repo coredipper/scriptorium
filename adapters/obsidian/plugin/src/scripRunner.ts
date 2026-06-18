@@ -26,7 +26,14 @@ export interface ScripRunner {
 export function createScripRunner(scripPath: string, root: string): ScripRunner {
   return {
     async run<T>(args: string[]): Promise<T> {
-      const { execFile } = await import("node:child_process");
+      // Obsidian desktop exposes CommonJS require; Electron's renderer cannot
+      // dynamic-import() node builtins. Fall back to import() only when there is
+      // no require (the node --test ESM runner).
+      const cp =
+        typeof require === "function"
+          ? (require("node:child_process") as typeof import("node:child_process"))
+          : await import("node:child_process");
+      const { execFile } = cp;
       const full = [...args, "--root", root, "--json"];
       return new Promise<T>((resolve, reject) => {
         execFile(

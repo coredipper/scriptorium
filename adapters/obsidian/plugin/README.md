@@ -34,8 +34,15 @@ Two layers (see [DESIGN.md](DESIGN.md)):
 ## Requirements
 
 - Relationship panel: none.
-- Vault health: Obsidian **desktop** + the `scrip` CLI installed and on PATH
-  (e.g. `pipx install scriptoria`), or its path set in the plugin settings.
+- Vault health: Obsidian **desktop** + the `scrip` CLI installed (e.g.
+  `uv tool install ./scrip` or `pipx install scriptoria`).
+
+**macOS:** Obsidian launched from Finder/Dock often has a minimal `PATH` that
+excludes `~/.local/bin`, so the plugin may report "scrip not found" even when
+`scrip` works in your terminal. Fix: run `which scrip` and paste the **absolute
+path** (e.g. `/Users/<you>/.local/bin/scrip`) into **Settings → Scriptorium →
+scrip path**. An absolute path is invoked directly, bypassing the GUI-`PATH`
+problem.
 
 ## Build
 
