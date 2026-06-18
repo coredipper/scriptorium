@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 # --- canonical vault layout ------------------------------------------------
 # ``root`` is the repo/instance root: the directory containing ``vault/``.

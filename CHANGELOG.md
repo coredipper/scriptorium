@@ -5,7 +5,17 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
-## [Unreleased]
+## [0.5.1] — 2026-06-18
+
+A maintenance release: faster scanning on large vaults, and stricter frontmatter
+validation so malformed metadata fails loudly instead of mis-computing staleness.
+(Only `scriptoria` changes; `scrip-harness` stays at 0.5.0.)
+
+### Changed
+- **Faster on large vaults**, all behavior-preserving: `.ndjson` facts are
+  streamed line-by-line instead of read whole; the dependency-graph block-hash
+  lookup is O(1) instead of an O(n) scan; whitespace normalization uses
+  `split`/`join` rather than a regex.
 
 ### Fixed
 - **Malformed frontmatter now fails loudly instead of silently mis-computing
@@ -14,7 +24,8 @@ reference CLI. The file **contract** is versioned separately in
   bogus STALE; `scrip status` now raises a clear `DataError` naming the file.
   Typed validation covers `id`/`type`/`derived-from`/`input-hash`/`last-compiled`
   on both wiki pages and `facts/_meta.yaml` (`frontmatter.as_str` /
-  `frontmatter.as_str_list`, used in `graph.scan_derived`).
+  `frontmatter.as_str_list`, used in `graph.scan_derived`). A `facts/_meta.yaml`
+  that parses to a non-mapping is rejected rather than silently dropped.
 
 ## [0.5.0] — 2026-06-13
 
@@ -174,6 +185,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[0.5.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.5.1
 [0.5.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.5.0
 [0.4.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.4.0
 [0.3.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.3.0
