@@ -29,3 +29,7 @@ build/
 
 # roborev snapshots
 /.roborev/
+
+# Obsidian local state: created when you open vault/ in Obsidian (UI config,
+# sideloaded plugin copies). Local-only; the vault is valid without it.
+vault/.obsidian/
