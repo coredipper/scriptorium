@@ -50,6 +50,17 @@ def test_facts_meta_derived_from_as_string_raises(kb):
         graph.compute_status(kb.root, use_cache=False)
 
 
+def test_facts_meta_non_mapping_raises(kb):
+    """A facts/_meta.yaml that parses to a non-mapping must fail loudly, not
+    silently drop the facts set from the graph (roborev 1251)."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    (kb.root / "vault" / "facts" / "_meta.yaml").write_text(
+        "- not\n- a\n- mapping\n", encoding="utf-8",
+    )
+    with pytest.raises(DataError):
+        graph.compute_status(kb.root, use_cache=False)
+
+
 def test_fresh_vault_all_ok(kb):
     kb.add_raw("a", "# A\n\nAlpha content.\n")
     kb.add_wiki("x", ["raw/a"])

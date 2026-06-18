@@ -95,7 +95,9 @@ def scan_derived(root: Path) -> dict:
             data = yaml.safe_load(fmeta.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as e:
             raise DataError(f"invalid facts/_meta.yaml: {e}") from e
-        if isinstance(data, dict) and "derived-from" in data:
+        if not isinstance(data, dict):
+            raise DataError("facts/_meta.yaml must be a YAML mapping")
+        if "derived-from" in data:
             where = str(fmeta.relative_to(root))
             did = frontmatter.as_str(data, "id", where) or "facts/core"
             out[did] = {
