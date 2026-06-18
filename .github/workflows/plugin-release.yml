@@ -45,6 +45,6 @@ jobs:
         run: |
           gh release create "$TAG" \
             --repo "$REPO" \
-            --title "Obsidian plugin $TAG" \
+            --title "Obsidian plugin v${TAG#plugin-v}" \
             --generate-notes \
             manifest.json main.js styles.css
