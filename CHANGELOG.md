@@ -185,6 +185,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[0.5.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.5.1
 [0.5.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.5.0
 [0.4.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.4.0
 [0.3.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.3.0
