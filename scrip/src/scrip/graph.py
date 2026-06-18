@@ -92,10 +92,13 @@ def scan_derived(root: Path) -> dict:
     fmeta = facts_dir(root) / "_meta.yaml"
     if fmeta.exists():
         try:
-            data = yaml.safe_load(fmeta.read_text(encoding="utf-8")) or {}
+            data = yaml.safe_load(fmeta.read_text(encoding="utf-8"))
         except yaml.YAMLError as e:
             raise DataError(f"invalid facts/_meta.yaml: {e}") from e
-        if not isinstance(data, dict):
+        if data is None:
+            data = {}  # empty / null file: legitimately "no facts set"
+        elif not isinstance(data, dict):
+            # don't let `or {}` mask falsey non-mappings ([], false, 0, '')
             raise DataError("facts/_meta.yaml must be a YAML mapping")
         if "derived-from" in data:
             where = str(fmeta.relative_to(root))

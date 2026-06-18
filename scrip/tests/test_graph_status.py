@@ -61,6 +61,25 @@ def test_facts_meta_non_mapping_raises(kb):
         graph.compute_status(kb.root, use_cache=False)
 
 
+def test_facts_meta_falsey_non_mapping_raises(kb):
+    """`[]`/`false`/`''` are falsey, so `safe_load(...) or {}` used to mask them as
+    an empty mapping and silently drop the facts set (roborev 1253)."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    (kb.root / "vault" / "facts" / "_meta.yaml").write_text("[]\n", encoding="utf-8")
+    with pytest.raises(DataError):
+        graph.compute_status(kb.root, use_cache=False)
+
+
+def test_facts_meta_empty_is_not_an_error(kb):
+    """An empty / null facts/_meta.yaml is legitimately 'no facts set' — None must
+    still map to {} and not raise (guards against over-correcting)."""
+    kb.add_raw("a", "# A\n\nAlpha.\n")
+    kb.add_wiki("x", ["raw/a"])
+    (kb.root / "vault" / "facts" / "_meta.yaml").write_text("", encoding="utf-8")
+    res = graph.compute_status(kb.root, use_cache=False)
+    assert res["stale"] == []
+
+
 def test_fresh_vault_all_ok(kb):
     kb.add_raw("a", "# A\n\nAlpha content.\n")
     kb.add_wiki("x", ["raw/a"])
