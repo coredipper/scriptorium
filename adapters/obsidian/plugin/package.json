@@ -1,7 +1,8 @@
 {
   "name": "scriptorium-obsidian-plugin",
   "version": "0.1.0",
-  "description": "In-app health (scrip status/verify) and relationship navigation (facts/graph.ndjson) for a scriptorium vault.",
+  "private": true,
+  "description": "In-app health (scrip status/verify) and relationship navigation (facts/graph.ndjson) for a scriptorium vault. Not an npm package — distributed via GitHub Release / the Obsidian community store.",
   "main": "main.js",
   "type": "module",
   "scripts": {
