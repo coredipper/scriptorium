@@ -10,6 +10,14 @@ was designed to render natively:
 - everything is plain markdown + NDJSON on disk, so "file over app" holds: close
   Obsidian and the vault is still fully valid.
 
+## The plugin (richer, optional)
+
+For a live in-app experience — a **relationship panel** (the active note's typed
+edges from `facts/graph.ndjson`, which the native graph view can't see) and a
+**vault-health** status bar/panel backed by `scrip status`/`verify` — install the
+plugin in [`plugin/`](plugin/). It's read-only like everything here; the native
+browsing below needs no plugin at all.
+
 ## Open it
 
 Point Obsidian at the `vault/` directory ("Open folder as vault"). `raw/`,

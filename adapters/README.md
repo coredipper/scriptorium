@@ -9,11 +9,12 @@ seams.
 
 - **obsidian/** — treat `vault/` as an Obsidian vault for browsing: `[[wiki-links]]`
   already match the contract's ids, and footnote anchors render as citations. No
-  plugin required to read. **Partially implemented**: two optional view generators
-  surface `scrip` state in-app — `dashboard.py` writes `wiki/_status.md` (staleness
-  + broken citations) and `graph_view.py` writes `wiki/_graph.md` (the
-  `facts/graph.ndjson` relationship map as clickable links). Both are
-  frontmatter-less views — deleting them leaves a fully valid vault.
+  plugin required to read. **Implemented**: (a) an Obsidian **plugin**
+  (`obsidian/plugin/`) — a relationship panel over `facts/graph.ndjson` plus a
+  live `scrip status`/`verify` health bar (desktop); and (b) two frontmatter-less
+  view generators — `dashboard.py` → `wiki/_status.md` (staleness + broken
+  citations) and `graph_view.py` → `wiki/_graph.md` (the relationship map as
+  clickable links). All are read-only — deleting any leaves a fully valid vault.
 
 - **embeddings/** — the retrieval rung (rung 4 of the answer ladder). **Now
   implemented** as the optional `[embeddings]` extra (`scrip/src/scrip/embeddings.py`,

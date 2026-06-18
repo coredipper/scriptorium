@@ -1,0 +1,10 @@
+{
+  "id": "scriptorium",
+  "name": "Scriptorium",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Live vault health (scrip status/verify) and relationship navigation (facts/graph.ndjson) for a scriptorium knowledge base.",
+  "author": "scriptorium",
+  "authorUrl": "https://github.com/coredipper/scriptorium",
+  "isDesktopOnly": false
+}
