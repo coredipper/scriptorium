@@ -57,6 +57,34 @@ source changes, only the artifacts that *depend on the changed bytes* recompile 
 not the corpus, fixing RAG's re-index tax. The expensive model calls happen once,
 at compile time, and amortize over every future read.
 
+## Related lineages — what this is *not*
+
+The three priors above are scriptorium's *direct* ancestors. Its *spiritual* one
+is older — the **commonplace book**, a personal compilation of quotations indexed
+and cross-referenced over a lifetime (it sits in the vault as a seed source). What
+scriptorium is **not** is a **Zettelkasten**, and the difference is load-bearing,
+not cosmetic.
+
+A Zettelkasten permanent note is deliberately *detached* from its source: you
+read, internalize, and rewrite the idea in your own words, and the note then
+stands on its own — trusted because a *human* internalized it. scriptorium does
+the opposite. Every synthesized claim stays *attached* to immutable source bytes
+through a verifiable anchor, because an *agent's* "internalization" cannot be
+trusted the way a person's can. Detachment is the right call for a human thinking
+tool; attachment is the only safe call for a machine-maintained reference. That
+one split explains the rest: content-derived ids rather than Luhmann's branching
+positional ones (two answers to the same "stable address under insertion"
+problem — content-addressing vs. notation-with-gaps), typed `source → derived`
+edges rather than emergent bidirectional wikilinks, and *decidable staleness*
+where a Zettelkasten has no notion of a note going out of date at all.
+
+The jobs differ too. A Zettelkasten optimizes a human's *serendipitous* idea
+generation through dense, hand-authored links; scriptorium optimizes a
+*verifiable, queryable, always-fresh* answer layer an agent maintains. That a
+scriptorium vault also opens cleanly in Obsidian (see `adapters/obsidian/`) is a
+browsing convenience, not a claim to be a slip-box. The overlap is the goal —
+"talk to your own knowledge" — not the method.
+
 ## Honest limits
 
 - **Synthesis quality** is still the model's job; the contract guarantees
