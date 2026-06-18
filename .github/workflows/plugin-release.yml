@@ -1,0 +1,48 @@
+name: plugin-release
+
+# Publishes the Obsidian plugin as GitHub Release assets when a `plugin-v*` tag is
+# pushed: builds main.js and attaches manifest.json + main.js + styles.css so the
+# plugin is drop-in sideloadable (and community-store ready) with no Node
+# toolchain. main.js is otherwise gitignored, so the build happens here.
+
+on:
+  push:
+    tags:
+      - "plugin-v*"
+
+permissions:
+  contents: write # gh release create
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapters/obsidian/plugin
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - run: npm install
+      - run: npm run build # tsc --noEmit + esbuild -> main.js
+
+      - name: Verify the tag matches manifest.json version
+        run: |
+          tag="${GITHUB_REF_NAME#plugin-v}"
+          ver="$(node -p "require('./manifest.json').version")"
+          test "$ver" = "$tag" || { echo "tag plugin-v$tag != manifest $ver"; exit 1; }
+
+      - name: Create the GitHub Release with the plugin assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --title "Obsidian plugin $TAG" \
+            --generate-notes \
+            manifest.json main.js styles.css
