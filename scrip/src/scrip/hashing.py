@@ -11,6 +11,7 @@ import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
 
+
 def normalize(text: str) -> str:
     """Canonical text normalization shared by provenance anchors and block ids.
 
