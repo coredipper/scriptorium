@@ -5,6 +5,17 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
+## [Unreleased]
+
+### Fixed
+- **Malformed frontmatter now fails loudly instead of silently mis-computing
+  staleness.** A derived artifact whose `derived-from` was a bare string (not a
+  YAML list) used to char-split into per-character dependency ids and report a
+  bogus STALE; `scrip status` now raises a clear `DataError` naming the file.
+  Typed validation covers `id`/`type`/`derived-from`/`input-hash`/`last-compiled`
+  on both wiki pages and `facts/_meta.yaml` (`frontmatter.as_str` /
+  `frontmatter.as_str_list`, used in `graph.scan_derived`).
+
 ## [0.5.0] — 2026-06-13
 
 RECONCILE joins the automated loop — the last AGENT.md stage — so the full

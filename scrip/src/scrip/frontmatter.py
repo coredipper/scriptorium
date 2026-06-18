@@ -60,3 +60,30 @@ def require(meta: dict, keys: Iterable[str], where: str = "frontmatter") -> None
     missing = [k for k in keys if k not in meta]
     if missing:
         raise DataError(f"{where}: missing required key(s): {', '.join(missing)}")
+
+
+def as_str(meta: dict, key: str, where: str = "frontmatter") -> str | None:
+    """Return ``meta[key]`` as a string, or ``None`` if absent/null. Raise
+    :class:`DataError` (naming ``where``) if present but not a string."""
+    value = meta.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise DataError(
+            f"{where}: '{key}' must be a string, got {type(value).__name__}"
+        )
+    return value
+
+
+def as_str_list(meta: dict, key: str, where: str = "frontmatter") -> list[str]:
+    """Return ``meta[key]`` as a list of strings, or ``[]`` if absent/null. Raise
+    :class:`DataError` (naming ``where``) if present but not a list of strings.
+
+    This is what stops a hand-edited bare string (``derived-from: raw/x``) from
+    silently char-splitting into per-character dependency ids downstream."""
+    value = meta.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        raise DataError(f"{where}: '{key}' must be a list of strings")
+    return value
