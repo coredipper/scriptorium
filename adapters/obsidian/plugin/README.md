@@ -69,6 +69,19 @@ Open `wiki/concepts/the-answer-ladder.md`; the panel should show
 `builds-on → concept/compilation-over-retrieval`. On desktop with `scrip`
 installed, the status bar should read `Scriptorium ✓`.
 
+## Releasing (maintainers)
+
+CI builds and attaches the plugin assets to a GitHub Release when you push a
+`plugin-v<version>` tag whose version matches `manifest.json`:
+
+```sh
+git tag plugin-v0.1.0 && git push origin plugin-v0.1.0
+```
+
+`plugin-release.yml` then builds `main.js` and uploads `manifest.json`,
+`main.js`, and `styles.css` as release assets — drop-in sideloadable, and the
+shape the community plugin store expects.
+
 ## Not in v1
 
 On-disk regeneration of `_status.md` / `_graph.md` (the live panels already show

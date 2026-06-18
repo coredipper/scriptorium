@@ -1,0 +1,41 @@
+name: plugin-ci
+
+# The Obsidian plugin (adapters/obsidian/plugin/) is a self-contained
+# TypeScript/esbuild project with its own toolchain, separate from the Python CI
+# in ci.yml. This job only runs when plugin files (or this workflow) change.
+
+on:
+  push:
+    paths:
+      - "adapters/obsidian/plugin/**"
+      - ".github/workflows/plugin-ci.yml"
+  pull_request:
+    paths:
+      - "adapters/obsidian/plugin/**"
+      - ".github/workflows/plugin-ci.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapters/obsidian/plugin
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          # node --test strips TypeScript types unflagged on 23.6+; pin to 24.
+          node-version: "24"
+
+      # ci installs exactly from the committed package-lock.json (fails on drift).
+      - run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Unit tests (node --test)
+        run: npm test
+
+      - name: Build (esbuild -> main.js)
+        run: npm run build
