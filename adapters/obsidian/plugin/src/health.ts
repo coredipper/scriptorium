@@ -47,8 +47,15 @@ export class HealthController {
   async refresh(): Promise<void> {
     const { scripPath, root } = this.getConfig();
     if (!Platform.isDesktopApp || !root) {
-      // mobile or unresolved root: shell-out layer simply isn't available.
-      this.state = { ...this.state, available: false, error: null };
+      // mobile or unresolved root: no shell-out layer and no valid health to
+      // show — clear any stale result from a previous (different) root.
+      this.state = {
+        available: false,
+        summary: null,
+        status: null,
+        verify: null,
+        error: null,
+      };
       this.emit();
       return;
     }

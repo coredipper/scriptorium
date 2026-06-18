@@ -34,6 +34,20 @@ test("trailing slashes are tolerated", () => {
   assert.deepEqual(r, { root: "/repo", vaultPrefix: "vault" });
 });
 
+test("Windows backslash base path: vault-dir layout", () => {
+  // FileSystemAdapter.getBasePath() returns "\"-separated paths on Windows.
+  const r = resolveRoot(
+    "C:\\repo\\vault",
+    setExists([
+      "C:\\repo\\vault/raw",
+      "C:\\repo\\vault/wiki",
+      "C:\\repo\\vault/facts",
+      "C:\\repo/SPEC.md",
+    ]),
+  );
+  assert.deepEqual(r, { root: "C:\\repo", vaultPrefix: "" });
+});
+
 test("unrecognized folder -> null", () => {
   assert.equal(resolveRoot("/random", () => false), null);
 });

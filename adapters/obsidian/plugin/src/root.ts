@@ -11,15 +11,17 @@ export interface Resolved {
   vaultPrefix: string; // "" if Obsidian opened vault/, "vault" if it opened the root
 }
 
+// Handle both POSIX and Windows separators: on desktop the base path comes from
+// the OS (FileSystemAdapter.getBasePath()), which uses "\" on Windows.
 function trimSlash(p: string): string {
-  return p.replace(/\/+$/, "");
+  return p.replace(/[/\\]+$/, "");
 }
 function join(a: string, b: string): string {
   return trimSlash(a) + "/" + b;
 }
 function parent(p: string): string {
   const q = trimSlash(p);
-  const i = q.lastIndexOf("/");
+  const i = Math.max(q.lastIndexOf("/"), q.lastIndexOf("\\"));
   return i <= 0 ? q : q.slice(0, i);
 }
 

@@ -30,9 +30,12 @@ export class RelationshipView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    // active-leaf-change covers switching tabs/panes; file-open covers opening a
+    // different note in the same leaf — both must refresh the panel.
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => this.render()),
     );
+    this.registerEvent(this.app.workspace.on("file-open", () => this.render()));
     this.render();
   }
 
