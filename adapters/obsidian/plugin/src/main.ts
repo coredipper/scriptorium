@@ -164,9 +164,7 @@ export default class ScriptoriumPlugin extends Plugin {
       this.statusBar.setText("Scriptorium ✓");
       this.statusBar.title = `${sum.ok} artifact(s) fresh, citations resolve`;
     } else {
-      this.statusBar.setText(
-        `Scriptorium ⚠ ${sum.stale} stale · ${sum.broken} broken`,
-      );
+      this.statusBar.setText(`Scriptorium ⚠ ${formatFindings(sum)}`);
       this.statusBar.title = "Open the Scriptorium panel for details";
     }
   }
