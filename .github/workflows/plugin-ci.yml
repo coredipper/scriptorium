@@ -28,7 +28,8 @@ jobs:
           # node --test strips TypeScript types unflagged on 23.6+; pin to 24.
           node-version: "24"
 
-      - run: npm install
+      # ci installs exactly from the committed package-lock.json (fails on drift).
+      - run: npm ci
 
       - name: Typecheck (tsc --noEmit)
         run: npm run typecheck
