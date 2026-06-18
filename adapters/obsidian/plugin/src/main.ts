@@ -56,10 +56,14 @@ export default class ScriptoriumPlugin extends Plugin {
         await this.health.refresh();
         const s = this.health.getState();
         if (s.error) new Notice(`Scriptorium: ${s.error}`);
-        else if (s.summary?.clean) new Notice("Scriptorium: all fresh ✓");
+        else if (!s.available || !s.summary)
+          new Notice(
+            "Scriptorium: health check unavailable — needs Obsidian desktop + a resolvable scriptorium root",
+          );
+        else if (s.summary.clean) new Notice("Scriptorium: all fresh ✓");
         else
           new Notice(
-            `Scriptorium: ${s.summary?.stale ?? 0} stale · ${s.summary?.broken ?? 0} broken`,
+            `Scriptorium: ${s.summary.stale} stale · ${s.summary.broken} broken`,
           );
       },
     });
