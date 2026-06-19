@@ -115,7 +115,7 @@ def compute_similar(
         if d.get("type") != want_type or cid in skip:
             continue  # other-kind pages and the facts.set row are dropped here
         c_sources = _source_set(d["derived_from"])
-        meta, _ = frontmatter.load(root / d["path"])
+        meta = frontmatter.load_meta(root / d["path"])
         c_title = (meta.get("title") if meta else "") or ""
         c_tags = _page_tags(c_sources, source_tags)
 
@@ -163,7 +163,7 @@ def print_similar(result: dict) -> None:
         s = c["scores"]
         print(f'  {s["combined"]:.3f}  {c["id"]}  "{c["title"]}"')
         print(
-            f'         sources {s["sources"]:.2f}  tags {s["tags"]:.2f}  title {s["title"]:.2f}'
-            f'   shared sources: {len(c["shared"]["sources"])}, tags: {len(c["shared"]["tags"])}'
+            f"         sources {s['sources']:.2f}  tags {s['tags']:.2f}  title {s['title']:.2f}"
+            f"   shared sources: {len(c['shared']['sources'])}, tags: {len(c['shared']['tags'])}"
         )
     print(f"({len(cands)} candidate(s))")

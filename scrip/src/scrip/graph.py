@@ -77,7 +77,7 @@ def scan_derived(root: Path) -> dict:
     wd = wiki_dir(root)
     if wd.is_dir():
         for path in sorted(wd.rglob("*.md")):
-            meta, _ = frontmatter.load(path)
+            meta = frontmatter.load_meta(path)
             if not meta or "derived-from" not in meta:
                 continue  # index.md, log.md, hand notes: not tracked artifacts
             where = str(path.relative_to(root))
@@ -195,11 +195,7 @@ def compute_status(
         else:
             ok.append({"id": did, "path": d["path"]})
 
-    uncompiled = [
-        {"id": rid, "path": r["path"]}
-        for rid, r in raw.items()
-        if rid not in referenced
-    ]
+    uncompiled = [{"id": rid, "path": r["path"]} for rid, r in raw.items() if rid not in referenced]
 
     if rebuild:
         manifest_mod.save(root, manifest_mod.build(raw, derived))
@@ -271,11 +267,7 @@ def print_status(result: dict) -> None:
     if stale:
         print(f"STALE ({len(stale)})")
         for s in stale:
-            tag = (
-                f"  [changed: {', '.join(s['changed_sources'])}]"
-                if s["changed_sources"]
-                else ""
-            )
+            tag = f"  [changed: {', '.join(s['changed_sources'])}]" if s["changed_sources"] else ""
             print(f"  ✗ {s['id']} — {s['reason']}{tag}")
     if unc:
         print(f"UNCOMPILED ({len(unc)})")
