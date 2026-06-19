@@ -39,10 +39,10 @@ def parse(text: str) -> tuple[dict, str]:
     raise DataError("unterminated frontmatter (missing closing '---')")
 
 
-def _read_frontmatter(f) -> dict:
+def _read_frontmatter(f) -> tuple[bool, dict]:
     first_line = f.readline()
     if not first_line or first_line.strip() != FENCE:
-        return {}
+        return False, {}
 
     fm_lines = []
     for line in f:
@@ -60,15 +60,15 @@ def _read_frontmatter(f) -> dict:
         meta = {}
     if not isinstance(meta, dict):
         raise DataError("frontmatter must be a YAML mapping")
-    return meta
+    return True, meta
 
 
 def load(path: str | Path) -> tuple[dict, str]:
     p = Path(path)
     try:
         with open(p, encoding="utf-8") as f:
-            meta = _read_frontmatter(f)
-            if not meta:
+            found, meta = _read_frontmatter(f)
+            if not found:
                 f.seek(0)
                 return {}, f.read()
             body = f.read()
@@ -83,7 +83,8 @@ def load_meta(path: str | Path) -> dict:
     p = Path(path)
     try:
         with open(p, encoding="utf-8") as f:
-            return _read_frontmatter(f)
+            _, meta = _read_frontmatter(f)
+            return meta
     except OSError as e:
         raise DataError(f"cannot read {p}: {e}") from e
 
