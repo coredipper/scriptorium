@@ -39,13 +39,54 @@ def parse(text: str) -> tuple[dict, str]:
     raise DataError("unterminated frontmatter (missing closing '---')")
 
 
+def _read_frontmatter(f) -> tuple[bool, dict]:
+    first_line = f.readline()
+    if not first_line or first_line.strip() != FENCE:
+        return False, {}
+
+    fm_lines = []
+    for line in f:
+        if line.strip() == FENCE:
+            break
+        fm_lines.append(line)
+    else:
+        raise DataError("unterminated frontmatter (missing closing '---')")
+
+    try:
+        meta = yaml.safe_load("".join(fm_lines))
+    except yaml.YAMLError as e:
+        raise DataError(f"invalid YAML frontmatter: {e}") from e
+    if meta is None:
+        meta = {}
+    if not isinstance(meta, dict):
+        raise DataError("frontmatter must be a YAML mapping")
+    return True, meta
+
+
 def load(path: str | Path) -> tuple[dict, str]:
     p = Path(path)
     try:
-        text = p.read_text(encoding="utf-8")
+        with open(p, encoding="utf-8") as f:
+            found, meta = _read_frontmatter(f)
+            if not found:
+                f.seek(0)
+                return {}, f.read()
+            body = f.read()
+            return meta, body
     except OSError as e:
         raise DataError(f"cannot read {p}: {e}") from e
-    return parse(text)
+
+
+def load_meta(path: str | Path) -> dict:
+    """Read just the frontmatter from a file without loading the body.
+    Significantly faster for metadata-only operations like scanning the vault."""
+    p = Path(path)
+    try:
+        with open(p, encoding="utf-8") as f:
+            _, meta = _read_frontmatter(f)
+            return meta
+    except OSError as e:
+        raise DataError(f"cannot read {p}: {e}") from e
 
 
 def dump(meta: dict, body: str) -> str:
@@ -69,9 +110,7 @@ def as_str(meta: dict, key: str, where: str = "frontmatter") -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise DataError(
-            f"{where}: '{key}' must be a string, got {type(value).__name__}"
-        )
+        raise DataError(f"{where}: '{key}' must be a string, got {type(value).__name__}")
     return value
 
 

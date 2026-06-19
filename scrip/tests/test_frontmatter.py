@@ -44,6 +44,36 @@ def test_load_missing_file_raises(tmp_path):
         frontmatter.load(tmp_path / "nope.md")
 
 
+def test_load_no_frontmatter_returns_whole_text(tmp_path):
+    path = tmp_path / "plain.md"
+    path.write_text("just a body\n", encoding="utf-8")
+
+    meta, body = frontmatter.load(path)
+
+    assert meta == {}
+    assert body == "just a body\n"
+
+
+def test_load_empty_frontmatter_strips_fences(tmp_path):
+    path = tmp_path / "empty.md"
+    path.write_text("---\n---\nbody\n", encoding="utf-8")
+
+    meta, body = frontmatter.load(path)
+
+    assert meta == {}
+    assert body == "body\n"
+
+
+def test_load_comment_only_frontmatter_strips_fences(tmp_path):
+    path = tmp_path / "comment.md"
+    path.write_text("---\n# intentionally empty\n---\nbody\n", encoding="utf-8")
+
+    meta, body = frontmatter.load(path)
+
+    assert meta == {}
+    assert body == "body\n"
+
+
 def test_dump_roundtrips_and_preserves_insertion_order():
     meta = {"id": "concept/x", "type": "wiki.concept", "derived-from": ["raw/a"]}
     text = frontmatter.dump(meta, "Body.\n")
