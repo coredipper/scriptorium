@@ -157,6 +157,47 @@ def test_answer_reads_relevant_wiki_pages_as_context(tmp_path):
     answer_question(root, "What about compiled knowledge?", draft_fn=stub)
 
 
+def test_answer_falls_back_to_raw_when_only_wiki_context_matches(tmp_path):
+    root = _vault(tmp_path)
+    raw_text = "# Topic\n\nCompiled knowledge compounds over time.\n"
+    _raw(root, "topic", raw_text)
+    ih = hashing.input_hash({"raw/topic": hashing.sha256_bytes(raw_text.encode("utf-8"))})
+    for i in range(4):
+        meta = {
+            "id": f"concept/context-{i}",
+            "type": "wiki.concept",
+            "title": "Compiled knowledge",
+            "derived-from": ["raw/topic"],
+            "input-hash": ih,
+            "last-compiled": "2026-01-01T00:00:00Z",
+            "confidence": 0.9,
+        }
+        page = root / "vault" / "wiki" / "concepts" / f"context-{i}.md"
+        page.write_text(
+            frontmatter.dump(meta, "Compiled knowledge is useful context.\n"),
+            encoding="utf-8",
+        )
+
+    def stub(question, *, evidence):
+        assert len(evidence["wiki_pages"]) == 4  # context found
+        assert evidence["claims"] == []  # but no citable compiled facts
+        assert evidence["raw_blocks"]  # so raw search still runs
+        return DraftAnswer(
+            body="Compiled knowledge compounds over time.[^a1]",
+            citations=[
+                AnswerCitation(
+                    marker="a1",
+                    kind="raw",
+                    source_id="raw/topic",
+                    quote="Compiled knowledge compounds over time.",
+                )
+            ],
+        )
+
+    result = answer_question(root, "compiled knowledge", draft_fn=stub, k=4)
+    assert "[^a1]: anchor=raw/topic#qh:" in result["answer"]
+
+
 def test_answer_refuses_stale_artifacts_before_model_call(tmp_path):
     root = _vault(tmp_path)
     _raw(root, "topic", "# Topic\n\nCached answers avoid recomputing work.\n")

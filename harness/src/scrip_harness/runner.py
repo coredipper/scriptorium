@@ -370,7 +370,11 @@ def _gather_answer_evidence(
     pages = _read_wiki_pages(root, question, k)
 
     raw_blocks: list[dict] = []
-    if len(ranked_claims) + len(pages) < min_compiled:
+    # Wiki pages are context-only: the model may read them, but final citations
+    # must be claim ids or raw quotes. Do not let non-citable page context satisfy
+    # the fallback threshold, or a wiki-heavy/facts-light vault dead-ends with no
+    # raw evidence the answer can legally cite.
+    if len(ranked_claims) < min_compiled:
         _, search = _scrip_json(
             scrip_cmd,
             ["search", question, "-k", str(k), "--json", "--root", str(root)],
