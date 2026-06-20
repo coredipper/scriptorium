@@ -23,6 +23,11 @@ seams.
   to grep when the extra is not installed. The contract is unchanged — embeddings
   are a cache for *finding* sources, never the source of truth.
 
+- **pageindex/** — planned long-document retrieval adapter. PageIndex should be a
+  regenerable cache under `.kb/pageindex/`, fingerprinted by `raw/` content
+  hashes, and any final citation must still be minted by `scrip anchor` against
+  canonical `vault/raw/` text. See `docs/pageindex-adapter.md`.
+
 - **lock/** — multi-writer coordination (`.kb/lock`, advisory). v0 is single-writer
   (one agent). Needed before concurrent agents maintain the same vault.
 

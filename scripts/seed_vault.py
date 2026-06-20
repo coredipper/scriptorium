@@ -325,6 +325,21 @@ EDGES = [
     {"src": "concept/the-answer-ladder", "dst": "concept/compilation-over-retrieval", "kind": "builds-on"},
 ]
 
+RECONCILIATIONS = [
+    {
+        "reconciliation_id": "rec_0001",
+        "decision": "qualify",
+        "claim_a": "clm_0007",
+        "claim_b": "clm_0009",
+        "rationale": (
+            "Preserve both claims with the qualifying caveat in clm_0010: naive "
+            "fixed-size chunking can discard document structure, while the "
+            "practical retrieval impact depends on chunk size and reranking."
+        ),
+        "at": "2026-06-07T10:00:00Z",
+    }
+]
+
 
 def write_ndjson(path: Path, rows: list[dict]) -> None:
     path.write_text(
@@ -375,6 +390,7 @@ def main() -> None:
     write_ndjson(FACTS / "claims.ndjson", claim_rows)
     write_ndjson(FACTS / "entities.ndjson", ENTITIES)
     write_ndjson(FACTS / "graph.ndjson", EDGES)
+    write_ndjson(FACTS / "reconciliations.ndjson", RECONCILIATIONS)
 
     # facts-set frontmatter (unstamped; scrip stamp fills input-hash)
     (FACTS / "_meta.yaml").write_text(
@@ -383,7 +399,12 @@ def main() -> None:
                 "id": "facts/core",
                 "type": "facts.set",
                 "derived-from": [f"raw/{slug}" for slug in SOURCES],
-                "members": ["facts/entities.ndjson", "facts/claims.ndjson", "facts/graph.ndjson"],
+                "members": [
+                    "facts/entities.ndjson",
+                    "facts/claims.ndjson",
+                    "facts/graph.ndjson",
+                    "facts/reconciliations.ndjson",
+                ],
                 "confidence": 0.85,
             },
             sort_keys=False, allow_unicode=True,
@@ -416,8 +437,9 @@ def main() -> None:
     )
     (WIKI / "log.md").write_text(
         f"# Log\n\n- 2026-06-07 — seeded vault from {len(SOURCES)} reading notes; "
-        f"compiled {len(WIKI_PAGES)} wiki pages and {len(claim_rows)} claims "
-        f"(incl. a contradiction pair reconciled with a 'qualifies' claim).\n",
+        f"compiled {len(WIKI_PAGES)} wiki pages and {len(claim_rows)} claims; "
+        "reconciled the fixed-size chunking contradiction as `qualify` in "
+        "`facts/reconciliations.ndjson`, with `clm_0010` carrying the caveat.\n",
         encoding="utf-8",
     )
     print(f"seeded {len(SOURCES)} sources, {len(WIKI_PAGES)} wiki pages, "

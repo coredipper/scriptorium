@@ -1,0 +1,72 @@
+"""Deterministic pieces of the ANSWER loop: evidence formatting, structured
+answer schema, and prompt construction. No network and no scrip subprocesses
+here; runner.py owns orchestration and verification."""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+ANSWER_SYSTEM = (
+    "You are the scribe for a scriptorium knowledge base answering a user's "
+    "question from bounded evidence.\n"
+    "Rules:\n"
+    "- Use only the evidence provided. If it is insufficient, say what is missing.\n"
+    "- Every factual sentence must carry a footnote marker ([^a1], [^a2], ...) "
+    "whose citation record points to either an existing claim id or a raw source "
+    "quote copied verbatim from the evidence.\n"
+    "- Keep the body free of footnote definitions; the harness mints and appends "
+    "verified definitions after your draft.\n"
+    "- Do not cite wiki pages directly. They are context; final citations must be "
+    "claim ids or raw quotes."
+)
+
+
+class AnswerCitation(BaseModel):
+    marker: str
+    """Footnote marker label, e.g. a1."""
+    kind: Literal["claim", "raw"]
+    claim_id: str = ""
+    """Existing claim id when kind == claim."""
+    source_id: str = ""
+    """Raw source id when kind == raw, e.g. raw/paper."""
+    quote: str = ""
+    """Verbatim raw-source quote when kind == raw."""
+
+
+class DraftAnswer(BaseModel):
+    body: str
+    """Markdown answer body containing footnote markers [^a1], [^a2], ..."""
+    citations: list[AnswerCitation] = Field(default_factory=list)
+
+
+def _compact_json(obj) -> str:
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+
+
+def build_answer_prompt(question: str, evidence: dict) -> str:
+    """Prompt the model with a compact, explicit evidence packet."""
+    return (
+        "Answer the question using only this evidence packet. Cite every factual "
+        "sentence with [^a1], [^a2], ... and return matching citation records.\n\n"
+        f"QUESTION:\n{question}\n\n"
+        "EVIDENCE JSON:\n"
+        f"{_compact_json(evidence)}"
+    )
+
+
+_WORD = re.compile(r"\w+")
+
+
+def tokenize(text: str) -> set[str]:
+    return {w.lower() for w in _WORD.findall(text)}
+
+
+def overlap_score(question: str, text: str) -> int:
+    q = tokenize(question)
+    if not q:
+        return 0
+    return sum(1 for w in tokenize(text) if w in q)

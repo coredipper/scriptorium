@@ -58,6 +58,23 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
    id in `supersedes`, delete the absorbed page, then `scrip stamp` + `scrip
    verify`. `--dry-run` prints the decision and mutates nothing.
 
+## How an answer runs
+
+`scrip-harness answer "question"` makes the ANSWER rung executable:
+
+1. **Preflight** — `scrip status`, `scrip verify`, and `scrip query
+   contradictions` must be clean by default. Stale artifacts, broken anchors, or
+   open contradiction pairs stop the answer before any model call.
+2. **Gather** — the harness ranks claims from `facts/`, reads relevant compiled
+   wiki pages as context, and falls back to `scrip search` when compiled evidence
+   is thin.
+3. **Draft** — Claude answers from that bounded evidence packet and returns
+   structured citation records: either an existing `claim_id` or a verbatim raw
+   quote.
+4. **Verify citations** — claim citations are resolved with `scrip span`; raw
+   quotes are minted with `scrip anchor`. Unsupported citations fail the answer.
+   `--save` writes a verified note under `wiki/explorations/`.
+
 ## How a reconcile runs
 
 `scrip-harness reconcile` (over every open contradiction):
@@ -87,6 +104,7 @@ export ANTHROPIC_API_KEY=...              # the harness calls Claude; scrip neve
 
 scrip-harness compile article            # synthesize + verify a page from raw/article
 scrip-harness extract article            # pull claims into facts/
+scrip-harness answer "What does the corpus say about caching?"
 scrip ingest <url> --slug article        # bring a source in (needs the install above)
 ```
 
@@ -105,10 +123,11 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 ## Scope & limits (v1)
 
 - Covers **COMPILE** (one source → one wiki page), **EXTRACT** (one source →
-  claims in `facts/`, with the bounded quote-retry loop), **PROMOTE** (score →
-  merge/keep, model only in the middle band), and **RECONCILE** (adjudicate every
-  contradiction → record the decision). Entities/edges go through `scrip fact add
-  --table entities|edges` by hand.
+  claims in `facts/`, with the bounded quote-retry loop), **ANSWER** (fresh
+  compiled evidence first, raw search on miss, verified citations), **PROMOTE**
+  (score → merge/keep, model only in the middle band), and **RECONCILE**
+  (adjudicate every contradiction → record the decision). Entities/edges go
+  through `scrip fact add --table entities|edges` by hand.
 - Single source per page/extract; merge is **append** (not re-synthesis).
   `reconcile` records the decision (supersede/qualify/keep-both); for a
   **qualify**, authoring the nuancing `polarity: qualifies` claim + the page

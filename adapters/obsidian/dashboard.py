@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scrip import anchors, graph
+from scrip import anchors, graph, query
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def main() -> None:
     st = graph.compute_status(ROOT, use_cache=False)
     vf = anchors.verify_vault(ROOT)
+    _, contradictions = query.run(ROOT, name="contradictions")
 
     out: list[str] = [
         "# Vault status",
@@ -33,6 +34,7 @@ def main() -> None:
         f"{len(st['uncompiled'])} uncompiled source(s)",
         f"- **Citations:** {vf['ok']}/{vf['checked']} resolve · "
         f"{len(vf['ambiguous'])} ambiguous · {len(vf['broken'])} broken",
+        f"- **Contradictions:** {len(contradictions)} open",
         "",
     ]
 
@@ -53,6 +55,15 @@ def main() -> None:
             out.append(f"- {b['where']} → `{b['source_id']}`")
         out.append("")
 
+    if contradictions:
+        out += ["## ⚠️ Open contradictions", ""]
+        for c in contradictions:
+            out.append(
+                f"- `{c['claim_a']}` vs `{c['claim_b']}` — "
+                f"{c['subject']} / {c['predicate']}"
+            )
+        out.append("")
+
     out += ["## ✅ Fresh artifacts", ""]
     for o in st["ok"]:
         slug = o["id"].split("/")[-1]
@@ -69,7 +80,8 @@ def main() -> None:
     target.write_text("\n".join(out), encoding="utf-8")
     print(
         f"wrote {target.relative_to(ROOT)} — "
-        f"{len(st['ok'])} OK, {len(st['stale'])} stale, {len(vf['broken'])} broken citations"
+        f"{len(st['ok'])} OK, {len(st['stale'])} stale, "
+        f"{len(vf['broken'])} broken citations, {len(contradictions)} contradictions"
     )
 
 

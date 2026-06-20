@@ -4,6 +4,7 @@
 
 - **Artifacts:** 6 OK · 0 stale · 0 uncompiled source(s)
 - **Citations:** 17/17 resolve · 0 ambiguous · 0 broken
+- **Contradictions:** 0 open
 
 ## ✅ Fresh artifacts
 

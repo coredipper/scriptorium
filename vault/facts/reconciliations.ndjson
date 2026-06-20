@@ -1,0 +1,1 @@
+{"reconciliation_id":"rec_0001","decision":"qualify","claim_a":"clm_0007","claim_b":"clm_0009","rationale":"Preserve both claims with the qualifying caveat in clm_0010: naive fixed-size chunking can discard document structure, while the practical retrieval impact depends on chunk size and reranking.","at":"2026-06-07T10:00:00Z"}

@@ -10,10 +10,12 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 
 from scrip import frontmatter  # reuse the deterministic frontmatter helper
 
+from .answer import DraftAnswer, overlap_score
 from .compile import DraftPage, assemble_body, extract_markers
 from .extract import DraftExtraction, to_ndjson
 from .promote import PromotionDecision, merge_bodies
@@ -23,6 +25,7 @@ DraftFn = Callable[..., DraftPage]
 ExtractDraftFn = Callable[..., DraftExtraction]
 DecideFn = Callable[..., PromotionDecision]  # (candidate_text, candidates) -> decision
 ReconcileDecideFn = Callable[..., ReconciliationDecision]  # (pair, span_a, span_b) -> decision
+AnswerDraftFn = Callable[..., DraftAnswer]  # (question, evidence=...) -> draft answer
 
 # Drive scriptoria through the *running interpreter*, not a bare `scrip` on PATH:
 # `uv tool install scrip-harness` installs scriptoria into the harness's own
@@ -52,6 +55,11 @@ class PromoteError(RuntimeError):
 class ReconcileError(RuntimeError):
     """A reconcile step failed (a scrip command erred, or the model returned an
     invalid decision such as supersede without a winner)."""
+
+
+class AnswerError(RuntimeError):
+    """An answer step failed (the vault is not green, evidence/citations are
+    invalid, or the model returned unsupported citations)."""
 
 
 def _scrip(
@@ -255,6 +263,325 @@ def _append_log(root: Path, line: str) -> None:
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "a", encoding="utf-8") as f:
         f.write(line.rstrip() + "\n")
+
+
+def _scrip_json(
+    scrip_cmd: Sequence[str],
+    args: list[str],
+    *,
+    error_cls: type[RuntimeError],
+    ok: set[int] | None = None,
+) -> tuple[int, object]:
+    ok = ok or {0}
+    r = _scrip(scrip_cmd, args)
+    if r.returncode not in ok:
+        raise error_cls(
+            f"scrip {' '.join(args[:2])} failed (exit {r.returncode}): "
+            f"{r.stderr.strip() or r.stdout.strip()}"
+        )
+    try:
+        return r.returncode, json.loads(r.stdout or "null")
+    except json.JSONDecodeError as e:
+        raise error_cls(
+            f"could not parse scrip {' '.join(args[:2])} output: {e}\n{r.stdout}"
+        ) from e
+
+
+def _slugify(s: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+    return (slug or "answer")[:60].strip("-") or "answer"
+
+
+def _read_wiki_pages(root: Path, question: str, top: int) -> list[dict]:
+    pages: list[dict] = []
+    wd = root / "vault" / "wiki"
+    if not wd.is_dir():
+        return pages
+    for path in sorted(wd.rglob("*.md")):
+        if path.name in {"index.md", "log.md"} or path.name.startswith("_"):
+            continue
+        try:
+            meta, body = frontmatter.load(path)
+        except Exception:  # noqa: BLE001 - malformed pages are caught by scrip status/verify
+            continue
+        text = body.strip()
+        title = str(meta.get("title") or path.stem) if meta else path.stem
+        score = overlap_score(question, f"{title} {text}")
+        if score <= 0:
+            continue
+        pages.append(
+            {
+                "ref": str(path.relative_to(root)),
+                "id": meta.get("id") if meta else None,
+                "title": title,
+                "excerpt": text[:1200],
+                "score": score,
+            }
+        )
+    pages.sort(key=lambda p: (-p["score"], p["ref"]))
+    return pages[:top]
+
+
+def _rank_claims(question: str, claims: list[dict], top: int) -> list[dict]:
+    ranked: list[dict] = []
+    for rec in claims:
+        tags = rec.get("tags") or []
+        text = " ".join(
+            str(rec.get(k) or "")
+            for k in ("claim_text", "subject", "predicate", "object", "source_id")
+        )
+        text += " " + " ".join(str(t) for t in tags)
+        score = overlap_score(question, text)
+        if score <= 0:
+            continue
+        ranked.append(
+            {
+                "ref": rec.get("claim_id"),
+                "source_id": rec.get("source_id"),
+                "text": rec.get("claim_text"),
+                "triple": [rec.get("subject"), rec.get("predicate"), rec.get("object")],
+                "polarity": rec.get("polarity"),
+                "tags": tags,
+                "score": score,
+            }
+        )
+    ranked.sort(key=lambda c: (-c["score"], str(c["ref"])))
+    return ranked[:top]
+
+
+def _gather_answer_evidence(
+    root: Path,
+    question: str,
+    *,
+    scrip_cmd: Sequence[str],
+    k: int,
+    min_compiled: int,
+) -> dict:
+    claims: list[dict] = []
+    if (root / "vault" / "facts" / "claims.ndjson").exists():
+        _, rows = _scrip_json(
+            scrip_cmd,
+            ["query", "claims", "--json", "--root", str(root)],
+            error_cls=AnswerError,
+        )
+        assert isinstance(rows, list)
+        claims = rows
+    ranked_claims = _rank_claims(question, claims, k)
+    pages = _read_wiki_pages(root, question, k)
+
+    raw_blocks: list[dict] = []
+    if len(ranked_claims) + len(pages) < min_compiled:
+        _, search = _scrip_json(
+            scrip_cmd,
+            ["search", question, "-k", str(k), "--json", "--root", str(root)],
+            error_cls=AnswerError,
+        )
+        assert isinstance(search, dict)
+        raw_blocks = [
+            {
+                "ref": f"{r.get('source_id')}#{r.get('block_id')}",
+                "source_id": r.get("source_id"),
+                "snippet": r.get("snippet"),
+                "score": r.get("score"),
+                "method": r.get("method"),
+            }
+            for r in search.get("results", [])
+        ]
+
+    return {
+        "claims": ranked_claims,
+        "wiki_pages": pages,
+        "raw_blocks": raw_blocks,
+        "policy": {
+            "claim_citations": "cite by claim_id",
+            "raw_citations": "cite by source_id plus verbatim quote",
+            "wiki_pages": "context only; do not cite directly",
+        },
+    }
+
+
+def _answer_footnotes(
+    root: Path,
+    draft: DraftAnswer,
+    evidence: dict,
+    *,
+    scrip_cmd: Sequence[str],
+) -> list[str]:
+    markers = extract_markers(draft.body)
+    expected = [f"a{i}" for i in range(1, len(draft.citations) + 1)]
+    citation_markers = [c.marker for c in draft.citations]
+    if not draft.citations:
+        raise AnswerError("answer draft has no citations")
+    if markers != expected or citation_markers != expected:
+        raise AnswerError(
+            f"draft markers {markers} and citation records {citation_markers} "
+            f"must be exactly {expected}"
+        )
+
+    allowed_claims = {c["ref"] for c in evidence["claims"] if c.get("ref")}
+    allowed_sources = {
+        c["source_id"] for c in evidence["claims"] if c.get("source_id")
+    } | {
+        r["source_id"] for r in evidence["raw_blocks"] if r.get("source_id")
+    }
+
+    footnotes: list[str] = []
+    for c in draft.citations:
+        if c.kind == "claim":
+            if c.claim_id not in allowed_claims:
+                raise AnswerError(f"citation {c.marker} references ungathered claim {c.claim_id!r}")
+            _, span = _scrip_json(
+                scrip_cmd,
+                ["span", "--claim", c.claim_id, "--json", "--root", str(root)],
+                error_cls=AnswerError,
+                ok={0, 1},
+            )
+            assert isinstance(span, dict)
+            if span.get("status") != "OK":
+                raise AnswerError(
+                    f"claim citation {c.claim_id} did not resolve uniquely: {span.get('status')}"
+                )
+            text = str(span.get("text") or "")
+            label = text[:72].replace("\n", " ")
+            footnotes.append(
+                f'[^{c.marker}]: anchor={span["target"]} claim={c.claim_id}  "{label}"'
+            )
+        else:
+            if c.source_id not in allowed_sources:
+                raise AnswerError(f"citation {c.marker} references ungathered source {c.source_id!r}")
+            if not c.quote.strip():
+                raise AnswerError(f"citation {c.marker} has an empty raw quote")
+            r = _scrip(
+                scrip_cmd,
+                [
+                    "anchor",
+                    c.quote,
+                    "--source",
+                    c.source_id,
+                    "--label",
+                    c.marker,
+                    "--json",
+                    "--root",
+                    str(root),
+                ],
+            )
+            if r.returncode != 0:
+                raise AnswerError(
+                    f"raw citation {c.marker} did not resolve uniquely "
+                    f"(scrip anchor exit {r.returncode}): {c.quote!r}\n{r.stderr.strip()}"
+                )
+            footnotes.append(json.loads(r.stdout)["footnote"])
+    return footnotes
+
+
+def _unique_exploration_path(root: Path, question: str) -> Path:
+    base = _slugify(question)
+    d = root / "vault" / "wiki" / "explorations"
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{base}.md"
+    if not path.exists():
+        return path
+    for i in range(2, 1000):
+        candidate = d / f"{base}-{i}.md"
+        if not candidate.exists():
+            return candidate
+    raise AnswerError(f"too many saved answers for slug {base!r}")
+
+
+def answer_question(
+    root,
+    question: str,
+    *,
+    draft_fn: AnswerDraftFn,
+    scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
+    k: int = 6,
+    min_compiled: int = 4,
+    allow_stale: bool = False,
+    allow_open_contradictions: bool = False,
+    save: bool = False,
+) -> dict:
+    """Answer a question via the answer ladder and return ``{answer, evidence,
+    saved}``.
+
+    The vault must verify cleanly. Stale artifacts and open contradiction pairs
+    are refused by default. Model output is accepted only after every citation is
+    checked by `scrip span` or minted by `scrip anchor`.
+    """
+    root = Path(root)
+    if not question.strip():
+        raise AnswerError("question must not be empty")
+
+    status_rc, status = _scrip_json(
+        scrip_cmd,
+        ["status", "--json", "--root", str(root)],
+        error_cls=AnswerError,
+        ok={0, 1},
+    )
+    assert isinstance(status, dict)
+    if status_rc == 1 and not allow_stale:
+        stale = ", ".join(s["id"] for s in status.get("stale", []))
+        raise AnswerError(f"refusing to answer with stale artifact(s): {stale}")
+
+    verify_rc, verify = _scrip_json(
+        scrip_cmd,
+        ["verify", "--json", "--root", str(root)],
+        error_cls=AnswerError,
+        ok={0, 1},
+    )
+    assert isinstance(verify, dict)
+    if verify_rc != 0:
+        raise AnswerError(
+            f"refusing to answer with unresolved citations: "
+            f"{len(verify.get('broken', []))} broken, {len(verify.get('ambiguous', []))} ambiguous"
+        )
+
+    contradictions: list = []
+    if (root / "vault" / "facts" / "claims.ndjson").exists():
+        _, rows = _scrip_json(
+            scrip_cmd,
+            ["query", "contradictions", "--json", "--root", str(root)],
+            error_cls=AnswerError,
+        )
+        assert isinstance(rows, list)
+        contradictions = rows
+    if contradictions and not allow_open_contradictions:
+        raise AnswerError(
+            f"refusing to answer with {len(contradictions)} open contradiction(s); "
+            "run scrip-harness reconcile or pass allow_open_contradictions"
+        )
+
+    evidence = _gather_answer_evidence(
+        root, question, scrip_cmd=scrip_cmd, k=k, min_compiled=min_compiled
+    )
+    if not (evidence["claims"] or evidence["wiki_pages"] or evidence["raw_blocks"]):
+        raise AnswerError("no relevant compiled or raw evidence found")
+
+    draft = draft_fn(question, evidence=evidence)
+    footnotes = _answer_footnotes(root, draft, evidence, scrip_cmd=scrip_cmd)
+    answer = draft.body.rstrip() + "\n\n" + "\n".join(footnotes) + "\n"
+
+    saved_path = None
+    if save:
+        path = _unique_exploration_path(root, question)
+        created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        body = (
+            "---\n"
+            f"query: {json.dumps(question, ensure_ascii=False)}\n"
+            f"answered-at: {created}\n"
+            "---\n\n"
+            f"{answer}"
+        )
+        path.write_text(body, encoding="utf-8")
+        # Saved explorations live under wiki/, so prove the minted footnotes keep
+        # vault-wide verification green before reporting success.
+        r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
+        if r.returncode != 0:
+            path.unlink(missing_ok=True)
+            raise AnswerError(f"scrip verify failed after saving answer:\n{r.stdout}{r.stderr}")
+        saved_path = str(path.relative_to(root))
+        _append_log(root, f"- ANSWER: saved {saved_path} for {question!r}")
+
+    return {"answer": answer, "evidence": evidence, "saved": saved_path}
 
 
 def promote_page(

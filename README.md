@@ -29,6 +29,7 @@ SPEC.md         the technology-agnostic file contract (the durable artifact)
 RATIONALE.md    why this beats compile-only / cache-only / retrieve-only
 AGENT.md        the protocol the maintaining agent follows
 HOWTO.md        practical day-to-day operator guide (start here to *use* it)
+docs/           comparisons and adapter design notes
 vault/          a real, dogfooded instance (reading notes on the 3 designs above)
   raw/          immutable sources (+ .meta.yaml sidecars)
   facts/        structured extractions, queryable as data (NDJSON)
@@ -40,6 +41,10 @@ adapters/       deferred bindings (Obsidian, embeddings) — see adapters/README
 ```
 
 The contract is the point; `scrip` and `vault/` are one conforming instance of it.
+For adjacent systems and tradeoffs, see **[docs/comparisons.md](docs/comparisons.md)**.
+For a concrete PageIndex integration sketch, see
+**[docs/pageindex-adapter.md](docs/pageindex-adapter.md)**. The current
+improvement plan lives in **[docs/roadmap.md](docs/roadmap.md)**.
 
 **Want to actually use it day to day?** See **[HOWTO.md](HOWTO.md)**.
 
@@ -111,13 +116,16 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 **Latest release: v0.5** (see [CHANGELOG.md](CHANGELOG.md)) — **RECONCILE**:
 `scrip span` reads both sides of a contradiction and `scrip-harness reconcile`
 adjudicates it, recording the decision append-only in
-`facts/reconciliations.ndjson`. With this the **whole maintaining loop is
-automated** — every [AGENT.md](AGENT.md) stage (**INGEST · COMPILE · EXTRACT ·
-ANSWER · PROMOTE · RECONCILE**) has a deterministic `scrip` primitive plus, where
-a model is involved, a runnable `scrip-harness` step. (0.4 added PROMOTE; 0.3
-added EXTRACT, a hardened CI/release pipeline, and published both packages to
-PyPI: `scriptoria`, the `scrip` CLI, and the optional
-[`scrip-harness`](harness/README.md).)
+`facts/reconciliations.ndjson`. With this the maintaining loop has runnable
+support end to end: every [AGENT.md](AGENT.md) stage (**INGEST · COMPILE ·
+EXTRACT · ANSWER · PROMOTE · RECONCILE**) has deterministic `scrip` primitives
+to branch on, and the model-bearing COMPILE / EXTRACT / ANSWER / PROMOTE /
+RECONCILE steps have bounded `scrip-harness` commands. This is still a reference
+implementation of a verifiable file contract, not a turnkey document-chat
+product: multi-source synthesis, rich chat UX, and long-document tree retrieval
+belong in adapters or higher-level tools. (0.4 added PROMOTE; 0.3 added EXTRACT,
+a hardened CI/release pipeline, and published both packages to PyPI:
+`scriptoria`, the `scrip` CLI, and the optional [`scrip-harness`](harness/README.md).)
 
 The contract is hardened (content-derived block ids, **SPEC v2**), with an
 advisory write lock, `scrip watch`, and an optional `[embeddings]` retrieval rung;

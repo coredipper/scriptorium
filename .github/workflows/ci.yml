@@ -46,6 +46,12 @@ jobs:
           uv run --locked --project scrip scrip status --root .
           uv run --locked --project scrip scrip verify --root .
           uv run --locked --project scrip scrip query --sql "SELECT count(*) AS claims FROM claims" --root .
+          contradictions="$(uv run --locked --project scrip scrip query contradictions --root . --json)"
+          test "$contradictions" = "[]" || {
+            echo "open contradiction(s) must be reconciled in facts/reconciliations.ndjson:"
+            echo "$contradictions"
+            exit 1
+          }
 
   lint:
     runs-on: ubuntu-latest
