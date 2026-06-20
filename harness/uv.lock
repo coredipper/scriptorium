@@ -559,7 +559,7 @@ dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "scriptoria"
-version = "0.5.1"
+version = "0.5.2"
 source = { directory = "../scrip" }
 dependencies = [
     { name = "duckdb" },
