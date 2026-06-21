@@ -26,6 +26,12 @@ from pathlib import Path
 
 import yaml
 
+# ⚡ Bolt: Use C-based PyYAML loader/dumper for ~6x faster parsing if available
+try:
+    from yaml import CSafeLoader as SafeLoader, CSafeDumper as SafeDumper
+except ImportError:
+    from yaml import SafeLoader, SafeDumper
+
 from . import anchors, facts_dir, lock
 from .errors import DataError, UsageError
 
@@ -337,7 +343,7 @@ def _load_meta(root: Path) -> dict:
             "confidence": 0.0,
         }
     try:
-        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        data = yaml.load(p.read_text(encoding="utf-8"), Loader=SafeLoader) or {}
     except yaml.YAMLError as e:
         raise DataError(f"invalid facts/_meta.yaml: {e}") from e
     if not isinstance(data, dict):
@@ -358,7 +364,7 @@ def _write_meta(root: Path, data: dict, new_sources: list[str]) -> None:
     # last-compiled is kept as the historical record of the last bless.
     data.pop("input-hash", None)
     (facts_dir(root) / "_meta.yaml").write_text(
-        yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        yaml.dump(data, Dumper=SafeDumper, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
 
 

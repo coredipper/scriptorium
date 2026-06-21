@@ -12,6 +12,12 @@ from pathlib import Path
 
 import yaml
 
+# ⚡ Bolt: Use C-based PyYAML loader/dumper for ~6x faster parsing if available
+try:
+    from yaml import CSafeLoader as SafeLoader, CSafeDumper as SafeDumper
+except ImportError:
+    from yaml import SafeLoader, SafeDumper
+
 from .errors import DataError
 
 FENCE = "---"
@@ -28,7 +34,7 @@ def parse(text: str) -> tuple[dict, str]:
             fm_text = "".join(lines[1:i])
             body = "".join(lines[i + 1 :])
             try:
-                meta = yaml.safe_load(fm_text)
+                meta = yaml.load(fm_text, Loader=SafeLoader)
             except yaml.YAMLError as e:
                 raise DataError(f"invalid YAML frontmatter: {e}") from e
             if meta is None:
@@ -53,7 +59,7 @@ def _read_frontmatter(f) -> tuple[bool, dict]:
         raise DataError("unterminated frontmatter (missing closing '---')")
 
     try:
-        meta = yaml.safe_load("".join(fm_lines))
+        meta = yaml.load("".join(fm_lines), Loader=SafeLoader)
     except yaml.YAMLError as e:
         raise DataError(f"invalid YAML frontmatter: {e}") from e
     if meta is None:
@@ -92,7 +98,7 @@ def load_meta(path: str | Path) -> dict:
 def dump(meta: dict, body: str) -> str:
     """Serialize back to a frontmatter document. Insertion order is preserved
     (``sort_keys=False``) so files diff cleanly."""
-    fm = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).rstrip("\n")
+    fm = yaml.dump(meta, Dumper=SafeDumper, sort_keys=False, allow_unicode=True).rstrip("\n")
     return f"{FENCE}\n{fm}\n{FENCE}\n{body}"
 
 
