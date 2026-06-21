@@ -14,9 +14,9 @@ import yaml
 
 # ⚡ Bolt: Use C-based PyYAML loader/dumper for ~6x faster parsing if available
 try:
-    from yaml import CSafeLoader as SafeLoader, CSafeDumper as SafeDumper
+    from yaml import CSafeLoader as SafeLoader
 except ImportError:
-    from yaml import SafeLoader, SafeDumper
+    from yaml import SafeLoader
 
 from .errors import DataError
 
@@ -98,7 +98,7 @@ def load_meta(path: str | Path) -> dict:
 def dump(meta: dict, body: str) -> str:
     """Serialize back to a frontmatter document. Insertion order is preserved
     (``sort_keys=False``) so files diff cleanly."""
-    fm = yaml.dump(meta, Dumper=SafeDumper, sort_keys=False, allow_unicode=True).rstrip("\n")
+    fm = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).rstrip("\n")
     return f"{FENCE}\n{fm}\n{FENCE}\n{body}"
 
 

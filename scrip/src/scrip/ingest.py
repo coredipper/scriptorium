@@ -25,12 +25,6 @@ from urllib.parse import urlparse
 
 import yaml
 
-# ⚡ Bolt: Use C-based PyYAML loader/dumper for ~6x faster parsing if available
-try:
-    from yaml import CSafeLoader as SafeLoader, CSafeDumper as SafeDumper
-except ImportError:
-    from yaml import SafeLoader, SafeDumper
-
 from . import raw_dir
 from .errors import DataError, UsageError
 
@@ -263,6 +257,6 @@ def write_source(root: Path, slug: str, text: str, meta: dict, *, overwrite: boo
             f"pass --reingest to replace it as a tracked re-ingest"
         ) from None
     (rd / f"{slug}.meta.yaml").write_text(
-        yaml.dump(meta, Dumper=SafeDumper, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        yaml.safe_dump(meta, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
     return {"id": f"raw/{slug}", "path": str(md.relative_to(root))}

@@ -28,9 +28,9 @@ import yaml
 
 # ⚡ Bolt: Use C-based PyYAML loader/dumper for ~6x faster parsing if available
 try:
-    from yaml import CSafeLoader as SafeLoader, CSafeDumper as SafeDumper
+    from yaml import CSafeLoader as SafeLoader
 except ImportError:
-    from yaml import SafeLoader, SafeDumper
+    from yaml import SafeLoader
 
 from . import anchors, facts_dir, lock
 from .errors import DataError, UsageError
@@ -364,7 +364,7 @@ def _write_meta(root: Path, data: dict, new_sources: list[str]) -> None:
     # last-compiled is kept as the historical record of the last bless.
     data.pop("input-hash", None)
     (facts_dir(root) / "_meta.yaml").write_text(
-        yaml.dump(data, Dumper=SafeDumper, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
 
 
