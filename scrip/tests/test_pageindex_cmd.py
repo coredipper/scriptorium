@@ -114,15 +114,61 @@ def test_pageindex_search_reuses_cached_verbatim_snippet(kb, monkeypatch):
     assert "fabricated summary" not in json.dumps(out)
 
 
-def test_pageindex_cache_reports_stale_after_raw_change(kb, monkeypatch):
+def test_pageindex_cache_revalidates_snippets_after_raw_change(kb, monkeypatch):
+    _fake_backend(monkeypatch)
+    kb.add_raw("paper", "# Paper\n\nAlpha section explains caching.\n")
+    pageindex_adapter.build_index(kb.root, "paper")
+    kb.mutate_raw("paper", "# Paper\n\nNew intro.\n\nAlpha section explains caching.\n")
+
+    out = pageindex_adapter.search(kb.root, "Alpha")
+    assert out is not None
+    assert out["stale_index"] is True
+    assert out["results"][0]["snippet"] == "Alpha section explains caching."
+
+
+def test_pageindex_cache_drops_stale_snippets_absent_from_raw(kb, monkeypatch):
     _fake_backend(monkeypatch)
     kb.add_raw("paper", "# Paper\n\nAlpha section explains caching.\n")
     pageindex_adapter.build_index(kb.root, "paper")
     kb.mutate_raw("paper", "# Paper\n\nAlpha section changed completely.\n")
 
-    out = pageindex_adapter.search(kb.root, "Alpha")
+    assert pageindex_adapter.search(kb.root, "Alpha") is None
+    out = retrieval.search(kb.root, "Alpha", long_docs="pageindex")
+    assert out["method"] == "grep"
+    assert "changed completely" in out["results"][0]["snippet"]
+
+
+def test_pageindex_lexical_fallback_uses_query_time_scores(kb, monkeypatch):
+    class RankedBuildBackend:
+        __version__ = "test"
+
+        def build_index(self, *, source_id, text):
+            alpha_start = text.index("Alpha Alpha section.")
+            beta_start = text.index("Beta section.")
+            return {
+                "sections": [
+                    {
+                        "section_id": "alpha",
+                        "span_hint": [alpha_start, alpha_start + len("Alpha Alpha section.")],
+                        "score": 1,
+                    },
+                    {
+                        "section_id": "beta",
+                        "span_hint": [beta_start, beta_start + len("Beta section.")],
+                        "score": 100,
+                    },
+                ]
+            }
+
+    monkeypatch.setattr(pageindex_adapter, "_get_backend", lambda: RankedBuildBackend())
+    kb.add_raw("paper", "# Paper\n\nAlpha Alpha section.\n\nBeta section.\n")
+    pageindex_adapter.build_index(kb.root, "paper")
+    monkeypatch.setattr(pageindex_adapter, "_get_backend", lambda: None)
+
+    out = pageindex_adapter.search(kb.root, "Alpha section")
     assert out is not None
-    assert out["stale_index"] is True
+    assert [r["section_id"] for r in out["results"]] == ["alpha", "beta"]
+    assert [r["score"] for r in out["results"]] == [3.0, 1.0]
 
 
 def test_search_long_docs_pageindex_falls_back_without_cache(kb):

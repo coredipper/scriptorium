@@ -275,7 +275,11 @@ def _load_cached(root: Path, source_id: str | None = None) -> tuple[list[dict], 
     base = _pageindex_dir(root)
     if not base.is_dir():
         return [], False
-    dirs = [_cache_dir(root, _source_id(source_id))] if source_id else sorted(p for p in base.iterdir() if p.is_dir())
+    dirs = (
+        [_cache_dir(root, _source_id(source_id))]
+        if source_id
+        else sorted(p for p in base.iterdir() if p.is_dir())
+    )
     items: list[dict] = []
     stale = False
     for d in dirs:
@@ -291,16 +295,49 @@ def _load_cached(root: Path, source_id: str | None = None) -> tuple[list[dict], 
         if not isinstance(sid, str):
             continue
         try:
-            current = hashing.content_hash_file(_source_path(root, sid))
+            source_path = _source_path(root, sid)
+            current = hashing.content_hash_file(source_path)
+            text = source_path.read_text(encoding="utf-8")
         except DataError:
             stale = True
             continue
-        if meta.get("raw_content_hash") != current or meta.get("schema") != INDEX_SCHEMA:
+        if meta.get("schema") != INDEX_SCHEMA:
+            stale = True
+            continue
+        if meta.get("raw_content_hash") != current:
             stale = True
         vals = tree.get("items") if isinstance(tree, dict) else None
         if isinstance(vals, list):
-            items.extend(v for v in vals if isinstance(v, dict))
+            items.extend(_revalidate_cached_items(vals, source_id=sid, text=text))
     return items, stale
+
+
+def _revalidate_cached_items(raw_items: list, *, source_id: str, text: str) -> list[dict]:
+    items: list[dict] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        cached_source = item.get("source_id")
+        if isinstance(cached_source, str):
+            try:
+                if _source_id(cached_source) != source_id:
+                    continue
+            except DataError:
+                continue
+        snippet = item.get("snippet")
+        if not isinstance(snippet, str) or not snippet:
+            continue
+        start = text.find(snippet)
+        if start < 0:
+            continue
+        out = dict(item)
+        out["source_id"] = source_id
+        out["snippet"] = snippet
+        out["span_hint"] = [start, start + len(snippet)]
+        out["score"] = _float_score(item.get("score"), 0.0)
+        out["method"] = "pageindex"
+        items.append(out)
+    return items
 
 
 def _terms(query: str) -> list[str]:
@@ -316,7 +353,7 @@ def _lexical_rank(query: str, items: list[dict], k: int) -> list[dict]:
         if score <= 0:
             continue
         out = dict(item)
-        out["score"] = float(item.get("score") or score)
+        out["score"] = float(score)
         out["method"] = "pageindex"
         ranked.append(out)
     ranked.sort(key=lambda r: (-float(r["score"]), str(r.get("source_id")), str(r.get("section_id"))))
