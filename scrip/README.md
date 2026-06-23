@@ -29,8 +29,10 @@ uv run --project scrip scrip --help
 | `scrip fact add --table claims\|entities\|edges\|reconciliations` | Validate and append facts under the write lock; claims mint verified anchors, reconciliations mint ids/timestamps. |
 | `scrip span --claim <id>` | Resolve a claim anchor and print the cited span. |
 | `scrip similar --title ... --from ...` | Score overlap with existing wiki pages before PROMOTE. |
-| `scrip search "<question>"` | Retrieve source blocks for a miss; uses embeddings if an index exists, otherwise lexical grep. |
+| `scrip search "<question>"` | Retrieve source blocks for a miss; uses embeddings if an index exists, otherwise lexical grep. Add `--long-docs pageindex` to try the PageIndex cache first. |
 | `scrip index` | Build the optional embeddings index over `vault/raw/` when `scriptoria[embeddings]` is installed; otherwise exits cleanly and `search` falls back to grep. |
+| `scrip pageindex build raw/<slug>` | Build the optional PageIndex cache for one raw source when a compatible backend is importable; otherwise exits cleanly. |
+| `scrip pageindex search "<question>" [--source raw/<slug>]` | Search cached PageIndex sections, returning only snippets mapped back to canonical `vault/raw/` text. |
 | `scrip watch` / `scrip unlock` | Watch vault health in a poll loop; clear a stale advisory write lock. |
 
 Every command accepts `--root DIR` and `--json`.

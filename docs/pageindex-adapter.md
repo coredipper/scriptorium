@@ -1,7 +1,12 @@
-# PageIndex Adapter Design
+# PageIndex Adapter
 
-This is the intended adapter shape for long-document retrieval. It keeps
+This is the implemented adapter shape for long-document retrieval. It keeps
 PageIndex as a regenerable cache and keeps `vault/raw/` as the source of truth.
+
+The repo ships the `scrip` cache plumbing and CLI surface, not a vendored
+PageIndex dependency. If no importable backend is installed, the PageIndex
+commands exit cleanly and normal `scrip search` still falls back to
+embeddings/grep.
 
 ## Goals
 
@@ -28,6 +33,7 @@ PageIndex as a regenerable cache and keeps `vault/raw/` as the source of truth.
   "raw_content_hash": "sha256:...",
   "backend": "pageindex",
   "backend_version": "...",
+  "schema": 1,
   "created_at": "..."
 }
 ```
@@ -38,7 +44,7 @@ is a warning, not contract breakage.
 
 ## Commands
 
-Proposed commands:
+Implemented commands:
 
 ```sh
 scrip pageindex build raw/paper
@@ -46,9 +52,15 @@ scrip pageindex search "question" --source raw/paper
 scrip search "question" --long-docs pageindex
 ```
 
-The first two can live in an optional adapter module or separate package. The
-third should only call PageIndex when the adapter is installed and a usable cache
-exists; otherwise it should fall back to the current embeddings/grep path.
+`scrip pageindex build` builds `.kb/pageindex/<slug>/tree.json` and
+`.kb/pageindex/<slug>/meta.json` for one raw source. `scrip pageindex search`
+searches cached PageIndex sections directly. `scrip search --long-docs pageindex`
+tries that cache first and falls back to the current embeddings/grep path when
+no usable cache exists.
+
+The adapter looks for an importable backend named `pageindex` or `page_index`
+that exposes `build` or `build_index`; `search` is optional because cached
+records can still be ranked lexically.
 
 ## Evidence Contract
 
@@ -69,6 +81,10 @@ The important field is `snippet`: it must be copied from the canonical
 `vault/raw/` text, not from a lossy OCR/tree summary. Any final wiki citation or
 claim still goes through `scrip anchor` or `scrip fact add`, so a PageIndex
 mistake cannot become trusted provenance without resolving against raw text.
+
+Both build and search results are normalized back to cached raw-text snippets.
+Backend summaries or search records that cannot be mapped to a cached raw
+snippet are dropped.
 
 ## Non-Goals
 

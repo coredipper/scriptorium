@@ -78,6 +78,7 @@ scrip query claims --where "list_contains(tags, 'caching')"
 scrip query contradictions                     # opposing claims, by source
 scrip query --sql "SELECT subject, count(*) FROM claims GROUP BY 1"
 scrip search "what makes adding one document expensive?"   # rung 4 retrieval
+scrip search "where does the paper discuss failure modes?" --long-docs pageindex
 scrip-harness answer "what makes adding one document expensive?" --save
 ```
 
@@ -93,6 +94,7 @@ evidence is thin, and verifies every citation before printing or saving.
 | Add an article you read | `scrip ingest <url\|file>` (HTML/PDF need the `[ingest]` extra), then `scrip status --rebuild-manifest` |
 | Turn it into knowledge | ask the agent to *ingest + compile + extract* per AGENT.md |
 | Re-index for semantic search | `scrip index` (needs the `[embeddings]` extra) |
+| Build a long-document cache | `scrip pageindex build raw/<slug>` (optional PageIndex backend) |
 | Answer with verified citations | `scrip-harness answer "<question>" [--save]` |
 | See what needs recompiling | `scrip status` |
 | Prove citations still hold | `scrip verify` |

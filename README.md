@@ -37,12 +37,12 @@ vault/          a real, dogfooded instance (reading notes on the 3 designs above
 scrip/          the reference CLI: the deterministic keeper (Python, uv)
 harness/        optional LLM loop (scrip-harness): runnable COMPILE / EXTRACT / PROMOTE
 scripts/        seed_vault.py — reproducibly regenerates the example vault
-adapters/       deferred bindings (Obsidian, embeddings) — see adapters/README.md
+adapters/       deferred bindings (Obsidian, embeddings, PageIndex) — see adapters/README.md
 ```
 
 The contract is the point; `scrip` and `vault/` are one conforming instance of it.
 For adjacent systems and tradeoffs, see **[docs/comparisons.md](docs/comparisons.md)**.
-For a concrete PageIndex integration sketch, see
+For the optional PageIndex cache adapter, see
 **[docs/pageindex-adapter.md](docs/pageindex-adapter.md)**. The current
 improvement plan lives in **[docs/roadmap.md](docs/roadmap.md)**.
 
@@ -87,6 +87,19 @@ scrip index    # embeds vault/raw/ blocks into .kb/embeddings/ (regenerable cach
 scrip search "keeping citations trustworthy when sources change"
 ```
 
+### Optional: long-document retrieval
+
+When a compatible PageIndex backend is importable, build a per-source tree cache
+and ask `scrip search` to try it before embeddings/grep:
+
+```sh
+scrip pageindex build raw/the-paper
+scrip search "where does the paper discuss failure modes?" --long-docs pageindex
+```
+
+The cache is regenerable under `.kb/pageindex/`; returned snippets still have to
+map back to canonical `vault/raw/` text before they can become citations.
+
 The maintaining loop (for an agent or a human): **ingest** a source into `raw/`
 (`scrip ingest <url|file>` — extracts canonical text; HTML/PDF need the optional
 `[ingest]` extra, markdown/text need nothing), **compile** a page into `wiki/`
@@ -122,9 +135,9 @@ EXTRACT · ANSWER · PROMOTE · RECONCILE**) has deterministic `scrip` primitive
 to branch on, and the model-bearing COMPILE / EXTRACT / ANSWER / PROMOTE /
 RECONCILE steps have bounded `scrip-harness` commands. This is still a reference
 implementation of a verifiable file contract, not a turnkey document-chat
-product: multi-source synthesis, rich chat UX, and long-document tree retrieval
-belong in adapters or higher-level tools. (0.4 added PROMOTE; 0.3 added EXTRACT,
-a hardened CI/release pipeline, and published both packages to PyPI:
+product: multi-source synthesis, rich chat UX, and richer long-document
+workflows belong in adapters or higher-level tools. (0.4 added PROMOTE; 0.3
+added EXTRACT, a hardened CI/release pipeline, and published both packages to PyPI:
 `scriptoria`, the `scrip` CLI, and the optional [`scrip-harness`](harness/README.md).)
 
 The contract is hardened (content-derived block ids, **SPEC v2**), with an

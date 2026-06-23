@@ -33,15 +33,17 @@ It is tested with the same harness style as COMPILE/EXTRACT: model stubbed, real
 
 ## Phase 3 — PageIndex Adapter
 
-Status: designed in `docs/pageindex-adapter.md`.
+Status: initial implementation complete.
 
-Implement optional long-document retrieval without making PageIndex part of the
+Optional long-document retrieval is wired without making PageIndex part of the
 contract:
 
 - Store tree state under `.kb/pageindex/<slug>/`.
 - Fingerprint it with the current `raw/<slug>` content hash.
 - Return verbatim snippets from `vault/raw/`, not uncited summaries.
 - Keep `scrip status` and `scrip verify` independent of PageIndex.
+- Add `scrip pageindex build`, `scrip pageindex search`, and
+  `scrip search --long-docs pageindex`.
 
 ## Phase 4 — Product Boundary
 
