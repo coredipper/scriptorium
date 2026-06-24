@@ -1,31 +1,45 @@
 name: release
 
-# Publishes the `scriptoria` package (the `scrip` CLI) to PyPI when a v* tag is
-# pushed. Uses PyPI Trusted Publishing (OIDC) — configure a trusted publisher for
-# the `scriptoria` project on PyPI pointing at this repo + workflow, so no token
-# secret is stored here. (The `scrip-harness` package has its own `harness-v*`
-# path in release-harness.yml.)
+# Publishes the `scriptoria` package (the `scrip` CLI) to PyPI. Triggered MANUALLY
+# (workflow_dispatch) with the release tag as input: push the `v*` tag first, then
+# run this workflow against it — so a tag push never publishes on its own. Uses
+# PyPI Trusted Publishing (OIDC) — configure a trusted publisher for the
+# `scriptoria` project on PyPI pointing at this repo + workflow, so no token secret
+# is stored here. (The `scrip-harness` package has its own `harness-v*` path in
+# release-harness.yml.)
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build & publish (e.g. v0.6.0)"
+        required: true
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # The `pypi` GitHub Environment is the deploy-time protection hook — configure
-    # it in repo Settings → Environments with **required reviewers** (manual
-    # approval before each publish) and ideally a deployment-branch/tag rule
-    # (v* tags on the default branch). This is independent of PyPI's "(Any)"
-    # environment setting, which only scopes the OIDC token; the line below is
-    # what enforces the gate at deploy time, so keep it even with "(Any)".
+    # Keep the `pypi` GitHub Environment: the PyPI trusted publisher (OIDC) is bound
+    # to it, so removing it breaks publishing (it also scopes the OIDC token,
+    # independent of PyPI's "(Any)" setting). The publish is now gated by the manual
+    # workflow_dispatch above rather than running unattended on a tag push.
     environment: pypi
     permissions:
       contents: read # actions/checkout needs repo read access
       id-token: write # required for OIDC trusted publishing (uv publish auto-detects)
     steps:
+      # Defense-in-depth: workflow_dispatch inputs come from a maintainer (write
+      # access), but validate the tag's shape before it reaches `ref:` below — no
+      # spaces or shell metacharacters, and the expected `v…` prefix.
+      - name: Validate the release tag input
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          echo "$TAG" | grep -Eq '^v[0-9][0-9A-Za-z.+-]*$' \
+            || { echo "tag input must be 'v<version>' (no spaces/metacharacters); got '$TAG'"; exit 1; }
+
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.2.0
@@ -34,12 +48,14 @@ jobs:
         working-directory: scrip
         run: uv build
 
-      - name: Verify the tag matches the package version
+      - name: Verify the input tag matches the package version
         working-directory: scrip
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           pkg=$(uv version --short)
-          tag="${GITHUB_REF_NAME#v}"
-          test "$pkg" = "$tag" || { echo "tag v$tag != package $pkg"; exit 1; }
+          ver="${TAG#v}"
+          test "$pkg" = "$ver" || { echo "tag $TAG (version $ver) != package $pkg"; exit 1; }
 
       - name: Publish to PyPI (trusted publishing)
         working-directory: scrip
@@ -57,9 +73,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$TAG" \
             --repo "$REPO" \
-            --title "$GITHUB_REF_NAME" \
+            --title "$TAG" \
             --generate-notes \
             --verify-tag
