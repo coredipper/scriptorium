@@ -66,7 +66,8 @@ def test_compile_rejects_a_non_verbatim_quote(tmp_path):
         "# T\n\nThe actual content of the source.\n", encoding="utf-8"
     )
 
-    def stub(source_text, *, source_id):
+    def stub(source_text, *, source_id, failures=None):
+        # keeps proposing the absent quote through every retry → clean failure
         return DraftPage(
             title="T",
             body="A hallucinated claim.[^a1]\n",
@@ -159,3 +160,72 @@ def test_compile_rejects_unsafe_slug(tmp_path):
     with pytest.raises(CompileError):
         compile_page(root, "../../etc/passwd", draft_fn=stub)
     assert called is False  # rejected before reading any source or calling the model
+
+
+# --------------------------------------------------------------------------- #
+# The quote-retry loop (mirror of EXTRACT, but claims keep their marker slots)
+# --------------------------------------------------------------------------- #
+def test_compile_retries_a_failed_quote_then_compiles(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text(
+        "alpha beta. alpha beta. gamma delta is a unique closing sentence.\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def stub(source_text, *, source_id, failures=None):
+        calls.append(failures)
+        if failures is None:
+            # one good claim + one AMBIGUOUS claim ("alpha beta." appears twice)
+            return DraftPage(
+                title="Topic",
+                body="Unique fact.[^a1] Ambiguous fact.[^a2]\n",
+                claims=[
+                    DraftClaim(quote="gamma delta is a unique closing sentence."),
+                    DraftClaim(quote="alpha beta."),
+                ],
+            )
+        # asked to fix exactly the failing quote — one replacement, in order, the
+        # body/title are ignored on retry (only the corrected claim is used)
+        assert [f["status"] for f in failures] == ["AMBIGUOUS"]
+        assert failures[0]["index"] == 1  # the second claim is the one that failed
+        return DraftPage(
+            title="(ignored on retry)",
+            body="(ignored on retry)\n",
+            claims=[DraftClaim(quote="alpha beta. alpha beta.")],
+        )
+
+    page = compile_page(root, "topic", draft_fn=stub)
+    assert len(calls) == 2  # one draft + one targeted retry
+    text = page.read_text(encoding="utf-8")
+    # both markers minted against the source; the prose is the ORIGINAL draft body
+    assert "Unique fact.[^a1] Ambiguous fact.[^a2]" in text
+    assert "[^a1]: anchor=raw/topic#qh:" in text
+    assert "[^a2]: anchor=raw/topic#qh:" in text
+    assert (
+        subprocess.run(
+            [sys.executable, "-m", "scrip.cli", "verify", "--root", str(root)]
+        ).returncode
+        == 0
+    )
+
+
+def test_compile_fails_cleanly_after_retry_exhaustion(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text(
+        "# T\n\nThe only real text here.\n", encoding="utf-8"
+    )
+    calls = []
+
+    def stub(source_text, *, source_id, failures=None):
+        calls.append(failures)
+        return DraftPage(
+            title="T",
+            body="Claim.[^a1]\n",
+            claims=[DraftClaim(quote="a quote that is never present in the source")],
+        )
+
+    with pytest.raises(CompileError):
+        compile_page(root, "topic", draft_fn=stub, max_quote_retries=2)
+    assert len(calls) == 3  # initial draft + 2 bounded retries
+    assert not (root / "vault" / "wiki" / "concepts" / "topic.md").exists()

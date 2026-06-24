@@ -3,6 +3,7 @@ construction, and page-body assembly. No network, no scrip — unit-testable."""
 
 from __future__ import annotations
 
+import json
 import re
 
 from pydantic import BaseModel
@@ -60,6 +61,27 @@ def build_user_prompt(source_text: str) -> str:
         "claim-bearing sentence with a footnote marker [^a1], [^a2], … in order. "
         "Return one claim per marker (same order), each with a `quote` copied "
         "verbatim from the source.\n\n----- SOURCE -----\n" + source_text
+    )
+
+
+def build_retry_prompt(source_text: str, failures: list[dict]) -> str:
+    """Ask for a replacement for each failed quote, in the reported order. Unlike
+    EXTRACT, COMPILE keeps *every* claim — the body's ``[^a1]..[^aN]`` markers are
+    positional, so dropping one would misnumber the rest — hence there is no
+    empty-quote drop option: each failure needs a corrected verbatim quote."""
+    listing = "\n".join(
+        f"- status {f['status']}: {json.dumps(f.get('quote', ''), ensure_ascii=False)}"
+        f" ({f.get('detail', '')})"
+        for f in failures
+    )
+    return (
+        "Some quotes you proposed did not verify against the source: an AMBIGUOUS "
+        "quote appears more than once (lengthen it until unique); a BROKEN quote "
+        "is not present verbatim (re-copy it exactly).\n\n"
+        f"Failed quotes, in order:\n{listing}\n\n"
+        "Return exactly one replacement claim per failed quote, in the same order, "
+        "each with a corrected verbatim `quote`. Every claim must keep a supporting "
+        "quote.\n\n----- SOURCE -----\n" + source_text
     )
 
 

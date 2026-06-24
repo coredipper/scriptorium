@@ -77,12 +77,16 @@ def compile_page(
     kind: str = "concept",
     draft_fn: DraftFn,
     scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
+    max_quote_retries: int = 2,
 ) -> Path:
     """Compile ``raw/<slug>`` into ``wiki/<kind>s/<slug>.md`` and leave it green.
 
     ``draft_fn(source_text, source_id=...)`` returns a :class:`DraftPage` — inject
-    a stub in tests; production passes ``model.draft_page``. Raises
-    :class:`CompileError` if any quote fails to resolve or any scrip step errors,
+    a stub in tests; production passes ``model.draft_page``. On an AMBIGUOUS/BROKEN
+    quote it is called again with ``failures=[...]`` (one per failing claim, in
+    order) and must return one corrected claim per failure — the prose body is kept
+    from the first draft, so the ``[^a1]..[^aN]`` markers never move (COMPILE drops
+    nothing). Bounded by ``max_quote_retries``; then raises :class:`CompileError`,
     so a bad draft never produces a stamped-but-broken page."""
     root = Path(root)
     if not _SLUG_RE.fullmatch(slug):  # fullmatch: reject a trailing newline (match + $ would not)
@@ -109,20 +113,55 @@ def compile_page(
         )
 
     # Mint a verified anchor per claim. scrip anchor exits non-zero on a quote that
-    # is not present or not unique, so a hallucinated quote fails the compile here.
-    footnotes: list[str] = []
-    for i, claim in enumerate(draft.claims, 1):
-        r = _scrip(
-            scrip_cmd,
-            ["anchor", claim.quote, "--source", source_id, "--label", f"a{i}",
-             "--json", "--root", str(root)],
-        )
-        if r.returncode != 0:
-            raise CompileError(
-                f"claim {i} quote did not resolve uniquely (scrip anchor exit "
-                f"{r.returncode}): {claim.quote!r}\n{r.stderr.strip()}"
+    # is not present or not unique; instead of failing on the first, collect every
+    # failing claim (scrip anchor --json reports its BROKEN/AMBIGUOUS status even on
+    # exit 1), ask the model to correct exactly those — one per failure, in order —
+    # and re-mint. The body is fixed, so each corrected claim keeps its marker slot.
+    claims = list(draft.claims)
+    retries = 0
+    while True:
+        footnotes: list[str] = []
+        failures: list[dict] = []
+        for i, claim in enumerate(claims):
+            r = _scrip(
+                scrip_cmd,
+                ["anchor", claim.quote, "--source", source_id, "--label", f"a{i + 1}",
+                 "--json", "--root", str(root)],
             )
-        footnotes.append(json.loads(r.stdout)["footnote"])
+            if r.returncode == 0:
+                footnotes.append(json.loads(r.stdout)["footnote"])
+                continue
+            try:
+                status = json.loads(r.stdout).get("status", "BROKEN")
+            except json.JSONDecodeError:
+                status = "BROKEN"
+            failures.append(
+                {"index": i, "status": status, "quote": claim.quote,
+                 "detail": r.stderr.strip()}
+            )
+        if not failures:
+            break
+        if retries >= max_quote_retries:
+            detail = "; ".join(f"{f['status']} {f['quote']!r}" for f in failures)
+            raise CompileError(
+                f"{len(failures)} quote(s) still failed after {retries} retr"
+                f"{'y' if retries == 1 else 'ies'}: {detail}"
+            )
+        retries += 1
+        replacements = list(draft_fn(source_text, source_id=source_id, failures=failures).claims)
+        if len(replacements) != len(failures):
+            raise CompileError(
+                f"retry returned {len(replacements)} claim(s) for {len(failures)} "
+                f"failure(s) — must be one corrected claim per failure, in order"
+            )
+        for failure, replacement in zip(failures, replacements, strict=True):
+            if not replacement.quote.strip():
+                raise CompileError(
+                    "a retry replacement had an empty quote; COMPILE keeps every "
+                    "claim (the body's markers are positional) — correct the quote "
+                    "instead of dropping it"
+                )
+            claims[failure["index"]] = replacement
 
     r = _scrip(
         scrip_cmd,

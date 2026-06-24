@@ -7,6 +7,15 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Changed
+- **`scrip-harness compile` retries broken/ambiguous quotes** instead of failing
+  on the first one, matching the EXTRACT loop: a quote that does not anchor
+  uniquely goes back to the model for correction (one per failure, in order),
+  then re-mints — bounded by an internal retry limit before a clean failure that
+  leaves no stamped-but-broken page. Unlike EXTRACT, COMPILE keeps every claim —
+  the page body's `[^a1]..[^aN]` markers are positional — so a quote is corrected,
+  never dropped.
+
 ## [0.6.0] — 2026-06-24
 
 ANSWER joins the automated loop with a verified-citation harness, plus an

@@ -7,7 +7,7 @@ as a validated ``DraftPage`` rather than free text to scrape.
 from __future__ import annotations
 
 from .answer import ANSWER_SYSTEM, DraftAnswer, build_answer_prompt
-from .compile import SYSTEM, DraftPage, build_user_prompt
+from .compile import SYSTEM, DraftPage, build_retry_prompt, build_user_prompt
 from .extract import (
     EXTRACT_SYSTEM,
     DraftExtraction,
@@ -26,19 +26,27 @@ def draft_page(
     source_id: str,
     model: str = DEFAULT_MODEL,
     client=None,
+    failures: list[dict] | None = None,
 ) -> DraftPage:
     """Ask Claude to synthesize a concept page from ``source_text``. Returns a
-    validated :class:`DraftPage`. Lazily imports the SDK so the rest of the
+    validated :class:`DraftPage`. With ``failures`` (the per-claim anchor findings
+    from the mint loop), asks instead for one corrected claim per failure, in order
+    — the retry half of the compile loop. Lazily imports the SDK so the rest of the
     harness (and its tests) need no network or API key."""
     import anthropic
 
     client = client or anthropic.Anthropic()
+    prompt = (
+        build_user_prompt(source_text)
+        if failures is None
+        else build_retry_prompt(source_text, failures)
+    )
     resp = client.messages.parse(
         model=model,
         max_tokens=16000,
         thinking={"type": "adaptive"},
         system=SYSTEM,
-        messages=[{"role": "user", "content": build_user_prompt(source_text)}],
+        messages=[{"role": "user", "content": prompt}],
         output_format=DraftPage,
     )
     out = resp.parsed_output

@@ -206,8 +206,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 0
 
-    def draft_fn(text: str, *, source_id: str):
-        return model_mod.draft_page(text, source_id=source_id, model=chosen_model)
+    def draft_fn(text: str, *, source_id: str, failures=None):
+        return model_mod.draft_page(
+            text, source_id=source_id, model=chosen_model, failures=failures
+        )
 
     try:
         page = compile_page(root, args.slug, kind=args.kind, draft_fn=draft_fn)
