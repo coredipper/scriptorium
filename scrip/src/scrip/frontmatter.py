@@ -12,6 +12,11 @@ from pathlib import Path
 
 import yaml
 
+try:
+    from yaml import CSafeLoader as SafeLoader
+except ImportError:
+    from yaml import SafeLoader
+
 from .errors import DataError
 
 FENCE = "---"
@@ -28,7 +33,7 @@ def parse(text: str) -> tuple[dict, str]:
             fm_text = "".join(lines[1:i])
             body = "".join(lines[i + 1 :])
             try:
-                meta = yaml.safe_load(fm_text)
+                meta = yaml.load(fm_text, Loader=SafeLoader)
             except yaml.YAMLError as e:
                 raise DataError(f"invalid YAML frontmatter: {e}") from e
             if meta is None:
@@ -53,7 +58,7 @@ def _read_frontmatter(f) -> tuple[bool, dict]:
         raise DataError("unterminated frontmatter (missing closing '---')")
 
     try:
-        meta = yaml.safe_load("".join(fm_lines))
+        meta = yaml.load("".join(fm_lines), Loader=SafeLoader)
     except yaml.YAMLError as e:
         raise DataError(f"invalid YAML frontmatter: {e}") from e
     if meta is None:

@@ -13,6 +13,11 @@ from pathlib import Path
 
 import yaml
 
+try:
+    from yaml import CSafeLoader as SafeLoader
+except ImportError:
+    from yaml import SafeLoader
+
 from . import blocks as blocks_mod
 from . import facts_dir, frontmatter, hashing, raw_dir, wiki_dir
 from . import manifest as manifest_mod
@@ -92,7 +97,7 @@ def scan_derived(root: Path) -> dict:
     fmeta = facts_dir(root) / "_meta.yaml"
     if fmeta.exists():
         try:
-            data = yaml.safe_load(fmeta.read_text(encoding="utf-8"))
+            data = yaml.load(fmeta.read_text(encoding="utf-8"), Loader=SafeLoader)
         except yaml.YAMLError as e:
             raise DataError(f"invalid facts/_meta.yaml: {e}") from e
         if data is None:
@@ -246,7 +251,7 @@ def stamp_artifacts(root: Path, paths: list[str] | None = None) -> list[dict]:
         ih = hashing.input_hash(deps)
         path = root / d["path"]
         if path.name == "_meta.yaml":
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            data = yaml.load(path.read_text(encoding="utf-8"), Loader=SafeLoader) or {}
             data["input-hash"] = ih
             data["last-compiled"] = now
             path.write_text(

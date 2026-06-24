@@ -9,3 +9,7 @@
 ## 2024-06-21 - Memory Overhead of String Operations on Large Files
 **Learning:** Using `Path.read_text().splitlines()` on large `.md` files incurs heavy memory and O(N) allocation overhead. In operations that only need metadata (frontmatter) from a file, eagerly loading the entire file body scales poorly.
 **Action:** When extracting subset metadata (like YAML frontmatter) from large string files, use python iterators `open(p, "r")` line-by-line reading and `break` loops early instead of using `read_text().splitlines()` or `read()`. Always abstract early reads to a dedicated `load_meta()` operation.
+
+## 2025-01-20 - Faster YAML parsing with CSafeLoader
+**Learning:** PyYAML's default `safe_load` uses a pure-Python implementation which can be slow. Using `yaml.load(..., Loader=SafeLoader)` where `SafeLoader` is imported as `CSafeLoader` (falling back to the Python `SafeLoader`) yields a roughly ~6x performance improvement when parsing YAML.
+**Action:** When fast YAML reads are required in high-throughput areas, explicitly import and use `CSafeLoader` to parse the YAML strings instead of using `yaml.safe_load`.

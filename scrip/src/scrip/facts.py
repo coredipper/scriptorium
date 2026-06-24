@@ -26,6 +26,11 @@ from pathlib import Path
 
 import yaml
 
+try:
+    from yaml import CSafeLoader as SafeLoader
+except ImportError:
+    from yaml import SafeLoader
+
 from . import anchors, facts_dir, lock
 from .errors import DataError, UsageError
 
@@ -337,7 +342,7 @@ def _load_meta(root: Path) -> dict:
             "confidence": 0.0,
         }
     try:
-        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        data = yaml.load(p.read_text(encoding="utf-8"), Loader=SafeLoader) or {}
     except yaml.YAMLError as e:
         raise DataError(f"invalid facts/_meta.yaml: {e}") from e
     if not isinstance(data, dict):
