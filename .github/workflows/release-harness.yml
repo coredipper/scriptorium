@@ -1,28 +1,44 @@
 name: release-harness
 
-# Publishes the `scrip-harness` package to PyPI when a `harness-v*` tag is pushed
-# (the scriptoria CLI has its own `v*` path in release.yml). Uses PyPI Trusted
+# Publishes the `scrip-harness` package to PyPI. Triggered MANUALLY
+# (workflow_dispatch) with the release tag as input: push the `harness-v*` tag
+# first, then run this workflow against it — so a tag push never publishes on its
+# own. (The scriptoria CLI has its own `v*` path in release.yml.) Uses PyPI Trusted
 # Publishing (OIDC) — configure a trusted publisher for the `scrip-harness`
 # project on PyPI pointing at this repo + this workflow + the `pypi` environment,
 # so no token secret is stored here.
 
 on:
-  push:
-    tags:
-      - "harness-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build & publish (e.g. harness-v0.7.0)"
+        required: true
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Same deploy-time gate as scriptoria: the `pypi` GitHub Environment. Add
-    # required reviewers in repo Settings → Environments to make the publish
-    # manual-approval; it currently runs unattended.
+    # Keep the `pypi` GitHub Environment: the PyPI trusted publisher (OIDC) is bound
+    # to it, so removing it breaks publishing. The publish is now gated by the
+    # manual workflow_dispatch above rather than running unattended on a tag push.
     environment: pypi
     permissions:
       contents: read # actions/checkout needs repo read access
       id-token: write # required for OIDC trusted publishing (uv publish auto-detects)
     steps:
+      # Defense-in-depth: workflow_dispatch inputs come from a maintainer (write
+      # access), but validate the tag's shape before it reaches `ref:` below — no
+      # spaces or shell metacharacters, and the expected `harness-v…` prefix.
+      - name: Validate the release tag input
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          echo "$TAG" | grep -Eq '^harness-v[0-9][0-9A-Za-z.+-]*$' \
+            || { echo "tag input must be 'harness-v<version>' (no spaces/metacharacters); got '$TAG'"; exit 1; }
+
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.2.0
@@ -31,12 +47,14 @@ jobs:
         working-directory: harness
         run: uv build
 
-      - name: Verify the tag matches the package version
+      - name: Verify the input tag matches the package version
         working-directory: harness
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           pkg=$(uv version --short)
-          tag="${GITHUB_REF_NAME#harness-v}"
-          test "$pkg" = "$tag" || { echo "tag harness-v$tag != package $pkg"; exit 1; }
+          ver="${TAG#harness-v}"
+          test "$pkg" = "$ver" || { echo "tag $TAG (version $ver) != package $pkg"; exit 1; }
 
       # The dev path source (tool.uv.sources) must never reach the wheel: an
       # installed scrip-harness has to pull scriptoria from PyPI by version. Assert
@@ -68,9 +86,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$TAG" \
             --repo "$REPO" \
-            --title "$GITHUB_REF_NAME" \
+            --title "$TAG" \
             --generate-notes \
             --verify-tag
