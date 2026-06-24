@@ -23,6 +23,17 @@ def _resolve_root(root_arg: str | None) -> Path:
     raise SystemExit("scrip-harness: could not locate a scriptorium root; pass --root")
 
 
+def _normalize_sources(raw: str) -> list[str]:
+    """Split a comma-separated ``--from`` value into normalized ``raw/<slug>`` ids:
+    strip whitespace around each part *before* the ``raw/`` prefix check, and drop
+    empty parts. An all-empty value yields ``[]`` (the caller rejects it)."""
+    return [
+        p if p.startswith("raw/") else f"raw/{p}"
+        for p in (part.strip() for part in raw.split(","))
+        if p
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="scrip-harness",
@@ -221,12 +232,14 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     compile_sources = None
-    if args.sources:
-        compile_sources = [
-            s if s.startswith("raw/") else f"raw/{s}"
-            for s in args.sources.split(",")
-            if s.strip()
-        ]
+    if args.sources is not None:
+        compile_sources = _normalize_sources(args.sources)
+        if not compile_sources:
+            print(
+                "scrip-harness: --from was given but lists no source ids",
+                file=sys.stderr,
+            )
+            return 1
     try:
         page = compile_page(
             root, args.slug, kind=args.kind, sources=compile_sources, draft_fn=draft_fn
