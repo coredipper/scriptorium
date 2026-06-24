@@ -81,6 +81,13 @@ Descend; stop at the first rung that applies (see [SPEC §9](SPEC.md#9-the-answe
 Append a one-line entry to `wiki/log.md` for compiles, promotions, and
 reconciliations.
 
+`scrip-harness answer "<question>"` runs the safe form of this ladder: it refuses
+stale artifacts, broken anchors, and open contradictions by default; gathers
+facts/wiki evidence first; falls back to `scrip search` when compiled evidence is
+thin; and accepts the model answer only after every claim citation resolves via
+`scrip span` or every raw quote mints via `scrip anchor`. `--save` writes the
+verified answer to `wiki/explorations/`.
+
 ## PROMOTE — turn a good answer into a page
 
 1. Before creating a page, score overlap with existing pages:
@@ -140,3 +147,4 @@ asks the model to decide, records the reconciliation, logs it, and re-verifies.
 | query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |
 | retrieve source blocks (rung 4) | `scrip search "<question>"` |
 | build the semantic index (optional) | `scrip index` *(needs the `[embeddings]` extra)* |
+| answer with verified citations | `scrip-harness answer "<question>" [--save]` |

@@ -224,15 +224,72 @@ def cmd_search(args: argparse.Namespace) -> int:
     from . import retrieval
 
     root = resolve_root(args.root)
-    out = retrieval.search(root, args.query, k=args.k)
+    out = retrieval.search(root, args.query, k=args.k, long_docs=args.long_docs)
     if args.json:
         _emit(out)
     else:
-        tag = out["method"] + (" — INDEX STALE, rebuild with `scrip index`" if out["stale_index"] else "")
+        stale_hint = "INDEX STALE, rebuild with `scrip index`"
+        if out["method"] == "pageindex":
+            stale_hint = "INDEX STALE, rebuild with `scrip pageindex build raw/<slug>`"
+        tag = out["method"] + (f" - {stale_hint}" if out["stale_index"] else "")
         print(f"[{tag}] top {len(out['results'])} for: {args.query!r}")
         for r in out["results"]:
-            score = f"{r['score']:.3f}" if isinstance(r["score"], float) else str(r["score"])
-            print(f"  {r['source_id']}#{r['block_id']}  ({score})")
+            score_value = r.get("score", "")
+            score = f"{score_value:.3f}" if isinstance(score_value, float) else str(score_value)
+            locator = r.get("block_id") or r.get("section_id") or "?"
+            print(f"  {r['source_id']}#{locator}  ({score})")
+            print(f"    {r.get('snippet', '')}")
+        if not out["results"]:
+            print("  (no matches)")
+    return 0
+
+
+def cmd_pageindex_build(args: argparse.Namespace) -> int:
+    from . import pageindex_adapter
+
+    root = resolve_root(args.root)
+    out = pageindex_adapter.build_index(root, args.source)
+    if args.json:
+        _emit(out)
+    else:
+        if out["status"] == "built":
+            print(f"indexed {out['sections_indexed']} section(s) for {out['source_id']} into .kb/pageindex/")
+        else:
+            print(out["message"])
+    return 0
+
+
+def cmd_pageindex_search(args: argparse.Namespace) -> int:
+    from . import pageindex_adapter
+
+    root = resolve_root(args.root)
+    source_id = args.source
+    if source_id is not None and not source_id.startswith("raw/"):
+        source_id = f"raw/{source_id}"
+    out = pageindex_adapter.search(root, args.query, k=args.k, source_id=source_id)
+    if out is None:
+        payload = {
+            "status": "missing",
+            "message": "no usable PageIndex cache; run `scrip pageindex build raw/<slug>` first",
+            "method": "pageindex",
+            "stale_index": False,
+            "results": [],
+        }
+        if args.json:
+            _emit(payload)
+        else:
+            print(payload["message"])
+        return 0
+    if args.json:
+        _emit(out)
+    else:
+        stale_hint = " - INDEX STALE, rebuild with `scrip pageindex build raw/<slug>`"
+        tag = out["method"] + (stale_hint if out["stale_index"] else "")
+        print(f"[{tag}] top {len(out['results'])} for: {args.query!r}")
+        for r in out["results"]:
+            score_value = r.get("score", "")
+            score = f"{score_value:.3f}" if isinstance(score_value, float) else str(score_value)
+            print(f"  {r['source_id']}#{r.get('section_id', '?')}  ({score})")
             print(f"    {r['snippet']}")
         if not out["results"]:
             print("  (no matches)")
@@ -569,7 +626,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     psr.add_argument("query", help="the question / search text")
     psr.add_argument("-k", type=int, default=5, help="number of results (default 5)")
+    psr.add_argument(
+        "--long-docs",
+        choices=["pageindex"],
+        help="try a long-document adapter cache before embeddings/grep",
+    )
     psr.set_defaults(func=cmd_search)
+
+    ppidx = sub.add_parser(
+        "pageindex",
+        help="optional PageIndex long-document cache (regenerable, not source of truth)",
+    )
+    pidx_sub = ppidx.add_subparsers(dest="pageindex_command", required=True, metavar="<action>")
+    ppb = pidx_sub.add_parser(
+        "build",
+        parents=[common],
+        help="build a PageIndex cache for one raw source",
+    )
+    ppb.add_argument("source", metavar="raw/<slug>", help="raw source to index")
+    ppb.set_defaults(func=cmd_pageindex_build)
+    pps = pidx_sub.add_parser(
+        "search",
+        parents=[common],
+        help="search the PageIndex cache for verbatim raw-source snippets",
+    )
+    pps.add_argument("query", help="the question / search text")
+    pps.add_argument("--source", metavar="raw/<slug>", help="restrict to one cached source")
+    pps.add_argument("-k", type=int, default=5, help="number of results (default 5)")
+    pps.set_defaults(func=cmd_pageindex_search)
 
     pul = sub.add_parser(
         "unlock",

@@ -6,6 +6,7 @@ as a validated ``DraftPage`` rather than free text to scrape.
 
 from __future__ import annotations
 
+from .answer import ANSWER_SYSTEM, DraftAnswer, build_answer_prompt
 from .compile import SYSTEM, DraftPage, build_user_prompt
 from .extract import (
     EXTRACT_SYSTEM,
@@ -131,4 +132,29 @@ def decide_reconciliation(
     out = resp.parsed_output
     if out is None:
         raise RuntimeError("model returned no parseable reconciliation decision")
+    return out
+
+
+def draft_answer(
+    question: str,
+    *,
+    evidence: dict,
+    model: str = DEFAULT_MODEL,
+    client=None,
+) -> DraftAnswer:
+    """Ask Claude to answer from a bounded evidence packet. Lazy SDK import."""
+    import anthropic
+
+    client = client or anthropic.Anthropic()
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=6000,
+        thinking={"type": "adaptive"},
+        system=ANSWER_SYSTEM,
+        messages=[{"role": "user", "content": build_answer_prompt(question, evidence)}],
+        output_format=DraftAnswer,
+    )
+    out = resp.parsed_output
+    if out is None:
+        raise RuntimeError("model returned no parseable answer")
     return out

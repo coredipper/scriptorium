@@ -5,6 +5,21 @@ All notable changes to scriptorium are recorded here. The format follows
 reference CLI. The file **contract** is versioned separately in
 [SPEC.md](SPEC.md) (currently `version: 2`).
 
+## [Unreleased]
+
+### Added
+- **`scrip-harness answer "<question>"`** — executable ANSWER rung. It refuses
+  stale artifacts, unresolved anchors, and open contradiction pairs by default;
+  gathers facts/wiki evidence first; falls back to `scrip search` when compiled
+  evidence is thin; and accepts model output only after every citation resolves
+  through `scrip span` (claim citations) or `scrip anchor` (raw quote citations).
+  `--save` writes a verified note under `wiki/explorations/`.
+- **Optional PageIndex cache adapter** — `scrip pageindex build raw/<slug>` writes
+  a regenerable `.kb/pageindex/` cache when a compatible backend is importable;
+  `scrip pageindex search` and `scrip search --long-docs pageindex` return only
+  snippets mapped back to canonical `vault/raw/` text, falling back to
+  embeddings/grep when no cache is available.
+
 ## [0.5.2] — 2026-06-20
 
 A patch release for faster metadata-only scans on large vaults while preserving

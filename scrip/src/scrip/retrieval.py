@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 from . import blocks as blocks_mod
-from . import embeddings, raw_dir
+from . import embeddings, pageindex_adapter, raw_dir
 
 _WORD = re.compile(r"\w+")
 
@@ -41,8 +41,12 @@ def grep_search(root: Path, query: str, k: int = 5) -> list[dict]:
     return hits[:k]
 
 
-def search(root: Path, query: str, k: int = 5) -> dict:
+def search(root: Path, query: str, k: int = 5, long_docs: str | None = None) -> dict:
     """Return ``{method, stale_index, results}``."""
+    if long_docs == "pageindex":
+        p = pageindex_adapter.search(root, query, k)
+        if p is not None:
+            return p
     v = embeddings.vector_search(root, query, k)
     if v is not None:
         results, stale = v

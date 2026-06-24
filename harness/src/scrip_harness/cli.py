@@ -76,14 +76,40 @@ def main(argv: list[str] | None = None) -> int:
     prc.add_argument(
         "--dry-run", action="store_true", help="report decisions without recording them"
     )
+    pa = sub.add_parser(
+        "answer",
+        help="answer a question from fresh wiki/facts first, falling back to raw search; "
+        "all citations are verified by scrip",
+    )
+    pa.add_argument("question")
+    pa.add_argument("--root")
+    pa.add_argument("--model", help="Claude model id (default: claude-opus-4-8)")
+    pa.add_argument("-k", type=int, default=6, help="evidence items per layer (default 6)")
+    pa.add_argument(
+        "--save",
+        action="store_true",
+        help="save the answer to vault/wiki/explorations/ after verification",
+    )
+    pa.add_argument(
+        "--allow-stale",
+        action="store_true",
+        help="answer even when scrip status reports stale artifacts",
+    )
+    pa.add_argument(
+        "--allow-open-contradictions",
+        action="store_true",
+        help="answer even when scrip query contradictions returns open pairs",
+    )
     args = p.parse_args(argv)
 
     from . import model as model_mod
     from .runner import (
+        AnswerError,
         CompileError,
         ExtractError,
         PromoteError,
         ReconcileError,
+        answer_question,
         compile_page,
         extract_facts,
         promote_page,
@@ -92,6 +118,28 @@ def main(argv: list[str] | None = None) -> int:
 
     root = _resolve_root(args.root)
     chosen_model = args.model or model_mod.DEFAULT_MODEL
+
+    if args.command == "answer":
+        def answer_draft_fn(question: str, *, evidence: dict):
+            return model_mod.draft_answer(question, evidence=evidence, model=chosen_model)
+
+        try:
+            result = answer_question(
+                root,
+                args.question,
+                draft_fn=answer_draft_fn,
+                k=args.k,
+                save=args.save,
+                allow_stale=args.allow_stale,
+                allow_open_contradictions=args.allow_open_contradictions,
+            )
+        except AnswerError as e:
+            print(f"scrip-harness: {e}", file=sys.stderr)
+            return 1
+        print(result["answer"].rstrip())
+        if result["saved"]:
+            print(f"\nsaved {result['saved']}")
+        return 0
 
     if args.command == "reconcile":
         def reconcile_decide_fn(pair, span_a, span_b):

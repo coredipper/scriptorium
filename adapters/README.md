@@ -5,7 +5,7 @@ tools live here as *adapters* so the core stays swappable. Some seams are now
 partially implemented (embeddings, obsidian views); the rest document intended
 seams.
 
-## Planned adapters
+## Adapter seams
 
 - **obsidian/** — treat `vault/` as an Obsidian vault for browsing: `[[wiki-links]]`
   already match the contract's ids, and footnote anchors render as citations. No
@@ -22,6 +22,14 @@ seams.
   over `vault/raw/` into `.kb/embeddings/`; `scrip search` uses it, falling back
   to grep when the extra is not installed. The contract is unchanged — embeddings
   are a cache for *finding* sources, never the source of truth.
+
+- **pageindex/** — initial long-document retrieval adapter, implemented in
+  `scrip/src/scrip/pageindex_adapter.py`. `scrip pageindex build` writes a
+  regenerable cache under `.kb/pageindex/`, fingerprinted by `raw/` content
+  hashes; `scrip pageindex search` and `scrip search --long-docs pageindex`
+  return only snippets that map back to canonical `vault/raw/` text. Any final
+  citation must still be minted by `scrip anchor`. See
+  `docs/pageindex-adapter.md`.
 
 - **lock/** — multi-writer coordination (`.kb/lock`, advisory). v0 is single-writer
   (one agent). Needed before concurrent agents maintain the same vault.

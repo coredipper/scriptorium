@@ -22,10 +22,24 @@ uv run --project scrip scrip --help
 |---|---|
 | `scrip status` | Report `STALE` / `OK` / `UNCOMPILED` artifacts from the dependency graph. `--no-cache` recomputes from files; `--rebuild-manifest` regenerates the cache. |
 | `scrip verify` | Check every provenance anchor still resolves to text in its source; check referenced sources exist and `claim_id`s are unique. Fails on `BROKEN` and `AMBIGUOUS` by default; `--allow-ambiguous` downgrades `AMBIGUOUS` to a warning. |
-| `scrip query [claims\|entities\|edges\|contradictions]` | Structured query over `vault/facts/*.ndjson` via DuckDB. `--sql "<duckdb>"`, `--where`, `--limit`. |
-| `scrip index` | v0 stub for the embeddings retrieval rung. |
+| `scrip query [claims\|entities\|edges\|contradictions\|reconciliations]` | Structured query over `vault/facts/*.ndjson` via DuckDB. `--sql "<duckdb>"`, `--where`, `--limit`. |
+| `scrip ingest <url\|file>` | Fetch/read a source and write canonical `vault/raw/<slug>.md` plus sidecar metadata. HTML/PDF need the optional `[ingest]` extra. |
+| `scrip new concept\|entity <slug> --from raw/...` | Scaffold a derived wiki page for the agent to fill. |
+| `scrip anchor "<quote>" --source raw/<slug>` | Mint a content-anchored footnote for a verbatim source quote. |
+| `scrip fact add --table claims\|entities\|edges\|reconciliations` | Validate and append facts under the write lock; claims mint verified anchors, reconciliations mint ids/timestamps. |
+| `scrip span --claim <id>` | Resolve a claim anchor and print the cited span. |
+| `scrip similar --title ... --from ...` | Score overlap with existing wiki pages before PROMOTE. |
+| `scrip search "<question>"` | Retrieve source blocks for a miss; uses embeddings if an index exists, otherwise lexical grep. Add `--long-docs pageindex` to try the PageIndex cache first. |
+| `scrip index` | Build the optional embeddings index over `vault/raw/` when `scriptoria[embeddings]` is installed; otherwise exits cleanly and `search` falls back to grep. |
+| `scrip pageindex build raw/<slug>` | Build the optional PageIndex cache for one raw source when a compatible backend is importable; otherwise exits cleanly. |
+| `scrip pageindex search "<question>" [--source raw/<slug>]` | Search cached PageIndex sections, returning only snippets mapped back to canonical `vault/raw/` text. |
+| `scrip watch` / `scrip unlock` | Watch vault health in a poll loop; clear a stale advisory write lock. |
 
 Every command accepts `--root DIR` and `--json`.
+
+The optional `scrip-harness` package adds the model-bearing commands, including
+`scrip-harness answer "<question>"`, which gathers evidence with these primitives
+and verifies every citation before printing or saving an answer.
 
 ## Exit codes
 
