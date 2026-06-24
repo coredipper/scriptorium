@@ -160,7 +160,10 @@ def main(argv: list[str] | None = None) -> int:
                 tail = f" → {d['winner']}" if d["decision"] == "supersede" else ""
                 print(f"  {d['decision']}: {d['claim_a']} vs {d['claim_b']}{tail}")
         else:
-            print(f"reconciled {len(result['reconciled'])} of {result['pairs']} contradiction(s)")
+            msg = f"reconciled {len(result['reconciled'])} of {result['pairs']} contradiction(s)"
+            if result.get("qualified"):
+                msg += f"; authored {len(result['qualified'])} qualifies claim(s)"
+            print(msg)
         return 0
 
     if args.command == "promote":

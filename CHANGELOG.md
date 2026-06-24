@@ -7,6 +7,15 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Added
+- **`scrip-harness reconcile` auto-authors the `polarity: qualifies` claim** on a
+  `qualify` decision. The model returns a verbatim qualifier quote, its source, and
+  the condition; the harness appends the claim via `scrip fact add --table claims`
+  (anchor minted + verified), so the nuance is no longer operator follow-up. A
+  `qualifies` claim cannot re-open a contradiction (detection is asserts-vs-denies
+  only); the page caveat is left to the read-only view layer rather than mutating a
+  stamped page.
+
 ### Changed
 - **`scrip-harness compile` retries broken/ambiguous quotes** instead of failing
   on the first one, matching the EXTRACT loop: a quote that does not anchor

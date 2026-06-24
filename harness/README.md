@@ -86,13 +86,15 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
 1. **Find** — `scrip query contradictions` lists the candidate pairs (same
    subject+predicate, opposing polarity, different sources, not yet adjudicated).
 2. **Read** — for each pair, `scrip span --claim <id>` fetches both verbatim
-   cited spans, and Claude decides **supersede** (with a winner), **qualify**, or
+   cited spans, and Claude decides **supersede** (with a winner), **qualify**
+   (with a verbatim qualifier quote + the condition under which it holds), or
    **keep-both**, with a rationale.
 3. **Record** — the decisions are written append-only with `scrip fact add
-   --table reconciliations` (existing claim rows are never rewritten), logged to
-   `wiki/log.md`, then `scrip stamp` + `scrip verify`. Adjudicated pairs stop
-   being surfaced by `scrip query contradictions`. `--dry-run` prints the
-   decisions without recording.
+   --table reconciliations` (existing claim rows are never rewritten); a
+   **qualify** also authors a `polarity: qualifies` claim via `scrip fact add
+   --table claims` (its anchor minted + verified). Logged to `wiki/log.md`, then
+   `scrip stamp` + `scrip verify`. Adjudicated pairs stop being surfaced by `scrip
+   query contradictions`. `--dry-run` prints the decisions without recording.
 
 ## Install & run
 
@@ -133,6 +135,7 @@ The tests inject a stub draft function (no network, no API key) and drive the re
   (adjudicate every contradiction → record the decision). Entities/edges go
   through `scrip fact add --table entities|edges` by hand.
 - Single source per page/extract; merge is **append** (not re-synthesis).
-  `reconcile` records the decision (supersede/qualify/keep-both); for a
-  **qualify**, authoring the nuancing `polarity: qualifies` claim + the page
-  caveat is still operator follow-up. Multi-source synthesis is future work.
+  `reconcile` records the decision (supersede/qualify/keep-both) and, on a
+  **qualify**, authors the nuancing `polarity: qualifies` claim; surfacing the
+  page caveat is left to the read-only view layer, not a page mutation.
+  Multi-source synthesis is future work.

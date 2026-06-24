@@ -55,6 +55,11 @@ def _recs(root):
     return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()] if p.exists() else []
 
 
+def _claims(root):
+    p = root / "vault" / "facts" / "claims.ndjson"
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()] if p.exists() else []
+
+
 def _contradictions(root):
     r = subprocess.run(
         [sys.executable, "-m", "scrip.cli", "query", "contradictions", "--json", "--root", str(root)],
@@ -111,6 +116,101 @@ def test_reconcile_keep_both(tmp_path):
     [rec] = _recs(root)
     assert rec["decision"] == "keep-both"
     assert "winner" not in rec
+
+
+# --------------------------------------------------------------------------- #
+# Qualify auto-authoring: the decision also mints a polarity:qualifies claim
+# --------------------------------------------------------------------------- #
+def test_reconcile_qualify_authors_a_qualifies_claim(tmp_path):
+    root = _contradiction(tmp_path)
+
+    def decide(pair, span_a, span_b):
+        return ReconciliationDecision(
+            decision="qualify",
+            qualifier_quote="Fixed-size chunking discards document structure.",
+            qualifier_source="a",
+            qualifier_object="for fixed-size chunks",
+            rationale="Structure loss is specific to fixed-size chunking.",
+        )
+
+    result = reconcile_contradictions(root, decide_fn=decide)
+    assert result["pairs"] == 1
+    # the nuancing claim was authored, verified (scrip minted its anchor + id),
+    # and is queryable under the pair's subject/predicate
+    qualifies = [c for c in _claims(root) if c["polarity"] == "qualifies"]
+    assert len(qualifies) == 1
+    q = qualifies[0]
+    assert q["subject"] == "chunking" and q["predicate"] == "discards"
+    assert q["object"] == "for fixed-size chunks"
+    assert q["source_id"] == "raw/a"
+    assert q["claim_id"].startswith("clm_")
+    # the decision is recorded and the original pair stops being surfaced; the new
+    # qualifies claim does NOT open a fresh contradiction (detection is asserts-vs-
+    # denies only), so the contradiction set is empty afterward
+    [rec] = _recs(root)
+    assert rec["decision"] == "qualify"
+    assert _contradictions(root) == []
+    # vault left green
+    assert subprocess.run(
+        [sys.executable, "-m", "scrip.cli", "verify", "--root", str(root)]
+    ).returncode == 0
+    assert subprocess.run(
+        [sys.executable, "-m", "scrip.cli", "status", "--root", str(root)]
+    ).returncode == 0
+
+
+def test_reconcile_qualify_without_qualifier_fields_errors(tmp_path):
+    """A qualify must carry the verbatim quote + source + object needed to author
+    the claim — an incomplete qualify aborts before recording anything."""
+    root = _contradiction(tmp_path)
+
+    def decide(pair, span_a, span_b):
+        return ReconciliationDecision(decision="qualify", rationale="too vague to author")
+
+    with pytest.raises(ReconcileError):
+        reconcile_contradictions(root, decide_fn=decide)
+    assert _recs(root) == []
+    assert [c for c in _claims(root) if c["polarity"] == "qualifies"] == []
+
+
+def test_reconcile_qualify_with_absent_quote_errors(tmp_path):
+    """If the qualifier quote does not resolve in its source, the claim append
+    fails — and no reconciliation is recorded (don't suppress the pair without the
+    nuance it promised)."""
+    root = _contradiction(tmp_path)
+
+    def decide(pair, span_a, span_b):
+        return ReconciliationDecision(
+            decision="qualify",
+            qualifier_quote="a sentence that is absent from source a",
+            qualifier_source="a",
+            qualifier_object="x",
+            rationale="y",
+        )
+
+    with pytest.raises(ReconcileError):
+        reconcile_contradictions(root, decide_fn=decide)
+    assert _recs(root) == []
+    assert [c for c in _claims(root) if c["polarity"] == "qualifies"] == []
+
+
+def test_reconcile_qualify_dry_run_writes_nothing(tmp_path):
+    root = _contradiction(tmp_path)
+
+    def decide(pair, span_a, span_b):
+        return ReconciliationDecision(
+            decision="qualify",
+            qualifier_quote="Fixed-size chunking discards document structure.",
+            qualifier_source="a",
+            qualifier_object="for fixed-size chunks",
+            rationale="z",
+        )
+
+    result = reconcile_contradictions(root, decide_fn=decide, dry_run=True)
+    assert result["dry_run"] is True
+    assert _recs(root) == []
+    assert [c for c in _claims(root) if c["polarity"] == "qualifies"] == []
+    assert len(_contradictions(root)) == 1  # still flagged
 
 
 def test_reconcile_dry_run_records_nothing(tmp_path):

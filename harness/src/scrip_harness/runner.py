@@ -17,7 +17,7 @@ from scrip import frontmatter  # reuse the deterministic frontmatter helper
 
 from .answer import DraftAnswer, overlap_score
 from .compile import DraftPage, assemble_body, extract_markers
-from .extract import DraftExtraction, to_ndjson
+from .extract import DraftExtraction, DraftFact, to_ndjson
 from .promote import PromotionDecision, merge_bodies
 from .reconcile import ReconciliationDecision
 
@@ -771,6 +771,9 @@ def reconcile_contradictions(
         return {"pairs": 0, "reconciled": []}
 
     records: list[dict] = []
+    # A `qualify` also authors a nuancing `polarity: qualifies` claim; collect each
+    # with the source its verbatim quote is from, to append in one batch below.
+    qualify_claims: list[tuple[DraftFact, str]] = []
     for pair in pairs:
         ca, cb = pair["claim_a"], pair["claim_b"]
         # Read both spans first and refuse unresolved evidence BEFORE asking the
@@ -790,12 +793,59 @@ def reconcile_contradictions(
                     f"supersede for {ca}/{cb} needs winner 'a' or 'b', got {decision.winner!r}"
                 )
             rec["winner"] = ca if decision.winner == "a" else cb
+        elif decision.decision == "qualify":
+            # The qualify must carry the verbatim quote + source + condition needed
+            # to author the claim — the load-bearing half of the decision. (The page
+            # caveat is left to a view, not baked into a stamped page.)
+            if (
+                not decision.qualifier_quote.strip()
+                or decision.qualifier_source not in ("a", "b")
+                or not decision.qualifier_object.strip()
+            ):
+                raise ReconcileError(
+                    f"qualify for {ca}/{cb} needs qualifier_quote, qualifier_source "
+                    f"'a'|'b', and qualifier_object"
+                )
+            src = pair["source_a"] if decision.qualifier_source == "a" else pair["source_b"]
+            qualify_claims.append(
+                (
+                    DraftFact(
+                        quote=decision.qualifier_quote,
+                        subject=pair["subject"],
+                        predicate=pair["predicate"],
+                        object=decision.qualifier_object,
+                        polarity="qualifies",
+                        claim_text=decision.rationale,
+                    ),
+                    src,
+                )
+            )
         if decision.rationale:
             rec["rationale"] = decision.rationale
         records.append(rec)
 
     if dry_run:
         return {"pairs": len(pairs), "dry_run": True, "decisions": records}
+
+    # Author the nuancing qualifies claims FIRST. scrip mints their anchors
+    # all-or-nothing (a quote that doesn't resolve fails here), so on failure we
+    # abort before recording any reconciliation — never suppress a pair without the
+    # nuance it promised. A qualifies claim cannot re-open a contradiction
+    # (detection is asserts-vs-denies only).
+    qualified: list = []
+    if qualify_claims:
+        claims_ndjson = "".join(to_ndjson([f], src) for f, src in qualify_claims)
+        r = _scrip(
+            scrip_cmd,
+            ["fact", "add", "--table", "claims", "--stdin", "--json", "--root", str(root)],
+            input_text=claims_ndjson,
+        )
+        if r.returncode != 0:
+            raise ReconcileError(
+                f"could not author qualifies claim(s) (scrip fact add exit "
+                f"{r.returncode}): {r.stderr.strip() or r.stdout.strip()}"
+            )
+        qualified = json.loads(r.stdout)["appended"]
 
     ndjson = "".join(json.dumps(rec, ensure_ascii=False) + "\n" for rec in records)
     r = _scrip(
@@ -810,11 +860,18 @@ def reconcile_contradictions(
         tail = f" (winner {rec['winner']})" if rec["decision"] == "supersede" else ""
         _append_log(root, f"- RECONCILE: {rec['decision']} {rec['claim_a']} vs {rec['claim_b']}{tail}")
 
-    if added["appended"]:
+    # Any append (claims or reconciliations) drops the facts set's input-hash, so
+    # stamp when either wrote, then prove the vault green.
+    if qualified or added["appended"]:
         r = _scrip(scrip_cmd, ["stamp", str(root / "vault" / "facts" / "_meta.yaml"), "--root", str(root)])
         if r.returncode != 0:
             raise ReconcileError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
     r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
     if r.returncode != 0:
         raise ReconcileError(f"scrip verify failed after reconcile:\n{r.stdout}{r.stderr}")
-    return {"pairs": len(pairs), "reconciled": added["appended"], "skipped": added["skipped"]}
+    return {
+        "pairs": len(pairs),
+        "reconciled": added["appended"],
+        "skipped": added["skipped"],
+        "qualified": qualified,
+    }
