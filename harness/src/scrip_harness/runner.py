@@ -16,8 +16,8 @@ from pathlib import Path
 from scrip import frontmatter  # reuse the deterministic frontmatter helper
 
 from .answer import DraftAnswer, overlap_score
-from .compile import DraftPage, assemble_body, extract_markers
-from .extract import DraftExtraction, to_ndjson
+from .compile import DraftPage, assemble_body, extract_markers, format_sources
+from .extract import DraftExtraction, DraftFact, to_ndjson
 from .promote import PromotionDecision, merge_bodies
 from .reconcile import ReconciliationDecision
 
@@ -75,14 +75,25 @@ def compile_page(
     slug: str,
     *,
     kind: str = "concept",
+    sources: Sequence[str] | None = None,
     draft_fn: DraftFn,
     scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
+    max_quote_retries: int = 2,
 ) -> Path:
-    """Compile ``raw/<slug>`` into ``wiki/<kind>s/<slug>.md`` and leave it green.
+    """Compile ``raw/<slug>`` (or several ``sources``) into ``wiki/<kind>s/<slug>.md``
+    and leave it green.
+
+    ``sources`` is a list of raw source ids (e.g. ``["raw/a", "raw/b"]``), defaulting
+    to the single ``raw/<slug>``. With several, each claim's ``source_id`` says which
+    source its quote is from, its anchor is minted against that source, and the
+    page's ``derived-from`` lists them all.
 
     ``draft_fn(source_text, source_id=...)`` returns a :class:`DraftPage` — inject
-    a stub in tests; production passes ``model.draft_page``. Raises
-    :class:`CompileError` if any quote fails to resolve or any scrip step errors,
+    a stub in tests; production passes ``model.draft_page``. On an AMBIGUOUS/BROKEN
+    quote it is called again with ``failures=[...]`` (one per failing claim, in
+    order) and must return one corrected claim per failure — the prose body is kept
+    from the first draft, so the ``[^a1]..[^aN]`` markers never move (COMPILE drops
+    nothing). Bounded by ``max_quote_retries``; then raises :class:`CompileError`,
     so a bad draft never produces a stamped-but-broken page."""
     root = Path(root)
     if not _SLUG_RE.fullmatch(slug):  # fullmatch: reject a trailing newline (match + $ would not)
@@ -90,12 +101,29 @@ def compile_page(
             f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
             f"separators, '..', or leading dot"
         )
-    source_id = f"raw/{slug}"
-    try:
-        source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
-    except OSError as e:
-        raise CompileError(f"cannot read {source_id}: {e}") from e
-    draft = draft_fn(source_text, source_id=source_id)
+    source_ids = list(sources) if sources else [f"raw/{slug}"]
+    valid_sources: dict[str, str] = {}
+    for sid in source_ids:
+        if not sid.startswith("raw/"):
+            raise CompileError(f"source id {sid!r} must start with 'raw/'")
+        s_slug = sid[len("raw/"):]
+        if not _SLUG_RE.fullmatch(s_slug):
+            raise CompileError(f"invalid source id {sid!r}")
+        try:
+            valid_sources[sid] = (
+                (root / "vault" / "raw" / f"{s_slug}.md").read_text(encoding="utf-8")
+            )
+        except OSError as e:
+            raise CompileError(f"cannot read {sid}: {e}") from e
+    # One source keeps the prompt byte-identical to a single-source compile; several
+    # are concatenated under labelled headers so the model attributes each quote.
+    if len(source_ids) == 1:
+        source_text = valid_sources[source_ids[0]]
+        draft_source_id = source_ids[0]
+    else:
+        source_text = format_sources([(sid, valid_sources[sid]) for sid in source_ids])
+        draft_source_id = ",".join(source_ids)
+    draft = draft_fn(source_text, source_id=draft_source_id)
 
     # The model's inline markers must be exactly [^a1]..[^aN] in order for the N
     # claims. scrip verify only checks footnote *definitions* resolve, so without
@@ -109,24 +137,73 @@ def compile_page(
         )
 
     # Mint a verified anchor per claim. scrip anchor exits non-zero on a quote that
-    # is not present or not unique, so a hallucinated quote fails the compile here.
-    footnotes: list[str] = []
-    for i, claim in enumerate(draft.claims, 1):
-        r = _scrip(
-            scrip_cmd,
-            ["anchor", claim.quote, "--source", source_id, "--label", f"a{i}",
-             "--json", "--root", str(root)],
-        )
-        if r.returncode != 0:
-            raise CompileError(
-                f"claim {i} quote did not resolve uniquely (scrip anchor exit "
-                f"{r.returncode}): {claim.quote!r}\n{r.stderr.strip()}"
+    # is not present or not unique; instead of failing on the first, collect every
+    # failing claim (scrip anchor --json reports its BROKEN/AMBIGUOUS status even on
+    # exit 1), ask the model to correct exactly those — one per failure, in order —
+    # and re-mint. The body is fixed, so each corrected claim keeps its marker slot.
+    claims = list(draft.claims)
+    retries = 0
+    while True:
+        footnotes: list[str] = []
+        failures: list[dict] = []
+        for i, claim in enumerate(claims):
+            # resolve which source this claim's quote is from: explicit source_id,
+            # or the sole source. An unknown or (with several sources) missing
+            # source_id is a structural error, not a retryable quote failure.
+            csrc = claim.source_id or (source_ids[0] if len(source_ids) == 1 else "")
+            if csrc not in valid_sources:
+                if claim.source_id:
+                    raise CompileError(
+                        f"claim {i + 1} cites source {claim.source_id!r} not among "
+                        f"the compile's sources {source_ids}"
+                    )
+                raise CompileError(
+                    f"claim {i + 1} has no source_id but the compile has multiple "
+                    f"sources {source_ids}; set source_id to the quote's source"
+                )
+            r = _scrip(
+                scrip_cmd,
+                ["anchor", claim.quote, "--source", csrc, "--label", f"a{i + 1}",
+                 "--json", "--root", str(root)],
             )
-        footnotes.append(json.loads(r.stdout)["footnote"])
+            if r.returncode == 0:
+                footnotes.append(json.loads(r.stdout)["footnote"])
+                continue
+            try:
+                status = json.loads(r.stdout).get("status", "BROKEN")
+            except json.JSONDecodeError:
+                status = "BROKEN"
+            failures.append(
+                {"index": i, "status": status, "quote": claim.quote,
+                 "detail": r.stderr.strip()}
+            )
+        if not failures:
+            break
+        if retries >= max_quote_retries:
+            detail = "; ".join(f"{f['status']} {f['quote']!r}" for f in failures)
+            raise CompileError(
+                f"{len(failures)} quote(s) still failed after {retries} retr"
+                f"{'y' if retries == 1 else 'ies'}: {detail}"
+            )
+        retries += 1
+        replacements = list(draft_fn(source_text, source_id=draft_source_id, failures=failures).claims)
+        if len(replacements) != len(failures):
+            raise CompileError(
+                f"retry returned {len(replacements)} claim(s) for {len(failures)} "
+                f"failure(s) — must be one corrected claim per failure, in order"
+            )
+        for failure, replacement in zip(failures, replacements, strict=True):
+            if not replacement.quote.strip():
+                raise CompileError(
+                    "a retry replacement had an empty quote; COMPILE keeps every "
+                    "claim (the body's markers are positional) — correct the quote "
+                    "instead of dropping it"
+                )
+            claims[failure["index"]] = replacement
 
     r = _scrip(
         scrip_cmd,
-        ["new", kind, slug, "--from", source_id, "--title", draft.title, "--root", str(root)],
+        ["new", kind, slug, "--from", ",".join(source_ids), "--title", draft.title, "--root", str(root)],
     )
     if r.returncode != 0:
         raise CompileError(f"scrip new failed (exit {r.returncode}): {r.stderr.strip()}")
@@ -732,6 +809,9 @@ def reconcile_contradictions(
         return {"pairs": 0, "reconciled": []}
 
     records: list[dict] = []
+    # A `qualify` also authors a nuancing `polarity: qualifies` claim; collect each
+    # with the source its verbatim quote is from, to append in one batch below.
+    qualify_claims: list[tuple[DraftFact, str]] = []
     for pair in pairs:
         ca, cb = pair["claim_a"], pair["claim_b"]
         # Read both spans first and refuse unresolved evidence BEFORE asking the
@@ -751,12 +831,59 @@ def reconcile_contradictions(
                     f"supersede for {ca}/{cb} needs winner 'a' or 'b', got {decision.winner!r}"
                 )
             rec["winner"] = ca if decision.winner == "a" else cb
+        elif decision.decision == "qualify":
+            # The qualify must carry the verbatim quote + source + condition needed
+            # to author the claim — the load-bearing half of the decision. (The page
+            # caveat is left to a view, not baked into a stamped page.)
+            if (
+                not decision.qualifier_quote.strip()
+                or decision.qualifier_source not in ("a", "b")
+                or not decision.qualifier_object.strip()
+            ):
+                raise ReconcileError(
+                    f"qualify for {ca}/{cb} needs qualifier_quote, qualifier_source "
+                    f"'a'|'b', and qualifier_object"
+                )
+            src = pair["source_a"] if decision.qualifier_source == "a" else pair["source_b"]
+            qualify_claims.append(
+                (
+                    DraftFact(
+                        quote=decision.qualifier_quote,
+                        subject=pair["subject"],
+                        predicate=pair["predicate"],
+                        object=decision.qualifier_object,
+                        polarity="qualifies",
+                        claim_text=decision.rationale,
+                    ),
+                    src,
+                )
+            )
         if decision.rationale:
             rec["rationale"] = decision.rationale
         records.append(rec)
 
     if dry_run:
         return {"pairs": len(pairs), "dry_run": True, "decisions": records}
+
+    # Author the nuancing qualifies claims FIRST. scrip mints their anchors
+    # all-or-nothing (a quote that doesn't resolve fails here), so on failure we
+    # abort before recording any reconciliation — never suppress a pair without the
+    # nuance it promised. A qualifies claim cannot re-open a contradiction
+    # (detection is asserts-vs-denies only).
+    qualified: list = []
+    if qualify_claims:
+        claims_ndjson = "".join(to_ndjson([f], src) for f, src in qualify_claims)
+        r = _scrip(
+            scrip_cmd,
+            ["fact", "add", "--table", "claims", "--stdin", "--json", "--root", str(root)],
+            input_text=claims_ndjson,
+        )
+        if r.returncode != 0:
+            raise ReconcileError(
+                f"could not author qualifies claim(s) (scrip fact add exit "
+                f"{r.returncode}): {r.stderr.strip() or r.stdout.strip()}"
+            )
+        qualified = json.loads(r.stdout)["appended"]
 
     ndjson = "".join(json.dumps(rec, ensure_ascii=False) + "\n" for rec in records)
     r = _scrip(
@@ -771,11 +898,18 @@ def reconcile_contradictions(
         tail = f" (winner {rec['winner']})" if rec["decision"] == "supersede" else ""
         _append_log(root, f"- RECONCILE: {rec['decision']} {rec['claim_a']} vs {rec['claim_b']}{tail}")
 
-    if added["appended"]:
+    # Any append (claims or reconciliations) drops the facts set's input-hash, so
+    # stamp when either wrote, then prove the vault green.
+    if qualified or added["appended"]:
         r = _scrip(scrip_cmd, ["stamp", str(root / "vault" / "facts" / "_meta.yaml"), "--root", str(root)])
         if r.returncode != 0:
             raise ReconcileError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
     r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
     if r.returncode != 0:
         raise ReconcileError(f"scrip verify failed after reconcile:\n{r.stdout}{r.stderr}")
-    return {"pairs": len(pairs), "reconciled": added["appended"], "skipped": added["skipped"]}
+    return {
+        "pairs": len(pairs),
+        "reconciled": added["appended"],
+        "skipped": added["skipped"],
+        "qualified": qualified,
+    }

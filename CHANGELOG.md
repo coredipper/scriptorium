@@ -7,6 +7,37 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-24
+
+The compile loop gains depth: COMPILE retries quotes that don't verify and can
+synthesize one page from several sources, and RECONCILE auto-authors the nuancing
+`qualifies` claim. (scrip-harness moves to 0.7.0; scriptoria stays 0.6.0 — these
+are harness-only changes, and the `scriptoria>=0.5` floor is unchanged: the new
+features reuse `scrip` commands already present in 0.5.)
+
+### Added
+- **`scrip-harness compile --from raw/a,raw/b`** synthesizes one wiki page from
+  several sources. Each claim names the `source_id` its quote is from, its anchor
+  is minted against that source, and the page's `derived-from` lists them all
+  (single-source `compile <slug>` is unchanged). This also unblocks PROMOTE
+  re-synthesis as a follow-on.
+- **`scrip-harness reconcile` auto-authors the `polarity: qualifies` claim** on a
+  `qualify` decision. The model returns a verbatim qualifier quote, its source, and
+  the condition; the harness appends the claim via `scrip fact add --table claims`
+  (anchor minted + verified), so the nuance is no longer operator follow-up. A
+  `qualifies` claim cannot re-open a contradiction (detection is asserts-vs-denies
+  only); the page caveat is left to the read-only view layer rather than mutating a
+  stamped page.
+
+### Changed
+- **`scrip-harness compile` retries broken/ambiguous quotes** instead of failing
+  on the first one, matching the EXTRACT loop: a quote that does not anchor
+  uniquely goes back to the model for correction (one per failure, in order),
+  then re-mints — bounded by an internal retry limit before a clean failure that
+  leaves no stamped-but-broken page. Unlike EXTRACT, COMPILE keeps every claim —
+  the page body's `[^a1]..[^aN]` markers are positional — so a quote is corrected,
+  never dropped.
+
 ## [0.6.0] — 2026-06-24
 
 ANSWER joins the automated loop with a verified-citation harness, plus an

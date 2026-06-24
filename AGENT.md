@@ -127,6 +127,9 @@ absorbed page, then re-stamps and re-verifies.
 
 `scrip-harness reconcile` runs this loop: it reads each contradiction's spans,
 asks the model to decide, records the reconciliation, logs it, and re-verifies.
+On a **qualify** it also authors the nuancing `polarity: qualifies` claim (verbatim
+quote → `scrip fact add --table claims`, anchor minted and verified); the page
+caveat is left to the read-only view layer rather than mutating a stamped page.
 
 ---
 

@@ -23,6 +23,17 @@ def _resolve_root(root_arg: str | None) -> Path:
     raise SystemExit("scrip-harness: could not locate a scriptorium root; pass --root")
 
 
+def _normalize_sources(raw: str) -> list[str]:
+    """Split a comma-separated ``--from`` value into normalized ``raw/<slug>`` ids:
+    strip whitespace around each part *before* the ``raw/`` prefix check, and drop
+    empty parts. An all-empty value yields ``[]`` (the caller rejects it)."""
+    return [
+        p if p.startswith("raw/") else f"raw/{p}"
+        for p in (part.strip() for part in raw.split(","))
+        if p
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="scrip-harness",
@@ -31,10 +42,16 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="command", required=True, metavar="<command>")
     pc = sub.add_parser(
         "compile",
-        help="synthesize wiki/<kind>s/<slug> from raw/<slug> via Claude, then stamp + verify",
+        help="synthesize wiki/<kind>s/<slug> from raw/<slug> (or several --from "
+        "sources) via Claude, then stamp + verify",
     )
     pc.add_argument("slug")
     pc.add_argument("--kind", choices=["concept", "entity"], default="concept")
+    pc.add_argument(
+        "--from", dest="sources", metavar="raw/a,raw/b",
+        help="comma-separated source ids to synthesize the page from "
+        "(default: raw/<slug>)",
+    )
     pc.add_argument("--root")
     pc.add_argument("--model", help="Claude model id (default: claude-opus-4-8)")
     pe = sub.add_parser(
@@ -160,7 +177,10 @@ def main(argv: list[str] | None = None) -> int:
                 tail = f" → {d['winner']}" if d["decision"] == "supersede" else ""
                 print(f"  {d['decision']}: {d['claim_a']} vs {d['claim_b']}{tail}")
         else:
-            print(f"reconciled {len(result['reconciled'])} of {result['pairs']} contradiction(s)")
+            msg = f"reconciled {len(result['reconciled'])} of {result['pairs']} contradiction(s)"
+            if result.get("qualified"):
+                msg += f"; authored {len(result['qualified'])} qualifies claim(s)"
+            print(msg)
         return 0
 
     if args.command == "promote":
@@ -206,11 +226,24 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 0
 
-    def draft_fn(text: str, *, source_id: str):
-        return model_mod.draft_page(text, source_id=source_id, model=chosen_model)
+    def draft_fn(text: str, *, source_id: str, failures=None):
+        return model_mod.draft_page(
+            text, source_id=source_id, model=chosen_model, failures=failures
+        )
 
+    compile_sources = None
+    if args.sources is not None:
+        compile_sources = _normalize_sources(args.sources)
+        if not compile_sources:
+            print(
+                "scrip-harness: --from was given but lists no source ids",
+                file=sys.stderr,
+            )
+            return 1
     try:
-        page = compile_page(root, args.slug, kind=args.kind, draft_fn=draft_fn)
+        page = compile_page(
+            root, args.slug, kind=args.kind, sources=compile_sources, draft_fn=draft_fn
+        )
     except CompileError as e:
         print(f"scrip-harness: {e}", file=sys.stderr)
         return 1

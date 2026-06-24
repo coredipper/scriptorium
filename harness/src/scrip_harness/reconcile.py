@@ -13,6 +13,15 @@ class ReconciliationDecision(BaseModel):
     decision: Literal["supersede", "qualify", "keep-both"]
     winner: Literal["a", "b"] | None = None
     """Which claim wins, for `supersede` only: "a" = claim_a, "b" = claim_b."""
+    qualifier_quote: str = ""
+    """For `qualify` only: a VERBATIM span from one of the two sources stating the
+    condition under which the claims diverge. scrip mints its anchor, so a
+    paraphrase is rejected."""
+    qualifier_source: Literal["a", "b"] | None = None
+    """For `qualify` only: which source `qualifier_quote` is copied from."""
+    qualifier_object: str = ""
+    """For `qualify` only: the distinguishing condition — the object of the authored
+    `polarity: qualifies` claim (its subject+predicate reuse the contradicted pair)."""
     rationale: str = ""
 
 
@@ -22,8 +31,11 @@ RECONCILE_SYSTEM = (
     "different sources). You are given each claim's verbatim cited span. Decide:\n"
     "- `supersede` — one claim is right and the other should be retired; set "
     "`winner` to \"a\" or \"b\".\n"
-    "- `qualify` — both hold under different conditions; the disagreement should be "
-    "nuanced rather than resolved.\n"
+    "- `qualify` — both hold under different conditions; nuance rather than "
+    "resolve. Also author the nuancing claim: set `qualifier_quote` to a VERBATIM "
+    "span from one source (copy it exactly — it is machine-verified), "
+    "`qualifier_source` to \"a\" or \"b\" for which source that span is from, and "
+    "`qualifier_object` to the condition under which the claim holds.\n"
     "- `keep-both` — the sources genuinely disagree and both should stand on record.\n"
     "Decide only from the cited spans; give a one-sentence `rationale`."
 )

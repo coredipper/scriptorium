@@ -54,7 +54,7 @@ def build_extract_prompt(source_text: str) -> str:
     )
 
 
-def build_retry_prompt(source_text: str, failures: list[dict]) -> str:
+def build_extract_retry_prompt(source_text: str, failures: list[dict]) -> str:
     """Ask for a replacement for each failed quote, in the reported order. An
     empty replacement quote tells the runner to drop that claim."""
     listing = "\n".join(
