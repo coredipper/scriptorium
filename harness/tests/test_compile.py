@@ -7,6 +7,7 @@ from scrip_harness.compile import (
     build_retry_prompt,
     build_user_prompt,
     extract_markers,
+    format_sources,
 )
 
 
@@ -38,6 +39,15 @@ def test_build_retry_prompt_lists_failed_quotes_with_their_status():
     # COMPILE markers are positional ([^a1]..[^aN]), so every claim must keep its
     # slot — unlike EXTRACT, the retry must NOT offer drop-via-empty-quote.
     assert "drop" not in prompt.lower() and "empty" not in prompt.lower()
+
+
+def test_format_sources_labels_each_source_in_order():
+    out = format_sources([("raw/a", "alpha body text"), ("raw/b", "beta body text")])
+    assert "raw/a" in out and "raw/b" in out  # each source is named
+    assert "alpha body text" in out and "beta body text" in out  # each body included
+    # labels precede their bodies and sources appear in the given order, so the
+    # model can attribute each quote to the right source_id
+    assert out.index("raw/a") < out.index("alpha body text") < out.index("raw/b")
 
 
 def test_assemble_body_appends_footnote_definitions():

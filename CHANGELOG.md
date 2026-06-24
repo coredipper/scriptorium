@@ -8,6 +8,11 @@ reference CLI. The file **contract** is versioned separately in
 ## [Unreleased]
 
 ### Added
+- **`scrip-harness compile --from raw/a,raw/b`** synthesizes one wiki page from
+  several sources. Each claim names the `source_id` its quote is from, its anchor
+  is minted against that source, and the page's `derived-from` lists them all
+  (single-source `compile <slug>` is unchanged). This also unblocks PROMOTE
+  re-synthesis as a follow-on.
 - **`scrip-harness reconcile` auto-authors the `polarity: qualifies` claim** on a
   `qualify` decision. The model returns a verbatim qualifier quote, its source, and
   the condition; the harness appends the claim via `scrip fact add --table claims`

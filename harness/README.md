@@ -11,11 +11,13 @@ valid, fully deterministic vault and CLI behind.
 
 ## How a compile runs
 
-`scrip-harness compile <slug>` (for `vault/raw/<slug>.md`):
+`scrip-harness compile <slug>` (for `vault/raw/<slug>.md`; pass
+`--from raw/a,raw/b` to synthesize one page from several sources):
 
 1. **Draft** — Claude (`claude-opus-4-8`, adaptive thinking, structured output)
    returns a `DraftPage`: a title, markdown prose with footnote markers
-   `[^a1], [^a2], …`, and one *verbatim quote* per marker.
+   `[^a1], [^a2], …`, and one *verbatim quote* per marker — each tagged with the
+   `source_id` it was copied from when several sources are given.
 2. **Mint + retry** — each quote goes through `scrip anchor`, which rejects a
    quote that isn't present in the source or isn't unique. Rejected quotes go back
    to Claude for one correction per failure (re-copied or lengthened until unique);
@@ -128,14 +130,15 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 
 ## Scope & limits (v1)
 
-- Covers **COMPILE** (one source → one wiki page, with the bounded quote-retry
-  loop), **EXTRACT** (one source → claims in `facts/`, same retry loop), **ANSWER** (fresh
+- Covers **COMPILE** (one or more sources → one wiki page, with the bounded
+  quote-retry loop), **EXTRACT** (one source → claims in `facts/`, same retry loop), **ANSWER** (fresh
   compiled evidence first, raw search on miss, verified citations), **PROMOTE**
   (score → merge/keep, model only in the middle band), and **RECONCILE**
   (adjudicate every contradiction → record the decision). Entities/edges go
   through `scrip fact add --table entities|edges` by hand.
-- Single source per page/extract; merge is **append** (not re-synthesis).
-  `reconcile` records the decision (supersede/qualify/keep-both) and, on a
-  **qualify**, authors the nuancing `polarity: qualifies` claim; surfacing the
-  page caveat is left to the read-only view layer, not a page mutation.
-  Multi-source synthesis is future work.
+- COMPILE accepts one or more sources (`--from raw/a,raw/b`); EXTRACT is still one
+  source. PROMOTE's merge is **append**, not re-synthesis — multi-source COMPILE
+  now unblocks re-synthesis as a follow-on. `reconcile` records the decision
+  (supersede/qualify/keep-both) and, on a **qualify**, authors the nuancing
+  `polarity: qualifies` claim; surfacing the page caveat is left to the read-only
+  view layer, not a page mutation.

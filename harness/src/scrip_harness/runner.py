@@ -16,7 +16,7 @@ from pathlib import Path
 from scrip import frontmatter  # reuse the deterministic frontmatter helper
 
 from .answer import DraftAnswer, overlap_score
-from .compile import DraftPage, assemble_body, extract_markers
+from .compile import DraftPage, assemble_body, extract_markers, format_sources
 from .extract import DraftExtraction, DraftFact, to_ndjson
 from .promote import PromotionDecision, merge_bodies
 from .reconcile import ReconciliationDecision
@@ -75,11 +75,18 @@ def compile_page(
     slug: str,
     *,
     kind: str = "concept",
+    sources: Sequence[str] | None = None,
     draft_fn: DraftFn,
     scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
     max_quote_retries: int = 2,
 ) -> Path:
-    """Compile ``raw/<slug>`` into ``wiki/<kind>s/<slug>.md`` and leave it green.
+    """Compile ``raw/<slug>`` (or several ``sources``) into ``wiki/<kind>s/<slug>.md``
+    and leave it green.
+
+    ``sources`` is a list of raw source ids (e.g. ``["raw/a", "raw/b"]``), defaulting
+    to the single ``raw/<slug>``. With several, each claim's ``source_id`` says which
+    source its quote is from, its anchor is minted against that source, and the
+    page's ``derived-from`` lists them all.
 
     ``draft_fn(source_text, source_id=...)`` returns a :class:`DraftPage` — inject
     a stub in tests; production passes ``model.draft_page``. On an AMBIGUOUS/BROKEN
@@ -94,12 +101,29 @@ def compile_page(
             f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
             f"separators, '..', or leading dot"
         )
-    source_id = f"raw/{slug}"
-    try:
-        source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
-    except OSError as e:
-        raise CompileError(f"cannot read {source_id}: {e}") from e
-    draft = draft_fn(source_text, source_id=source_id)
+    source_ids = list(sources) if sources else [f"raw/{slug}"]
+    valid_sources: dict[str, str] = {}
+    for sid in source_ids:
+        if not sid.startswith("raw/"):
+            raise CompileError(f"source id {sid!r} must start with 'raw/'")
+        s_slug = sid[len("raw/"):]
+        if not _SLUG_RE.fullmatch(s_slug):
+            raise CompileError(f"invalid source id {sid!r}")
+        try:
+            valid_sources[sid] = (
+                (root / "vault" / "raw" / f"{s_slug}.md").read_text(encoding="utf-8")
+            )
+        except OSError as e:
+            raise CompileError(f"cannot read {sid}: {e}") from e
+    # One source keeps the prompt byte-identical to a single-source compile; several
+    # are concatenated under labelled headers so the model attributes each quote.
+    if len(source_ids) == 1:
+        source_text = valid_sources[source_ids[0]]
+        draft_source_id = source_ids[0]
+    else:
+        source_text = format_sources([(sid, valid_sources[sid]) for sid in source_ids])
+        draft_source_id = ",".join(source_ids)
+    draft = draft_fn(source_text, source_id=draft_source_id)
 
     # The model's inline markers must be exactly [^a1]..[^aN] in order for the N
     # claims. scrip verify only checks footnote *definitions* resolve, so without
@@ -123,9 +147,23 @@ def compile_page(
         footnotes: list[str] = []
         failures: list[dict] = []
         for i, claim in enumerate(claims):
+            # resolve which source this claim's quote is from: explicit source_id,
+            # or the sole source. An unknown or (with several sources) missing
+            # source_id is a structural error, not a retryable quote failure.
+            csrc = claim.source_id or (source_ids[0] if len(source_ids) == 1 else "")
+            if csrc not in valid_sources:
+                if claim.source_id:
+                    raise CompileError(
+                        f"claim {i + 1} cites source {claim.source_id!r} not among "
+                        f"the compile's sources {source_ids}"
+                    )
+                raise CompileError(
+                    f"claim {i + 1} has no source_id but the compile has multiple "
+                    f"sources {source_ids}; set source_id to the quote's source"
+                )
             r = _scrip(
                 scrip_cmd,
-                ["anchor", claim.quote, "--source", source_id, "--label", f"a{i + 1}",
+                ["anchor", claim.quote, "--source", csrc, "--label", f"a{i + 1}",
                  "--json", "--root", str(root)],
             )
             if r.returncode == 0:
@@ -148,7 +186,7 @@ def compile_page(
                 f"{'y' if retries == 1 else 'ies'}: {detail}"
             )
         retries += 1
-        replacements = list(draft_fn(source_text, source_id=source_id, failures=failures).claims)
+        replacements = list(draft_fn(source_text, source_id=draft_source_id, failures=failures).claims)
         if len(replacements) != len(failures):
             raise CompileError(
                 f"retry returned {len(replacements)} claim(s) for {len(failures)} "
@@ -165,7 +203,7 @@ def compile_page(
 
     r = _scrip(
         scrip_cmd,
-        ["new", kind, slug, "--from", source_id, "--title", draft.title, "--root", str(root)],
+        ["new", kind, slug, "--from", ",".join(source_ids), "--title", draft.title, "--root", str(root)],
     )
     if r.returncode != 0:
         raise CompileError(f"scrip new failed (exit {r.returncode}): {r.stderr.strip()}")

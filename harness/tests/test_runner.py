@@ -229,3 +229,75 @@ def test_compile_fails_cleanly_after_retry_exhaustion(tmp_path):
         compile_page(root, "topic", draft_fn=stub, max_quote_retries=2)
     assert len(calls) == 3  # initial draft + 2 bounded retries
     assert not (root / "vault" / "wiki" / "concepts" / "topic.md").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Multi-source COMPILE: one page synthesized from several raw sources
+# --------------------------------------------------------------------------- #
+def _two_sources(root):
+    (root / "vault" / "raw" / "a.md").write_text(
+        "# A\n\nAlpha asserts the first unique fact clearly.\n", encoding="utf-8"
+    )
+    (root / "vault" / "raw" / "b.md").write_text(
+        "# B\n\nBeta provides a second distinct fact here.\n", encoding="utf-8"
+    )
+
+
+def test_compile_synthesizes_from_multiple_sources(tmp_path):
+    root = _vault(tmp_path)
+    _two_sources(root)
+
+    def stub(source_text, *, source_id, failures=None):
+        # the prompt carries BOTH labelled sources so the model can attribute quotes
+        assert "raw/a" in source_text and "raw/b" in source_text
+        return DraftPage(
+            title="Combined",
+            body="First point.[^a1] Second point.[^a2]\n",
+            claims=[
+                DraftClaim(quote="Alpha asserts the first unique fact", source_id="raw/a"),
+                DraftClaim(quote="Beta provides a second distinct fact", source_id="raw/b"),
+            ],
+        )
+
+    page = compile_page(root, "combined", sources=["raw/a", "raw/b"], draft_fn=stub)
+    text = page.read_text(encoding="utf-8")
+    # derived from BOTH sources, and each footnote anchors to its OWN source
+    assert "- raw/a" in text and "- raw/b" in text
+    assert "[^a1]: anchor=raw/a#qh:" in text
+    assert "[^a2]: anchor=raw/b#qh:" in text
+    assert subprocess.run(
+        [sys.executable, "-m", "scrip.cli", "verify", "--root", str(root)]
+    ).returncode == 0
+
+
+def test_compile_rejects_a_claim_citing_an_unknown_source(tmp_path):
+    root = _vault(tmp_path)
+    _two_sources(root)
+
+    def stub(source_text, *, source_id, failures=None):
+        return DraftPage(
+            title="Combined",
+            body="First.[^a1]\n",
+            claims=[DraftClaim(quote="Alpha asserts the first unique fact", source_id="raw/c")],
+        )
+
+    with pytest.raises(CompileError):
+        compile_page(root, "combined", sources=["raw/a", "raw/b"], draft_fn=stub)
+    assert not (root / "vault" / "wiki" / "concepts" / "combined.md").exists()
+
+
+def test_compile_requires_source_id_when_multiple_sources(tmp_path):
+    root = _vault(tmp_path)
+    _two_sources(root)
+
+    def stub(source_text, *, source_id, failures=None):
+        # a claim with no source_id is ambiguous when more than one source is given
+        return DraftPage(
+            title="Combined",
+            body="First.[^a1]\n",
+            claims=[DraftClaim(quote="Alpha asserts the first unique fact")],
+        )
+
+    with pytest.raises(CompileError):
+        compile_page(root, "combined", sources=["raw/a", "raw/b"], draft_fn=stub)
+    assert not (root / "vault" / "wiki" / "concepts" / "combined.md").exists()

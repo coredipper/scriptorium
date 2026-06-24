@@ -26,7 +26,7 @@ def extract_markers(body: str) -> list[str]:
     return seen
 
 SYSTEM = (
-    "You are the scribe for a scriptorium knowledge base. From the single source "
+    "You are the scribe for a scriptorium knowledge base. From the source(s) "
     "you are given, synthesize a concise, accurate concept page in markdown.\n"
     "Rules:\n"
     "- Write only what the source supports; do not add outside facts.\n"
@@ -35,6 +35,9 @@ SYSTEM = (
     "- For every marker, return one claim whose `quote` is copied VERBATIM from the "
     "source (it is machine-verified against the source text; paraphrases are "
     "rejected). Quote enough words to be unique.\n"
+    "- When several sources are provided (each under a `----- SOURCE <id> -----` "
+    "header), set each claim's `source_id` to the id of the source its quote was "
+    "copied from; with a single source you may leave it empty.\n"
     "- Keep the body free of the footnote *definitions* — only the markers. The "
     "definitions are generated from your quotes."
 )
@@ -43,6 +46,9 @@ SYSTEM = (
 class DraftClaim(BaseModel):
     quote: str
     """Verbatim text copied from the source, supporting the matching marker."""
+    source_id: str = ""
+    """Which source the quote was copied from (e.g. ``raw/a``), for multi-source
+    compiles. Empty means the page's sole source."""
     note: str = ""
     """Optional human-readable note on what the claim asserts."""
 
@@ -62,6 +68,14 @@ def build_user_prompt(source_text: str) -> str:
         "Return one claim per marker (same order), each with a `quote` copied "
         "verbatim from the source.\n\n----- SOURCE -----\n" + source_text
     )
+
+
+def format_sources(sources: list[tuple[str, str]]) -> str:
+    """Concatenate labelled sources for a multi-source compile so the model can
+    attribute each quote to the source it came from (and set the claim's
+    ``source_id``). Each section is ``----- SOURCE <id> -----`` then that source's
+    text — the same header the system prompt tells the model to read."""
+    return "\n\n".join(f"----- SOURCE {sid} -----\n{text}" for sid, text in sources)
 
 
 def build_retry_prompt(source_text: str, failures: list[dict]) -> str:
