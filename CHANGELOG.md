@@ -7,6 +7,13 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-06-24
+
+ANSWER joins the automated loop with a verified-citation harness, plus an
+optional long-document retrieval adapter. (scriptoria and scrip-harness both
+move to 0.6.0; the harness keeps its `scriptoria>=0.5` floor — `answer` only
+uses `scrip` commands that already existed in 0.5.)
+
 ### Added
 - **`scrip-harness answer "<question>"`** — executable ANSWER rung. It refuses
   stale artifacts, unresolved anchors, and open contradiction pairs by default;
@@ -19,6 +26,13 @@ reference CLI. The file **contract** is versioned separately in
   `scrip pageindex search` and `scrip search --long-docs pageindex` return only
   snippets mapped back to canonical `vault/raw/` text, falling back to
   embeddings/grep when no cache is available.
+
+### Changed
+- **Faster YAML parsing.** `frontmatter`, `facts`, and `graph` now load YAML via
+  PyYAML's C-accelerated `CSafeLoader` when available, falling back to the
+  pure-Python `SafeLoader` otherwise. Dump calls are unchanged — `CSafeDumper`
+  does not support `sort_keys=False`, which frontmatter writes rely on to keep
+  diffs clean.
 
 ## [0.5.2] — 2026-06-20
 
