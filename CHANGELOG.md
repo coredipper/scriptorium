@@ -7,6 +7,14 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-24
+
+The compile loop gains depth: COMPILE retries quotes that don't verify and can
+synthesize one page from several sources, and RECONCILE auto-authors the nuancing
+`qualifies` claim. (scrip-harness moves to 0.7.0; scriptoria stays 0.6.0 — these
+are harness-only changes, and the `scriptoria>=0.5` floor is unchanged: the new
+features reuse `scrip` commands already present in 0.5.)
+
 ### Added
 - **`scrip-harness compile --from raw/a,raw/b`** synthesizes one wiki page from
   several sources. Each claim names the `source_id` its quote is from, its anchor
