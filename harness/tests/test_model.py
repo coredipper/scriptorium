@@ -1,8 +1,9 @@
 """model.py wiring tests — no network. A fake Anthropic client captures the
 prompt so we can assert each retry path picks the RIGHT prompt. COMPILE and
-EXTRACT both export a `build_retry_prompt`; a name collision once mis-wired
-`draft_page` to EXTRACT's prompt (which invites dropping claims), violating
-COMPILE's positional-marker contract. These tests guard that boundary."""
+EXTRACT each have their own retry-prompt builder (`build_compile_retry_prompt` /
+`build_extract_retry_prompt`); a name collision once mis-wired `draft_page` to
+EXTRACT's prompt (which invites dropping claims), violating COMPILE's
+positional-marker contract. These tests guard that boundary."""
 
 from scrip_harness import model as model_mod
 from scrip_harness.compile import DraftClaim, DraftPage

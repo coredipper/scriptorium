@@ -78,7 +78,7 @@ def format_sources(sources: list[tuple[str, str]]) -> str:
     return "\n\n".join(f"----- SOURCE {sid} -----\n{text}" for sid, text in sources)
 
 
-def build_retry_prompt(source_text: str, failures: list[dict]) -> str:
+def build_compile_retry_prompt(source_text: str, failures: list[dict]) -> str:
     """Ask for a replacement for each failed quote, in the reported order. Unlike
     EXTRACT, COMPILE keeps *every* claim — the body's ``[^a1]..[^aN]`` markers are
     positional, so dropping one would misnumber the rest — hence there is no

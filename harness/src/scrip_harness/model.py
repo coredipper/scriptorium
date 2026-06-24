@@ -10,14 +10,14 @@ from .answer import ANSWER_SYSTEM, DraftAnswer, build_answer_prompt
 from .compile import (
     SYSTEM,
     DraftPage,
-    build_retry_prompt as build_compile_retry_prompt,
+    build_compile_retry_prompt,
     build_user_prompt,
 )
 from .extract import (
     EXTRACT_SYSTEM,
     DraftExtraction,
     build_extract_prompt,
-    build_retry_prompt as build_extract_retry_prompt,
+    build_extract_retry_prompt,
 )
 from .promote import PROMOTE_SYSTEM, PromotionDecision, build_promote_prompt
 from .reconcile import RECONCILE_SYSTEM, ReconciliationDecision, build_reconcile_prompt

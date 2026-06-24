@@ -4,7 +4,7 @@ from scrip_harness.compile import (
     DraftClaim,
     DraftPage,
     assemble_body,
-    build_retry_prompt,
+    build_compile_retry_prompt,
     build_user_prompt,
     extract_markers,
     format_sources,
@@ -27,12 +27,12 @@ def test_build_user_prompt_includes_the_source():
     assert "a distinctive source sentence" in prompt
 
 
-def test_build_retry_prompt_lists_failed_quotes_with_their_status():
+def test_build_compile_retry_prompt_lists_failed_quotes_with_their_status():
     failures = [
         {"index": 0, "status": "AMBIGUOUS", "quote": "alpha beta", "detail": "appears 2x"},
         {"index": 1, "status": "BROKEN", "quote": "not in the source", "detail": ""},
     ]
-    prompt = build_retry_prompt("the full distinctive source body", failures)
+    prompt = build_compile_retry_prompt("the full distinctive source body", failures)
     assert "the full distinctive source body" in prompt  # the source is re-supplied
     assert "alpha beta" in prompt and "not in the source" in prompt  # the failed quotes
     assert "AMBIGUOUS" in prompt and "BROKEN" in prompt  # each failure's status
