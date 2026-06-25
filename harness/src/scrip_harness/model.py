@@ -292,10 +292,13 @@ def _anthropic_structured(
     model: str,
     max_tokens: int,
     client=None,
+    api_key: str | None = None,
 ) -> BaseModel:
     import anthropic
 
-    client = client or anthropic.Anthropic()
+    client = client or (
+        anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+    )
     resp = client.messages.parse(
         model=model,
         max_tokens=max_tokens,
@@ -393,6 +396,7 @@ def _complete_structured(
     chosen_model = _resolve_model(chosen_provider, model)
 
     if chosen_provider == "anthropic":
+        key = _api_key(chosen_provider, api_key_file)
         return _anthropic_structured(
             system,
             prompt,
@@ -400,6 +404,7 @@ def _complete_structured(
             model=chosen_model,
             max_tokens=max_tokens,
             client=client,
+            api_key=key,
         )
 
     key = _api_key(chosen_provider, api_key_file)

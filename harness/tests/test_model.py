@@ -87,6 +87,30 @@ def test_auto_provider_rejects_explicit_key_file_without_provider(tmp_path):
         raise AssertionError("expected ModelConfigError")
 
 
+def test_anthropic_provider_passes_explicit_key_file(monkeypatch, tmp_path):
+    key_file = tmp_path / "anthropic"
+    key_file.write_text("anthropic-test\n", encoding="utf-8")
+    captured: dict = {}
+
+    def fake_anthropic(system, prompt, output_format, *, model, max_tokens, client=None, api_key=None):
+        captured["api_key"] = api_key
+        captured["model"] = model
+        return DraftAnswer(body="Answer.", citations=[])
+
+    monkeypatch.setattr(model_mod, "_anthropic_structured", fake_anthropic)
+
+    out = model_mod.draft_answer(
+        "question",
+        evidence={},
+        provider="anthropic",
+        model="claude-test",
+        api_key_file=str(key_file),
+    )
+
+    assert isinstance(out, DraftAnswer)
+    assert captured == {"api_key": "anthropic-test", "model": "claude-test"}
+
+
 def test_openai_provider_posts_responses_structured_output(monkeypatch):
     captured: dict = {}
 
