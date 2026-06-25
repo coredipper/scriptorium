@@ -88,6 +88,7 @@ def test_auto_provider_rejects_explicit_key_file_without_provider(tmp_path):
 
 
 def test_anthropic_provider_passes_explicit_key_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     key_file = tmp_path / "anthropic"
     key_file.write_text("anthropic-test\n", encoding="utf-8")
     captured: dict = {}
