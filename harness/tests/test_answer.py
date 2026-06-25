@@ -333,3 +333,9 @@ def test_answer_rejects_marker_mismatch(tmp_path):
 
     with pytest.raises(AnswerError, match="must be exactly"):
         answer_question(root, "Why cache?", draft_fn=stub)
+
+
+def test_answer_citation_accepts_markdown_marker_wrapper():
+    citation = AnswerCitation(marker="[^a1]", kind="claim", claim_id="clm_0001")
+
+    assert citation.marker == "a1"
