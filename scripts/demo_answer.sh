@@ -14,6 +14,9 @@ Options:
   --model MODEL       Provider model id override
   --api-key-file PATH Provider API key file
   -k N                Evidence items per layer (default: 6)
+  --timeout SECONDS   Provider HTTP timeout for OpenAI/Gemini (default: 180)
+  --preflight-only    Run status/verify only, then exit
+  --debug             Print the answer command before running it
   --save              Save the verified answer under vault/wiki/explorations/
   -h, --help          Show this help
 
@@ -33,6 +36,9 @@ model=""
 api_key_file=""
 save=0
 k=6
+timeout=180
+preflight_only=0
+debug=0
 question="How does Atlas answer questions safely?"
 
 while [[ $# -gt 0 ]]; do
@@ -56,6 +62,18 @@ while [[ $# -gt 0 ]]; do
     -k|--k)
       k="$2"
       shift 2
+      ;;
+    --timeout)
+      timeout="$2"
+      shift 2
+      ;;
+    --preflight-only)
+      preflight_only=1
+      shift
+      ;;
+    --debug)
+      debug=1
+      shift
       ;;
     --save)
       save=1
@@ -99,11 +117,18 @@ else
 fi
 
 echo "== status =="
+echo "root: $root"
 "${scrip_cmd[@]}" status --root "$root"
 
 echo
 echo "== verify =="
 "${scrip_cmd[@]}" verify --root "$root"
+
+if [[ "$preflight_only" -eq 1 ]]; then
+  echo
+  echo "preflight passed"
+  exit 0
+fi
 
 answer_cmd=(
   "${harness_cmd[@]}"
@@ -122,6 +147,17 @@ if [[ "$save" -eq 1 ]]; then
   answer_cmd+=(--save)
 fi
 
+export SCRIP_HARNESS_HTTP_TIMEOUT="$timeout"
+
 echo
 echo "== answer =="
+echo "provider: $provider"
+echo "question: $question"
+echo "timeout: ${timeout}s"
+echo "waiting for provider response..."
+if [[ "$debug" -eq 1 ]]; then
+  printf 'command:'
+  printf ' %q' "${answer_cmd[@]}"
+  printf '\n'
+fi
 exec "${answer_cmd[@]}"

@@ -191,8 +191,10 @@ def _http_json(
     payload: dict[str, Any],
     headers: dict[str, str],
     *,
-    timeout: int = 180,
+    timeout: int | None = None,
 ) -> dict[str, Any]:
+    if timeout is None:
+        timeout = _http_timeout()
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
@@ -210,6 +212,19 @@ def _http_json(
     if not isinstance(parsed, dict):
         raise RuntimeError("provider returned a non-object JSON response")
     return parsed
+
+
+def _http_timeout() -> int:
+    raw = os.environ.get("SCRIP_HARNESS_HTTP_TIMEOUT")
+    if not raw:
+        return 180
+    try:
+        timeout = int(raw)
+    except ValueError as e:
+        raise ModelConfigError("SCRIP_HARNESS_HTTP_TIMEOUT must be an integer") from e
+    if timeout <= 0:
+        raise ModelConfigError("SCRIP_HARNESS_HTTP_TIMEOUT must be positive")
+    return timeout
 
 
 def _redact(text: str) -> str:

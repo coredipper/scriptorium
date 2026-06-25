@@ -113,6 +113,12 @@ def test_provider_model_env_override(monkeypatch):
     assert model_mod._resolve_model("openai", "gpt-explicit") == "gpt-explicit"
 
 
+def test_http_timeout_env(monkeypatch):
+    monkeypatch.setenv("SCRIP_HARNESS_HTTP_TIMEOUT", "12")
+
+    assert model_mod._http_timeout() == 12
+
+
 def test_anthropic_provider_passes_explicit_key_file(monkeypatch, tmp_path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     key_file = tmp_path / "anthropic"
