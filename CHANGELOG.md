@@ -7,6 +7,34 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-25
+
+The harness can now run against multiple model providers, and the answer demo is
+repeatable without private data. `scrip-harness` moves to 0.8.0; `scriptoria`
+moves to 0.6.2 for the answer preflight fix below.
+
+### Added
+- **Multi-provider model support in `scrip-harness`.** Model-backed commands now
+  accept `--provider auto|anthropic|openai|gemini`, `--model`, and
+  `--api-key-file`. Auto-selection checks Anthropic, OpenAI, then Gemini keys;
+  OpenAI/Gemini default key-file paths support the local demo setup.
+- **Sanitized answer demo fixture.** `examples/answer-demo-vault/` and
+  `scripts/demo_answer.sh` run `status`, `verify`, and a model-backed answer flow
+  against synthetic Atlas data, so demos no longer need private wiki content.
+
+### Changed
+- **ANSWER citation prompting is stricter.** The harness normalizes citation
+  markers, asks for bare marker labels in structured output, and falls back to raw
+  search when compiled claim hits are weak rather than merely sparse.
+
+### Fixed
+- **Empty reconciliations files no longer break contradiction preflight.**
+  `scrip query contradictions` now gives an empty `reconciliations` schema stub
+  when `facts/reconciliations.ndjson` exists but has no rows, matching the
+  missing-file behavior.
+- **Anthropic key-file credentials are passed to the SDK client.** Explicit key
+  files and Anthropic key-file env config now work the same way as env keys.
+
 ## [0.6.1] — 2026-06-25
 
 A performance-only patch: `split_blocks` now segments markdown in a single pass.
@@ -275,6 +303,9 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[0.8.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.8.0
+[0.7.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.7.0
+[0.6.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.1
 [0.6.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.0
 [0.5.2]: https://github.com/coredipper/scriptorium/releases/tag/v0.5.2
 [0.5.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.5.1

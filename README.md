@@ -141,19 +141,16 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 
 ## Status
 
-**Latest release: v0.5** (see [CHANGELOG.md](CHANGELOG.md)) — **RECONCILE**:
-`scrip span` reads both sides of a contradiction and `scrip-harness reconcile`
-adjudicates it, recording the decision append-only in
-`facts/reconciliations.ndjson`. With this the maintaining loop has runnable
-support end to end: every [AGENT.md](AGENT.md) stage (**INGEST · COMPILE ·
-EXTRACT · ANSWER · PROMOTE · RECONCILE**) has deterministic `scrip` primitives
-to branch on, and the model-bearing COMPILE / EXTRACT / ANSWER / PROMOTE /
-RECONCILE steps have bounded `scrip-harness` commands. This is still a reference
-implementation of a verifiable file contract, not a turnkey document-chat
-product: multi-source synthesis, rich chat UX, and richer long-document
-workflows belong in adapters or higher-level tools. (0.4 added PROMOTE; 0.3
-added EXTRACT, a hardened CI/release pipeline, and published both packages to PyPI:
-`scriptoria`, the `scrip` CLI, and the optional [`scrip-harness`](harness/README.md).)
+**Latest releases: scriptoria v0.6.2 and scrip-harness v0.8.0** (see
+[CHANGELOG.md](CHANGELOG.md)) — ANSWER now has a multi-provider harness
+(`anthropic`, `openai`, `gemini`) and a sanitized demo fixture. The maintaining
+loop has runnable support end to end: every [AGENT.md](AGENT.md) stage
+(**INGEST · COMPILE · EXTRACT · ANSWER · PROMOTE · RECONCILE**) has deterministic
+`scrip` primitives to branch on, and the model-bearing COMPILE / EXTRACT /
+ANSWER / PROMOTE / RECONCILE steps have bounded `scrip-harness` commands. This
+is still a reference implementation of a verifiable file contract, not a turnkey
+document-chat product: rich chat UX and richer long-document workflows belong in
+adapters or higher-level tools.
 
 The contract is hardened (content-derived block ids, **SPEC v2**), with an
 advisory write lock, `scrip watch`, and an optional `[embeddings]` retrieval rung;

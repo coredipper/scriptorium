@@ -2,7 +2,7 @@
 # Distribution name on PyPI is `scriptoria` (scrip/scriptorium were taken); the
 # CLI command and the import package both remain `scrip`.
 name = "scriptoria"
-version = "0.6.1"
+version = "0.6.2"
 description = "Deterministic scriptorium-keeper (the `scrip` CLI): staleness, provenance integrity, and fact queries for an agent-compiled knowledge base"
 readme = "README.md"
 requires-python = ">=3.10"
