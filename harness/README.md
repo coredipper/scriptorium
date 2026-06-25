@@ -132,7 +132,31 @@ scrip-harness answer "..." --provider auto|anthropic|openai|gemini \
 `--provider auto` is the default. It picks the first available key in this order:
 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` (or `~/veed/var/openai`), then
 `GEMINI_API_KEY`/`GOOGLE_API_KEY` (or files under `~/veed/var/gemini`). Provider
-defaults can be overridden with `SCRIP_HARNESS_<PROVIDER>_MODEL`.
+defaults can be overridden with `SCRIP_HARNESS_<PROVIDER>_MODEL`. Environment
+keys take precedence over key files. When `--api-key-file` points at a directory,
+the harness reads the first non-empty key from the sorted files in that directory.
+An explicit key file also needs an explicit provider:
+
+```sh
+scrip-harness answer "How does the answer ladder work?" --provider openai \
+  --api-key-file ~/veed/var/openai
+scrip-harness answer "How does raw fallback work?" --provider gemini \
+  --api-key-file ~/veed/var/gemini --model gemini-3.5-flash
+```
+
+### Demo fixture
+
+From a checkout, `scripts/demo_answer.sh` runs the full answer command against a
+small synthetic vault in `examples/answer-demo-vault/`:
+
+```sh
+scripts/demo_answer.sh --provider openai
+scripts/demo_answer.sh --provider gemini --api-key-file ~/veed/var/gemini
+scripts/demo_answer.sh --root . --provider auto "What does the vault say about caching?"
+```
+
+The script runs `scrip status` and `scrip verify` before invoking the model. Pass
+`--save` to write the verified answer under `vault/wiki/explorations/`.
 
 ## Develop / test
 

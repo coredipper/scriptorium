@@ -87,6 +87,32 @@ def test_auto_provider_rejects_explicit_key_file_without_provider(tmp_path):
         raise AssertionError("expected ModelConfigError")
 
 
+def test_api_key_env_precedes_explicit_key_file(monkeypatch, tmp_path):
+    key_file = tmp_path / "openai"
+    key_file.write_text("sk-file\n", encoding="utf-8")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+
+    assert model_mod._api_key("openai", str(key_file)) == "sk-env"
+
+
+def test_gemini_key_file_directory_uses_sorted_files(monkeypatch, tmp_path):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    key_dir = tmp_path / "gemini"
+    key_dir.mkdir()
+    (key_dir / "b").write_text("gem-b\n", encoding="utf-8")
+    (key_dir / "a").write_text("gem-a\n", encoding="utf-8")
+
+    assert model_mod._api_key("gemini", str(key_dir)) == "gem-a"
+
+
+def test_provider_model_env_override(monkeypatch):
+    monkeypatch.setenv("SCRIP_HARNESS_OPENAI_MODEL", "gpt-demo")
+
+    assert model_mod._resolve_model("openai", None) == "gpt-demo"
+    assert model_mod._resolve_model("openai", "gpt-explicit") == "gpt-explicit"
+
+
 def test_anthropic_provider_passes_explicit_key_file(monkeypatch, tmp_path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     key_file = tmp_path / "anthropic"

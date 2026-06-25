@@ -55,26 +55,35 @@ _NAMED = {
 _FILTERABLE = {"claims", "entities", "edges", "reconciliations"}
 
 
+def _create_empty_reconciliations_view(con: duckdb.DuckDBPyConnection) -> None:
+    # Always present (empty stub) so `contradictions` can anti-join it and raw SQL
+    # over its columns works even before any reconciliation exists.
+    con.execute(
+        "CREATE VIEW reconciliations AS SELECT "
+        "NULL::VARCHAR AS reconciliation_id, NULL::VARCHAR AS decision, "
+        "NULL::VARCHAR AS claim_a, NULL::VARCHAR AS claim_b, "
+        "NULL::VARCHAR AS winner, NULL::VARCHAR AS rationale, "
+        "NULL::VARCHAR AS at WHERE FALSE"
+    )
+
+
+def _has_rows(path: Path) -> bool:
+    with path.open(encoding="utf-8") as f:
+        return any(line.strip() for line in f)
+
+
 def _connect(root: Path) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(":memory:")
     fd = facts_dir(root)
     for view, fname in _VIEWS.items():
         p = fd / fname
-        if p.exists():
+        if p.exists() and (view != "reconciliations" or _has_rows(p)):
             con.execute(
                 f"CREATE VIEW {view} AS "
                 f"SELECT * FROM read_ndjson_auto('{p.as_posix()}')"
             )
         elif view == "reconciliations":
-            # Always present (empty stub) so `contradictions` can anti-join it and
-            # raw SQL over its columns works even before any reconciliation exists.
-            con.execute(
-                "CREATE VIEW reconciliations AS SELECT "
-                "NULL::VARCHAR AS reconciliation_id, NULL::VARCHAR AS decision, "
-                "NULL::VARCHAR AS claim_a, NULL::VARCHAR AS claim_b, "
-                "NULL::VARCHAR AS winner, NULL::VARCHAR AS rationale, "
-                "NULL::VARCHAR AS at WHERE FALSE"
-            )
+            _create_empty_reconciliations_view(con)
     return con
 
 
