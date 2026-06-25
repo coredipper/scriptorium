@@ -35,17 +35,13 @@ def _is_blank(line: str) -> bool:
 
 def split_blocks(text: str) -> list[dict]:
     """Return a list of ``{"block_id", "span": [start, end], "hash"}``."""
-    # Index every line with its [start, end) char offsets.
-    spans: list[tuple[int, int, str]] = []
-    start = 0
-    for line in text.splitlines(keepends=True):
-        end = start + len(line)
-        spans.append((start, end, line))
-        start = end
-
+    # ⚡ Bolt: Single pass block segmentation to avoid intermediate O(N) allocation
     ranges: list[list[int]] = []  # [start, end] per block
     cur: list[int] | None = None
-    for s, e, line in spans:
+    start = 0
+
+    for line in text.splitlines(keepends=True):
+        end = start + len(line)
         if _is_blank(line):
             if cur is not None:
                 ranges.append(cur)
@@ -54,12 +50,14 @@ def split_blocks(text: str) -> list[dict]:
             if cur is not None:
                 ranges.append(cur)
                 cur = None
-            ranges.append([s, e])  # a heading is its own block
+            ranges.append([start, end])  # a heading is its own block
         else:
             if cur is None:
-                cur = [s, e]
+                cur = [start, end]
             else:
-                cur[1] = e
+                cur[1] = end
+        start = end
+
     if cur is not None:
         ranges.append(cur)
 
