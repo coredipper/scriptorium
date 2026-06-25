@@ -7,6 +7,18 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-06-25
+
+A performance-only patch: `split_blocks` now segments markdown in a single pass.
+scriptoria moves to 0.6.1; scrip-harness stays 0.7.0 — no behavior or API change.
+
+### Changed
+- **`split_blocks` is now single-pass.** The per-line offset indexing was folded
+  into the segmentation loop, dropping the intermediate `spans` list (one fewer
+  O(N) allocation and walk) — faster and lower-memory on large documents. Output
+  is byte-identical: block ids, spans, and hashes are unchanged, so the
+  determinism contract and existing manifests/staleness state are unaffected.
+
 ## [0.7.0] — 2026-06-24
 
 The compile loop gains depth: COMPILE retries quotes that don't verify and can
