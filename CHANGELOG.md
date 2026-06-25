@@ -7,11 +7,21 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
-## [0.8.0] — 2026-06-25
+## [0.6.2] — 2026-06-25
+
+scriptoria moves to 0.6.2 for an ANSWER preflight fix used by the harness.
+
+### Fixed
+- **Empty reconciliations files no longer break contradiction preflight.**
+  `scrip query contradictions` now gives an empty `reconciliations` schema stub
+  when `facts/reconciliations.ndjson` exists but has no rows, matching the
+  missing-file behavior.
+
+## [harness-0.8.0] — 2026-06-25
 
 The harness can now run against multiple model providers, and the answer demo is
-repeatable without private data. `scrip-harness` moves to 0.8.0; `scriptoria`
-moves to 0.6.2 for the answer preflight fix below.
+repeatable without private data. `scrip-harness` moves to 0.8.0 and now depends
+on `scriptoria>=0.6.2`.
 
 ### Added
 - **Multi-provider model support in `scrip-harness`.** Model-backed commands now
@@ -28,10 +38,6 @@ moves to 0.6.2 for the answer preflight fix below.
   search when compiled claim hits are weak rather than merely sparse.
 
 ### Fixed
-- **Empty reconciliations files no longer break contradiction preflight.**
-  `scrip query contradictions` now gives an empty `reconciliations` schema stub
-  when `facts/reconciliations.ndjson` exists but has no rows, matching the
-  missing-file behavior.
 - **Anthropic key-file credentials are passed to the SDK client.** Explicit key
   files and Anthropic key-file env config now work the same way as env keys.
 
@@ -303,8 +309,9 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
-[0.8.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.8.0
+[harness-0.8.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.8.0
 [0.7.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.7.0
+[0.6.2]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.2
 [0.6.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.1
 [0.6.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.0
 [0.5.2]: https://github.com/coredipper/scriptorium/releases/tag/v0.5.2
