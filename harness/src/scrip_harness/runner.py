@@ -15,7 +15,7 @@ from pathlib import Path
 
 from scrip import frontmatter  # reuse the deterministic frontmatter helper
 
-from .answer import DraftAnswer, overlap_score
+from .answer import DraftAnswer, overlap_score, tokenize
 from .compile import DraftPage, assemble_body, extract_markers, format_sources
 from .extract import DraftExtraction, DraftFact, to_ndjson
 from .promote import PromotionDecision, merge_bodies
@@ -451,7 +451,9 @@ def _gather_answer_evidence(
     # must be claim ids or raw quotes. Do not let non-citable page context satisfy
     # the fallback threshold, or a wiki-heavy/facts-light vault dead-ends with no
     # raw evidence the answer can legally cite.
-    if len(ranked_claims) < min_compiled:
+    top_claim_score = ranked_claims[0]["score"] if ranked_claims else 0
+    strong_claim_threshold = max(2, min(4, len(tokenize(question)) // 2))
+    if len(ranked_claims) < min_compiled or top_claim_score < strong_claim_threshold:
         _, search = _scrip_json(
             scrip_cmd,
             ["search", question, "-k", str(k), "--json", "--root", str(root)],

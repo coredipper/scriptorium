@@ -1,0 +1,7 @@
+id: facts/core
+type: facts.set
+derived-from:
+- raw/atlas-cache
+- raw/atlas-incidents
+input-hash: sha256:9bd082f5dca1390a9dc8ab9e894ff0d220080a751b0362864b4cf06248805d23
+last-compiled: '2026-06-25T00:00:00Z'

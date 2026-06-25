@@ -74,6 +74,16 @@ def test_contradictions_works_without_reconciliations_file(kb):
     assert len(query.run(kb.root, name="contradictions")[1]) == 1
 
 
+def test_contradictions_works_with_empty_reconciliations_file(kb):
+    # an existing-but-empty file should use the same stub schema as a missing file
+    _contradiction_pair(kb)
+    (kb.root / "vault" / "facts" / "reconciliations.ndjson").write_text(
+        "\n", encoding="utf-8"
+    )
+
+    assert len(query.run(kb.root, name="contradictions")[1]) == 1
+
+
 def test_query_reconciliations_cli_choice(kb):
     # the named query must be a valid CLI `query` choice, not just in query.run
     _contradiction_pair(kb)
@@ -84,6 +94,20 @@ def test_reconciliations_stub_exposes_full_schema(kb):
     # before the file exists, raw SQL over the stub's columns must still work
     _contradiction_pair(kb)
     cols, rows = query.run(kb.root, sql="SELECT decision, winner, reconciliation_id FROM reconciliations")
+    assert rows == []
+    assert "decision" in cols
+
+
+def test_empty_reconciliations_file_exposes_full_schema(kb):
+    _contradiction_pair(kb)
+    (kb.root / "vault" / "facts" / "reconciliations.ndjson").write_text(
+        "\n", encoding="utf-8"
+    )
+
+    cols, rows = query.run(
+        kb.root,
+        sql="SELECT decision, winner, reconciliation_id FROM reconciliations",
+    )
     assert rows == []
     assert "decision" in cols
 

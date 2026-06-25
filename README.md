@@ -37,6 +37,7 @@ vault/          a real, dogfooded instance (reading notes on the 3 designs above
 scrip/          the reference CLI: the deterministic keeper (Python, uv)
 harness/        optional LLM loop (scrip-harness): runnable COMPILE / EXTRACT / PROMOTE
 scripts/        seed_vault.py — reproducibly regenerates the example vault
+examples/       small synthetic vaults and demos safe to share
 adapters/       deferred bindings (Obsidian, embeddings, PageIndex) — see adapters/README.md
 ```
 
@@ -74,6 +75,20 @@ scrip search "what makes adding one document expensive?"
 # before creating a page, score its overlap with existing ones (PROMOTE step 1)
 scrip similar --title "Compilation over retrieval" --from raw/karpathy-llm-wiki
 ```
+
+### Optional: answer demo
+
+The optional harness can answer from a green vault with model output constrained
+to verified claim ids or raw quotes. A sanitized fixture is included for demos:
+
+```sh
+scripts/demo_answer.sh --provider openai
+scripts/demo_answer.sh --provider gemini --api-key-file ~/veed/var/gemini
+scripts/demo_answer.sh --root . --provider auto "What does the vault say about caching?"
+```
+
+The first two commands use `examples/answer-demo-vault/`. The `--root .` form
+targets the local dogfood vault instead.
 
 ### Optional: semantic retrieval
 

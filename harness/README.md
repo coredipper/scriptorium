@@ -2,25 +2,26 @@
 
 The deterministic `scrip` keeper does staleness, provenance, and queries. It never
 calls a model. **scrip-harness** is the optional *judgment* layer that makes the
-[AGENT.md](../AGENT.md) COMPILE step runnable: it asks Claude to synthesize a wiki
-page from a source, then hands every verifiable step back to `scrip`.
+[AGENT.md](../AGENT.md) COMPILE step runnable: it asks a configured model provider
+to synthesize a wiki page from a source, then hands every verifiable step back to
+`scrip`.
 
 The dependency points one way only: the harness depends on `scrip` (and the
-Anthropic SDK); `scrip` depends on neither. Removing this directory leaves a fully
-valid, fully deterministic vault and CLI behind.
+provider client in `model.py`); `scrip` depends on neither. Removing this
+directory leaves a fully valid, fully deterministic vault and CLI behind.
 
 ## How a compile runs
 
 `scrip-harness compile <slug>` (for `vault/raw/<slug>.md`; pass
 `--from raw/a,raw/b` to synthesize one page from several sources):
 
-1. **Draft** — Claude (`claude-opus-4-8`, adaptive thinking, structured output)
-   returns a `DraftPage`: a title, markdown prose with footnote markers
+1. **Draft** — the selected provider returns a `DraftPage`: a title, markdown
+   prose with footnote markers
    `[^a1], [^a2], …`, and one *verbatim quote* per marker — each tagged with the
    `source_id` it was copied from when several sources are given.
 2. **Mint + retry** — each quote goes through `scrip anchor`, which rejects a
    quote that isn't present in the source or isn't unique. Rejected quotes go back
-   to Claude for one correction per failure (re-copied or lengthened until unique);
+   to the model for one correction per failure (re-copied or lengthened until unique);
    bounded retries, then the compile fails cleanly. A hallucinated or paraphrased
    quote cannot get past this step. Unlike EXTRACT, every claim is kept — the
    body's `[^a1]..[^aN]` markers are positional — so a quote is corrected, never
@@ -37,13 +38,13 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
 
 `scrip-harness extract <slug>` (for `vault/raw/<slug>.md`):
 
-1. **Draft** — Claude returns a `DraftExtraction`: structured claims, each with a
-   *verbatim quote*, a subject/predicate/object triple, and a polarity.
+1. **Draft** — the selected provider returns a `DraftExtraction`: structured
+   claims, each with a *verbatim quote*, a subject/predicate/object triple, and a polarity.
 2. **Mint + append** — the claims go to `scrip fact add --stdin`, which verifies
    every quote (minting anchors), assigns ids and timestamps, skips exact
    duplicates, and appends **all-or-nothing** under the write lock.
 3. **Retry** — if quotes come back BROKEN/AMBIGUOUS, the failures go back to
-   Claude for one replacement per failure (lengthened until unique, or an empty
+   the model for one replacement per failure (lengthened until unique, or an empty
    quote to drop the claim); bounded retries, then the extract fails cleanly.
 4. **Stamp + verify** — `scrip stamp vault/facts/_meta.yaml`, then `scrip verify`;
    contradiction candidates from `scrip query contradictions` are surfaced for
@@ -57,7 +58,7 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
    title tokens + derived tags) with the candidate, excluding itself.
 2. **Band** the top score: **≥ `--merge-threshold`** (0.5) → merge into it,
    **deterministically (no model)**; **< `--keep-threshold`** (0.25) → keep the
-   page as its own; **in between** → Claude decides merge-vs-keep over the small
+   page as its own; **in between** → the model decides merge-vs-keep over the small
    candidate set (the *only* model call in PROMOTE).
 3. **Merge** — append the candidate into the target (its `[^a1]..` footnotes
    renumbered to avoid collision), union the `derived-from`, record the absorbed
@@ -74,7 +75,7 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
 2. **Gather** — the harness ranks claims from `facts/`, reads relevant compiled
    wiki pages as context, and falls back to `scrip search` when compiled evidence
    is thin.
-3. **Draft** — Claude answers from that bounded evidence packet and returns
+3. **Draft** — the selected provider answers from that bounded evidence packet and returns
    structured citation records: either an existing `claim_id` or a verbatim raw
    quote.
 4. **Verify citations** — claim citations are resolved with `scrip span`; raw
@@ -88,7 +89,7 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
 1. **Find** — `scrip query contradictions` lists the candidate pairs (same
    subject+predicate, opposing polarity, different sources, not yet adjudicated).
 2. **Read** — for each pair, `scrip span --claim <id>` fetches both verbatim
-   cited spans, and Claude decides **supersede** (with a winner), **qualify**
+   cited spans, and the model decides **supersede** (with a winner), **qualify**
    (with a verbatim qualifier quote + the condition under which it holds), or
    **keep-both**, with a rationale.
 3. **Record** — the decisions are written append-only with `scrip fact add
@@ -108,16 +109,54 @@ direct use:
 ```sh
 uv tool install scrip-harness            # this package → `scrip-harness` (pulls scriptoria)
 uv tool install 'scriptoria[ingest]'     # optional: `scrip` on PATH + HTML/PDF ingest
-export ANTHROPIC_API_KEY=...              # the harness calls Claude; scrip never does
+export OPENAI_API_KEY=...                 # or ANTHROPIC_API_KEY / GEMINI_API_KEY
 
-scrip-harness compile article            # synthesize + verify a page from raw/article
+scrip-harness compile article --provider openai
 scrip-harness extract article            # pull claims into facts/
-scrip-harness answer "What does the corpus say about caching?"
+scrip-harness answer "What does the corpus say about caching?" --provider openai
 scrip ingest <url> --slug article        # bring a source in (needs the install above)
 ```
 
 (From a checkout, `uv tool install ./scrip` and `uv tool install ./harness`
 install the local versions instead.)
+
+### Provider selection
+
+Every model-backed command accepts:
+
+```sh
+scrip-harness answer "..." --provider auto|anthropic|openai|gemini \
+  [--model MODEL] [--api-key-file PATH]
+```
+
+`--provider auto` is the default. It picks the first available key in this order:
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` (or `~/veed/var/openai`), then
+`GEMINI_API_KEY`/`GOOGLE_API_KEY` (or files under `~/veed/var/gemini`). Provider
+defaults can be overridden with `SCRIP_HARNESS_<PROVIDER>_MODEL`. Environment
+keys take precedence over key files. When `--api-key-file` points at a directory,
+the harness reads the first non-empty key from the sorted files in that directory.
+An explicit key file also needs an explicit provider:
+
+```sh
+scrip-harness answer "How does the answer ladder work?" --provider openai \
+  --api-key-file ~/veed/var/openai
+scrip-harness answer "How does raw fallback work?" --provider gemini \
+  --api-key-file ~/veed/var/gemini --model gemini-3.5-flash
+```
+
+### Demo fixture
+
+From a checkout, `scripts/demo_answer.sh` runs the full answer command against a
+small synthetic vault in `examples/answer-demo-vault/`:
+
+```sh
+scripts/demo_answer.sh --provider openai
+scripts/demo_answer.sh --provider gemini --api-key-file ~/veed/var/gemini
+scripts/demo_answer.sh --root . --provider auto "What does the vault say about caching?"
+```
+
+The script runs `scrip status` and `scrip verify` before invoking the model. Pass
+`--save` to write the verified answer under `vault/wiki/explorations/`.
 
 ## Develop / test
 

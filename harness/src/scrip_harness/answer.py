@@ -8,7 +8,7 @@ import json
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 ANSWER_SYSTEM = (
     "You are the scribe for a scriptorium knowledge base answering a user's "
@@ -18,6 +18,10 @@ ANSWER_SYSTEM = (
     "- Every factual sentence must carry a footnote marker ([^a1], [^a2], ...) "
     "whose citation record points to either an existing claim id or a raw source "
     "quote copied verbatim from the evidence.\n"
+    "- Return one citation record for every marker, in the same order. In citation "
+    "records, `marker` is the bare label (`a1`), not the markdown wrapper (`[^a1]`).\n"
+    "- For raw citations, copy a complete contiguous quote, not a truncated snippet. "
+    "Avoid generic table headers; quote enough source words to be unique.\n"
     "- Keep the body free of footnote definitions; the harness mints and appends "
     "verified definitions after your draft.\n"
     "- Do not cite wiki pages directly. They are context; final citations must be "
@@ -36,6 +40,13 @@ class AnswerCitation(BaseModel):
     quote: str = ""
     """Verbatim raw-source quote when kind == raw."""
 
+    @field_validator("marker")
+    @classmethod
+    def normalize_marker(cls, value: str) -> str:
+        value = value.strip()
+        m = re.fullmatch(r"\[\^([^\]]+)\]", value)
+        return m.group(1) if m else value
+
 
 class DraftAnswer(BaseModel):
     body: str
@@ -51,7 +62,10 @@ def build_answer_prompt(question: str, evidence: dict) -> str:
     """Prompt the model with a compact, explicit evidence packet."""
     return (
         "Answer the question using only this evidence packet. Cite every factual "
-        "sentence with [^a1], [^a2], ... and return matching citation records.\n\n"
+        "sentence with [^a1], [^a2], ... and return matching citation records. "
+        "The citation record markers must be bare labels (`a1`, `a2`, ...). Raw "
+        "citation quotes must be complete, contiguous, verbatim, and specific "
+        "enough to resolve uniquely against the source.\n\n"
         f"QUESTION:\n{question}\n\n"
         "EVIDENCE JSON:\n"
         f"{_compact_json(evidence)}"
