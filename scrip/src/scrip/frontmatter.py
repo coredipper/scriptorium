@@ -25,23 +25,29 @@ FENCE = "---"
 def parse(text: str) -> tuple[dict, str]:
     """Return ``(meta, body)``. If there is no frontmatter, ``meta`` is ``{}``
     and ``body`` is the whole text."""
-    lines = text.splitlines(keepends=True)
-    if not lines or lines[0].strip() != FENCE:
+    import io
+    f = io.StringIO(text, newline="")
+    first_line = f.readline()
+    if not first_line or first_line.strip() != FENCE:
         return {}, text
-    for i in range(1, len(lines)):
-        if lines[i].strip() == FENCE:
-            fm_text = "".join(lines[1:i])
-            body = "".join(lines[i + 1 :])
-            try:
-                meta = yaml.load(fm_text, Loader=SafeLoader)
-            except yaml.YAMLError as e:
-                raise DataError(f"invalid YAML frontmatter: {e}") from e
-            if meta is None:
-                meta = {}
-            if not isinstance(meta, dict):
-                raise DataError("frontmatter must be a YAML mapping")
-            return meta, body
-    raise DataError("unterminated frontmatter (missing closing '---')")
+
+    fm_lines = []
+    for line in f:
+        if line.strip() == FENCE:
+            break
+        fm_lines.append(line)
+    else:
+        raise DataError("unterminated frontmatter (missing closing '---')")
+
+    try:
+        meta = yaml.load("".join(fm_lines), Loader=SafeLoader)
+    except yaml.YAMLError as e:
+        raise DataError(f"invalid YAML frontmatter: {e}") from e
+    if meta is None:
+        meta = {}
+    if not isinstance(meta, dict):
+        raise DataError("frontmatter must be a YAML mapping")
+    return meta, f.read()
 
 
 def _read_frontmatter(f) -> tuple[bool, dict]:

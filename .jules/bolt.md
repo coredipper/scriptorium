@@ -17,3 +17,7 @@
 ## 2024-07-28 - Single Pass Block Segmentation
 **Learning:** In operations that process text files line-by-line (like markdown block segmentation), accumulating intermediate lists (e.g., span tuples containing start/end and full lines) introduces significant memory overhead and repeated O(N) iteration loops. Merging the tracking logic directly inside the main `splitlines()` loop saves allocations and iteration cycles.
 **Action:** Always prefer a single pass strategy when generating indices or ranges over raw text files; avoid constructing intermediary sequence arrays (`spans: list[...]`) that are merely used to inform the final range boundaries.
+
+## 2024-07-28 - Memory Overhead of String Splitlines on Large In-Memory Text
+**Learning:** Calling `text.splitlines()` on large multi-line strings is just as bad as calling `Path.read_text().splitlines()`. It creates a huge array allocating all lines at once. `frontmatter.parse` was parsing string text using `text.splitlines()` when it only ever needed the frontmatter.
+**Action:** When extracting subset metadata (like YAML frontmatter) from large in-memory strings, use `io.StringIO(text)` to lazily read the prefix instead of `splitlines()`. This significantly reduces memory footprint and iteration cycles.
