@@ -7,6 +7,17 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-06-26
+
+scriptoria moves to 0.6.3 for a faster in-memory frontmatter parser.
+
+### Changed
+- **`frontmatter.parse()` no longer materializes the whole document.** It now
+  reads via `io.StringIO` only up to the closing `---` fence — delegating to the
+  same `_read_frontmatter()` helper used by `load()`/`load_meta()` — instead of
+  building a `splitlines(keepends=True)` array over the entire body. Behavior is
+  unchanged; large in-memory documents parse with far less allocation.
+
 ## [0.6.2] — 2026-06-25
 
 scriptoria moves to 0.6.2 for an ANSWER preflight fix used by the harness.
@@ -311,6 +322,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
 
 [harness-0.8.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.8.0
 [0.7.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.7.0
+[0.6.3]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.3
 [0.6.2]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.2
 [0.6.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.1
 [0.6.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.0
