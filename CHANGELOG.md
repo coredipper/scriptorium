@@ -7,6 +7,22 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-06-28
+
+scriptoria moves to 0.6.4 for an NDJSON parsing fix and a block-segmentation
+safeguard.
+
+### Fixed
+- **`facts.parse_ndjson()` no longer mis-splits records on Unicode line
+  separators.** It now splits input on `"\n"` only instead of
+  `str.splitlines()`, so a `U+2028`/`U+2029`/NEL character legally embedded in a
+  JSON string value no longer fragments a valid record into invalid JSON.
+- **Block segmentation keeps its full line-boundary set.**
+  `blocks.split_blocks()` stays on `splitlines(keepends=True)` (reverting an
+  `io.StringIO` change that only split on `\r`/`\n`), preserving the
+  deterministic, content-hashed block ids that rely on form feed / NEL /
+  `U+2028`/`U+2029` acting as boundaries (SPEC §7.2).
+
 ## [0.6.3] — 2026-06-26
 
 scriptoria moves to 0.6.3 for a faster in-memory frontmatter parser.
