@@ -151,3 +151,14 @@ def test_blank_runs_are_boundaries_not_blocks():
     assert len(bs) == 1
     s, e = bs[0]["span"]
     assert "only paragraph" in "\n\nonly paragraph\n\n"[s:e]
+
+
+def test_form_feed_is_a_line_boundary():
+    """Segmentation uses str.splitlines()'s full boundary set (form feed here,
+    also NEL/U+2028/U+2029). Splitting only on \\r/\\n — e.g. via io.StringIO —
+    would merge these into one block and change every affected block's id/hash,
+    breaking the deterministic-segmentation contract (SPEC §7.2)."""
+    text = "# Heading\x0c## Sub\n"
+    spans = [tuple(b["span"]) for b in blocks.split_blocks(text)]
+    # two separate heading blocks, split at the form feed
+    assert spans == [(0, 10), (10, 17)]
