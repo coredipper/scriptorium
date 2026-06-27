@@ -1,7 +1,7 @@
 import pytest
+from scrip.errors import DataError, UsageError
 
 from scrip import facts
-from scrip.errors import DataError, UsageError
 
 
 def test_parse_ndjson_basic():
