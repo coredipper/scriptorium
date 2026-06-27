@@ -19,6 +19,7 @@ mirroring how ``scrip anchor`` mints citations for wiki prose:
 
 from __future__ import annotations
 
+import io
 import json
 import re
 from datetime import datetime, timezone
@@ -77,7 +78,8 @@ def parse_ndjson(text: str) -> list[dict]:
     """Parse proposed records (one JSON object per line). Malformed input is a
     :class:`DataError` with its line number; an empty input is a usage error."""
     records: list[dict] = []
-    for lineno, raw_line in enumerate(text.splitlines(), start=1):
+    # ⚡ Bolt: Use io.StringIO to avoid allocating a full array of lines in memory
+    for lineno, raw_line in enumerate(io.StringIO(text), start=1):
         line = raw_line.strip()
         if not line:
             continue

@@ -22,6 +22,8 @@ appended later.
 
 from __future__ import annotations
 
+import io
+
 from . import hashing
 
 
@@ -36,11 +38,12 @@ def _is_blank(line: str) -> bool:
 def split_blocks(text: str) -> list[dict]:
     """Return a list of ``{"block_id", "span": [start, end], "hash"}``."""
     # ⚡ Bolt: Single pass block segmentation to avoid intermediate O(N) allocation
+    # ⚡ Bolt: Use io.StringIO to avoid allocating a full array of lines in memory
     ranges: list[list[int]] = []  # [start, end] per block
     cur: list[int] | None = None
     start = 0
 
-    for line in text.splitlines(keepends=True):
+    for line in io.StringIO(text, newline=""):
         end = start + len(line)
         if _is_blank(line):
             if cur is not None:
