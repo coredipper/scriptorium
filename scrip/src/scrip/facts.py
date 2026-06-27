@@ -77,7 +77,8 @@ def parse_ndjson(text: str) -> list[dict]:
     """Parse proposed records (one JSON object per line). Malformed input is a
     :class:`DataError` with its line number; an empty input is a usage error."""
     records: list[dict] = []
-    for lineno, raw_line in enumerate(text.splitlines(), start=1):
+    # ⚡ Bolt: Split on \n directly since NDJSON values may legally contain U+2028/U+2029
+    for lineno, raw_line in enumerate(text.split("\n"), start=1):
         line = raw_line.strip()
         if not line:
             continue
