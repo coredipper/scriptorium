@@ -11,6 +11,7 @@ from scrip_harness import model as model_mod
 from scrip_harness.answer import DraftAnswer
 from scrip_harness.compile import DraftClaim, DraftPage
 from scrip_harness.extract import DraftExtraction, DraftFact
+from scrip_harness.graph import DraftEntity, DraftGraph
 from scrip_harness.promote import PromotionDecision
 
 
@@ -57,6 +58,20 @@ def test_draft_extraction_retry_uses_the_extract_prompt():
     prompt = client.captured["prompt"]
     # EXTRACT facts are position-independent: an empty quote may drop a claim.
     assert "empty" in prompt.lower() and "drop" in prompt.lower()
+
+
+def test_draft_graph_uses_the_graph_prompt_and_returns_a_graph():
+    # guards the same mis-wire class as the compile/extract tests above: draft_graph
+    # must route the GRAPH prompt + DraftGraph schema, not a claims/quotes prompt.
+    client = _CapturingClient(
+        DraftGraph(entities=[DraftEntity(name="A", kind="concept")], edges=[])
+    )
+    out = model_mod.draft_graph("a distinctive source body", source_id="raw/s", client=client)
+    assert isinstance(out, DraftGraph)
+    prompt = client.captured["prompt"]
+    assert "a distinctive source body" in prompt
+    assert "entit" in prompt.lower() and "edge" in prompt.lower()
+    assert "quote" not in prompt.lower()  # entities/edges are uncited
 
 
 def test_auto_provider_uses_default_openai_key_file(tmp_path, monkeypatch):

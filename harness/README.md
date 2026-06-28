@@ -172,9 +172,15 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 - Covers **COMPILE** (one or more sources → one wiki page, with the bounded
   quote-retry loop), **EXTRACT** (one source → claims in `facts/`, same retry loop), **ANSWER** (fresh
   compiled evidence first, raw search on miss, verified citations), **PROMOTE**
-  (score → merge/keep, model only in the middle band), and **RECONCILE**
-  (adjudicate every contradiction → record the decision). Entities/edges go
-  through `scrip fact add --table entities|edges` by hand.
+  (score → merge/keep, model only in the middle band), **RECONCILE**
+  (adjudicate every contradiction → record the decision), and **GRAPH** (one
+  source → entities + typed edges in `facts/`). `scrip-harness graph <slug>`
+  drafts both at once; the runner mints `entity/<slug>` ids and **drops any edge
+  whose endpoints are not real entities** (drafted here or already on disk).
+  Entities/edges carry no anchor — they are structural, not cited — so there is no
+  quote-retry loop and a model can still assert a *wrong* relation between real
+  entities; treat the graph as a navigational aid, not verified provenance. You
+  can still author them by hand via `scrip fact add --table entities|edges`.
 - COMPILE accepts one or more sources (`--from raw/a,raw/b`); EXTRACT is still one
   source. PROMOTE's merge is **append**, not re-synthesis — multi-source COMPILE
   now unblocks re-synthesis as a follow-on. `reconcile` records the decision

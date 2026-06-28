@@ -29,6 +29,7 @@ from .extract import (
     build_extract_prompt,
     build_extract_retry_prompt,
 )
+from .graph import GRAPH_SYSTEM, DraftGraph, build_graph_prompt
 from .promote import PROMOTE_SYSTEM, PromotionDecision, build_promote_prompt
 from .reconcile import RECONCILE_SYSTEM, ReconciliationDecision, build_reconcile_prompt
 
@@ -513,6 +514,34 @@ def draft_extraction(
     )
     if not isinstance(out, DraftExtraction):
         raise RuntimeError(f"model returned wrong extraction type for {source_id}")
+    return out
+
+
+def draft_graph(
+    source_text: str,
+    *,
+    source_id: str,
+    model: str | None = None,
+    provider: Provider | None = None,
+    client=None,
+    api_key_file: str | None = None,
+) -> DraftGraph:
+    """Ask a model to draft the entities and typed edges a source describes.
+    Returns a validated :class:`DraftGraph`. Entities/edges carry no anchors, so
+    there is no quote-retry loop — the runner drops dangling edges and skips
+    unsluggable entities instead."""
+    out = _complete_structured(
+        GRAPH_SYSTEM,
+        build_graph_prompt(source_text),
+        DraftGraph,
+        provider=provider,
+        model=model,
+        max_tokens=8000,
+        client=client,
+        api_key_file=api_key_file,
+    )
+    if not isinstance(out, DraftGraph):
+        raise RuntimeError(f"model returned wrong graph type for {source_id}")
     return out
 
 

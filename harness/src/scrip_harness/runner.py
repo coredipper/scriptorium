@@ -1,7 +1,11 @@
-"""Orchestrate the model-driven steps — COMPILE (draft a page) and EXTRACT
-(draft claims) — handing every verifiable step to ``scrip`` subprocesses.
-``scrip`` stays the deterministic source of truth — this never re-implements
-hashing, anchoring, staleness, or fact writing."""
+"""Orchestrate the model-driven AGENT.md steps (COMPILE, EXTRACT, GRAPH, PROMOTE,
+RECONCILE, ANSWER) — handing every verifiable step to ``scrip`` subprocesses.
+``scrip`` stays the deterministic source of truth: this never re-implements
+hashing, anchoring, staleness, or fact writing. The one narrow exception is the
+GRAPH stage, which records ``raw/<slug>`` in ``facts/_meta.yaml`` ``derived-from``
+(see :func:`_ensure_source_tracked`) — a provenance link the source-less
+entity/edge schema cannot carry; scrip still computes the hash and decides
+staleness from it."""
 
 from __future__ import annotations
 
@@ -18,11 +22,20 @@ from scrip import frontmatter  # reuse the deterministic frontmatter helper
 from .answer import DraftAnswer, overlap_score, tokenize
 from .compile import DraftPage, assemble_body, extract_markers, format_sources
 from .extract import DraftExtraction, DraftFact, to_ndjson
+from .graph import (
+    DraftEdge,
+    DraftEntity,
+    DraftGraph,
+    edges_to_ndjson,
+    entities_to_ndjson,
+    entity_id,
+)
 from .promote import PromotionDecision, merge_bodies
 from .reconcile import ReconciliationDecision
 
 DraftFn = Callable[..., DraftPage]
 ExtractDraftFn = Callable[..., DraftExtraction]
+GraphDraftFn = Callable[..., DraftGraph]  # (source_text, source_id=...) -> draft graph
 DecideFn = Callable[..., PromotionDecision]  # (candidate_text, candidates) -> decision
 ReconcileDecideFn = Callable[..., ReconciliationDecision]  # (pair, span_a, span_b) -> decision
 AnswerDraftFn = Callable[..., DraftAnswer]  # (question, evidence=...) -> draft answer
@@ -45,6 +58,12 @@ class CompileError(RuntimeError):
 class ExtractError(RuntimeError):
     """An extract step failed (bad slug, quotes still failing after the bounded
     retries, or a scrip command erred)."""
+
+
+class GraphError(RuntimeError):
+    """A graph-drafting step failed (bad slug, missing source, an empty draft, or a
+    scrip command erred). Entities/edges carry no anchors, so there is no
+    quote-retry loop — a structurally bad record is a hard error, not a finding."""
 
 
 class PromoteError(RuntimeError):
@@ -340,6 +359,194 @@ def _append_log(root: Path, line: str) -> None:
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "a", encoding="utf-8") as f:
         f.write(line.rstrip() + "\n")
+
+
+def _existing_entity_ids(root: Path) -> dict[str, str]:
+    """Map ``name -> entity_id`` for entities already in ``entities.ndjson`` so a
+    drafted edge may point at an entity from a prior run. Malformed rows are
+    skipped here — scrip status/verify is the authority on file validity."""
+    out: dict[str, str] = {}
+    try:
+        text = (root / "vault" / "facts" / "entities.ndjson").read_text(encoding="utf-8")
+    except OSError:
+        return out
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        name, eid = rec.get("name"), rec.get("entity_id")
+        if isinstance(name, str) and isinstance(eid, str):
+            out.setdefault(name, eid)
+    return out
+
+
+def _ensure_source_tracked(root: Path, source_id: str) -> None:
+    """Record ``source_id`` in ``facts/_meta.yaml`` ``derived-from`` so the graph
+    facts go STALE when that source changes.
+
+    ``scrip fact add`` adds this provenance link itself only for *claims* (they
+    carry a ``source_id``); entities and edges do not, so without this a
+    graph-only facts set would be staleness-blind to the raw source it was drafted
+    from. This declares the dependency edge the entity/edge schema cannot carry —
+    it is not a re-implementation of scrip's hashing: ``scrip stamp`` still
+    computes the ``input-hash`` over the resulting ``derived-from`` set. Done under
+    scrip's write lock, mirroring scrip's own meta writes."""
+    import yaml
+
+    from scrip import lock
+
+    meta_path = root / "vault" / "facts" / "_meta.yaml"
+    with lock.write_lock(root):
+        try:
+            data = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+        except OSError:
+            return  # no meta yet; scrip creates it on the append that precedes this
+        if not isinstance(data, dict):
+            return
+        derived = list(data.get("derived-from") or [])
+        if source_id in derived:
+            return
+        derived.append(source_id)
+        data["derived-from"] = derived
+        data.pop("input-hash", None)  # force a fresh stamp over the new source set
+        meta_path.write_text(
+            yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        )
+
+
+def _fact_add(scrip_cmd: Sequence[str], root: Path, table: str, ndjson: str) -> dict:
+    """Append a batch to ``facts/<table>`` and return scrip's ``{appended, skipped}``.
+    Entities/edges have no quote findings, so any non-zero exit is a hard error
+    (the runner's own guards already rejected dangling/unsluggable records)."""
+    r = _scrip(
+        scrip_cmd,
+        ["fact", "add", "--table", table, "--stdin", "--json", "--root", str(root)],
+        input_text=ndjson,
+    )
+    if r.returncode != 0:
+        raise GraphError(
+            f"scrip fact add --table {table} failed (exit {r.returncode}): "
+            f"{r.stderr.strip() or r.stdout.strip()}"
+        )
+    try:
+        return json.loads(r.stdout)
+    except json.JSONDecodeError as e:
+        raise GraphError(f"could not parse scrip fact add output: {e}\n{r.stdout}") from e
+
+
+def draft_graph_facts(
+    root,
+    slug: str,
+    *,
+    draft_fn: GraphDraftFn,
+    scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
+) -> dict:
+    """Draft entities + edges from ``raw/<slug>`` into ``facts/`` and leave the
+    vault green.
+
+    ``draft_fn(source_text, source_id=...)`` returns a :class:`DraftGraph`. There
+    is no quote-retry loop (entities/edges carry no anchors). Instead the runner
+    enforces two honesty guards before writing: an entity whose ``name`` has no
+    usable slug is **skipped**, and an edge is **dropped** unless both endpoints
+    resolve to a real entity — drafted in this pass or already in
+    ``entities.ndjson``. Returns
+    ``{"entities", "edges", "dropped_edges", "skipped_entities"}``.
+    """
+    root = Path(root)
+    if not _SLUG_RE.fullmatch(slug):  # fullmatch: reject a trailing newline
+        raise GraphError(
+            f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
+            f"separators, '..', or leading dot"
+        )
+    source_id = f"raw/{slug}"
+    try:
+        source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
+    except OSError as e:
+        raise GraphError(f"cannot read {source_id}: {e}") from e
+
+    draft = draft_fn(source_text, source_id=source_id)
+
+    # Mint ids and build name->id. Drafted entities win on a name collision so an
+    # entity's appended row and the edges pointing at it use the same id; existing
+    # entities fill in names this pass did not redraft.
+    # Skip entities the writer would reject (no usable slug, or a blank `kind`),
+    # so the entities batch cannot fail on model data — its append must succeed
+    # before the edges batch runs (the two tables are separate, non-transactional
+    # `fact add` calls, so a mid-stage rejection would leave entities committed
+    # without their edges).
+    kept_entities: list[DraftEntity] = []
+    skipped_entities: list[str] = []
+    name_to_id: dict[str, str] = {}
+    for e in draft.entities:
+        eid = entity_id(e.name)
+        if not eid or not e.kind.strip():
+            skipped_entities.append(e.name)
+            continue
+        kept_entities.append(e)
+        name_to_id[e.name] = eid
+    for name, eid in _existing_entity_ids(root).items():
+        name_to_id.setdefault(name, eid)
+
+    # The honesty guard: keep only edges whose endpoints are real entities and
+    # whose `kind` is non-empty (a blank kind is the other reachable writer
+    # rejection — dropping it keeps the edges batch from failing after entities
+    # have already been committed).
+    kept_edges: list[DraftEdge] = []
+    dropped_edges: list[dict] = []
+    for edge in draft.edges:
+        if edge.src in name_to_id and edge.dst in name_to_id and edge.kind.strip():
+            kept_edges.append(edge)
+        else:
+            dropped_edges.append({"src": edge.src, "dst": edge.dst, "kind": edge.kind})
+
+    if not kept_entities and not kept_edges:
+        raise GraphError(f"the draft proposed no entities or edges for {source_id}")
+
+    empty = {"appended": [], "skipped": []}
+    added_entities = (
+        _fact_add(scrip_cmd, root, "entities", entities_to_ndjson(kept_entities))
+        if kept_entities
+        else dict(empty)
+    )
+    added_edges = (
+        _fact_add(scrip_cmd, root, "edges", edges_to_ndjson(kept_edges, name_to_id))
+        if kept_edges
+        else dict(empty)
+    )
+
+    # Any append leaves the facts set honestly STALE; link the source so future
+    # edits to it stale the graph, then stamp and prove the vault green.
+    if added_entities["appended"] or added_edges["appended"]:
+        _ensure_source_tracked(root, source_id)
+        meta_path = root / "vault" / "facts" / "_meta.yaml"
+        r = _scrip(scrip_cmd, ["stamp", str(meta_path), "--root", str(root)])
+        if r.returncode != 0:
+            raise GraphError(f"scrip stamp failed (exit {r.returncode}): {r.stderr.strip()}")
+    r = _scrip(scrip_cmd, ["verify", "--root", str(root)])
+    if r.returncode != 0:
+        raise GraphError(f"scrip verify failed after graph:\n{r.stdout}{r.stderr}")
+
+    n_ent, n_edge = len(added_entities["appended"]), len(added_edges["appended"])
+    note = (
+        f"- {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')} GRAPH "
+        f"{source_id}: +{n_ent} entit{'y' if n_ent == 1 else 'ies'}, +{n_edge} edge(s)"
+    )
+    if dropped_edges:
+        note += f", {len(dropped_edges)} edge(s) dropped (unknown endpoint)"
+    if skipped_entities:
+        note += f", {len(skipped_entities)} entity name(s) skipped (no slug)"
+    _append_log(root, note)
+
+    return {
+        "entities": added_entities,
+        "edges": added_edges,
+        "dropped_edges": dropped_edges,
+        "skipped_entities": skipped_entities,
+    }
 
 
 def _scrip_json(
