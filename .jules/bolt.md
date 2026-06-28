@@ -17,3 +17,7 @@
 ## 2024-07-28 - Single Pass Block Segmentation
 **Learning:** In operations that process text files line-by-line (like markdown block segmentation), accumulating intermediate lists (e.g., span tuples containing start/end and full lines) introduces significant memory overhead and repeated O(N) iteration loops. Merging the tracking logic directly inside the main `splitlines()` loop saves allocations and iteration cycles.
 **Action:** Always prefer a single pass strategy when generating indices or ranges over raw text files; avoid constructing intermediary sequence arrays (`spans: list[...]`) that are merely used to inform the final range boundaries.
+
+## 2024-08-05 - Avoid splitlines for extracting large subsets
+**Learning:** In string parsing functions that extract text by trimming prefix/suffix wrappers (like ```json ... ``` code blocks from LLM responses), calling `splitlines()` constructs a large array in memory. For large inputs, this creates unnecessary memory overhead and wastes CPU cycles iterating and joining the lines back together `O(N)`.
+**Action:** When extracting subset string data by stripping boundaries, use `find()` and `rfind()` combined with string slicing instead of full segmentation via `splitlines()` to avoid creating heavy intermediary arrays.
