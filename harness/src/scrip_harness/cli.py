@@ -84,6 +84,15 @@ def main(argv: list[str] | None = None) -> int:
     pe.add_argument("slug")
     pe.add_argument("--root")
     _add_model_args(pe)
+    pg = sub.add_parser(
+        "graph",
+        help="draft entities + edges from raw/<slug> into facts/ via a model "
+        "provider (validated by `scrip fact add --table entities|edges`), then "
+        "stamp + verify",
+    )
+    pg.add_argument("slug")
+    pg.add_argument("--root")
+    _add_model_args(pg)
     pp = sub.add_parser(
         "promote",
         help="score a compiled page against existing pages (`scrip similar`) and "
@@ -146,10 +155,12 @@ def main(argv: list[str] | None = None) -> int:
         AnswerError,
         CompileError,
         ExtractError,
+        GraphError,
         PromoteError,
         ReconcileError,
         answer_question,
         compile_page,
+        draft_graph_facts,
         extract_facts,
         promote_page,
         reconcile_contradictions,
@@ -272,6 +283,36 @@ def main(argv: list[str] | None = None) -> int:
                 f"  {len(result['contradictions'])} contradiction candidate(s) — "
                 f"run `scrip query contradictions` and RECONCILE per AGENT.md"
             )
+        return 0
+
+    if args.command == "graph":
+        def graph_draft_fn(text: str, *, source_id: str):
+            return model_mod.draft_graph(
+                text,
+                source_id=source_id,
+                provider=chosen_provider,
+                model=chosen_model,
+                api_key_file=api_key_file,
+            )
+
+        try:
+            result = draft_graph_facts(root, args.slug, draft_fn=graph_draft_fn)
+        except (GraphError, RuntimeError) as e:
+            print(f"scrip-harness: {e}", file=sys.stderr)
+            return 1
+        n_ent = len(result["entities"]["appended"])
+        n_edge = len(result["edges"]["appended"])
+        print(
+            f"drafted {n_ent} entit{'y' if n_ent == 1 else 'ies'} and {n_edge} "
+            f"edge(s) from raw/{args.slug}  (verified)"
+        )
+        extras = []
+        if result["dropped_edges"]:
+            extras.append(f"{len(result['dropped_edges'])} edge(s) dropped (unknown endpoint)")
+        if result["skipped_entities"]:
+            extras.append(f"{len(result['skipped_entities'])} entity name(s) skipped (no slug)")
+        if extras:
+            print("  " + "; ".join(extras))
         return 0
 
     def draft_fn(text: str, *, source_id: str, failures=None):
