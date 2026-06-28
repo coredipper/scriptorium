@@ -216,3 +216,66 @@ def test_graph_empty_draft_is_a_clean_error(tmp_path):
 
     with pytest.raises(GraphError, match="no entities or edges"):
         draft_graph_facts(root, "topic", draft_fn=stub)
+
+
+def _status_rc(root):
+    return subprocess.run(
+        ["scrip", "status", "--root", str(root)], capture_output=True, text=True
+    ).returncode
+
+
+def test_graph_facts_track_source_for_staleness(tmp_path):
+    # the facts set must record raw/<slug> in derived-from so a later edit to the
+    # source stales the graph — even when the source has no extracted claims (the
+    # entity/edge writer does not carry source ids, so the runner links it).
+    root = _vault(tmp_path)
+    src = root / "vault" / "raw" / "topic.md"
+    src.write_text("# T\n\nOriginal body.\n", encoding="utf-8")
+
+    def stub(source_text, *, source_id):
+        return DraftGraph(entities=[DraftEntity(name="Solo", kind="concept")], edges=[])
+
+    draft_graph_facts(root, "topic", draft_fn=stub)
+    meta = (root / "vault" / "facts" / "_meta.yaml").read_text(encoding="utf-8")
+    assert "raw/topic" in meta
+    assert _status_rc(root) == 0  # green right after drafting
+
+    src.write_text("# T\n\nEdited body — content changed.\n", encoding="utf-8")
+    assert _status_rc(root) != 0  # the graph facts are now STALE w.r.t. their source
+
+
+def test_graph_drops_edges_with_blank_kind(tmp_path):
+    # a blank `kind` is a writer rejection; dropping it keeps the edges batch from
+    # failing AFTER entities were already committed (the two-table atomicity gap).
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text("# T\n\nText.\n", encoding="utf-8")
+
+    def stub(source_text, *, source_id):
+        return DraftGraph(
+            entities=[DraftEntity(name="A", kind="concept"), DraftEntity(name="B", kind="concept")],
+            edges=[
+                DraftEdge(src="A", dst="B", kind="relates-to"),
+                DraftEdge(src="A", dst="B", kind="   "),  # blank kind -> dropped
+            ],
+        )
+
+    result = draft_graph_facts(root, "topic", draft_fn=stub)
+    assert len(result["edges"]["appended"]) == 1
+    assert result["dropped_edges"] == [{"src": "A", "dst": "B", "kind": "   "}]
+    assert _status_rc(root) == 0  # entities + the one good edge committed, vault green
+
+
+def test_graph_skips_entities_with_blank_kind(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text("# T\n\nText.\n", encoding="utf-8")
+
+    def stub(source_text, *, source_id):
+        return DraftGraph(
+            entities=[DraftEntity(name="Good", kind="concept"), DraftEntity(name="Bad", kind="")],
+            edges=[DraftEdge(src="Good", dst="Bad", kind="relates-to")],
+        )
+
+    result = draft_graph_facts(root, "topic", draft_fn=stub)
+    assert result["skipped_entities"] == ["Bad"]
+    assert {e["entity_id"] for e in _rows(root, "entities.ndjson")} == {"entity/good"}
+    assert _rows(root, "graph.ndjson") == []  # edge referenced a skipped entity

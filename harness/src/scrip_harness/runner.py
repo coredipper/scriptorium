@@ -1,7 +1,11 @@
-"""Orchestrate the model-driven steps — COMPILE (draft a page) and EXTRACT
-(draft claims) — handing every verifiable step to ``scrip`` subprocesses.
-``scrip`` stays the deterministic source of truth — this never re-implements
-hashing, anchoring, staleness, or fact writing."""
+"""Orchestrate the model-driven AGENT.md steps (COMPILE, EXTRACT, GRAPH, PROMOTE,
+RECONCILE, ANSWER) — handing every verifiable step to ``scrip`` subprocesses.
+``scrip`` stays the deterministic source of truth: this never re-implements
+hashing, anchoring, staleness, or fact writing. The one narrow exception is the
+GRAPH stage, which records ``raw/<slug>`` in ``facts/_meta.yaml`` ``derived-from``
+(see :func:`_ensure_source_tracked`) — a provenance link the source-less
+entity/edge schema cannot carry; scrip still computes the hash and decides
+staleness from it."""
 
 from __future__ import annotations
 
@@ -380,6 +384,40 @@ def _existing_entity_ids(root: Path) -> dict[str, str]:
     return out
 
 
+def _ensure_source_tracked(root: Path, source_id: str) -> None:
+    """Record ``source_id`` in ``facts/_meta.yaml`` ``derived-from`` so the graph
+    facts go STALE when that source changes.
+
+    ``scrip fact add`` adds this provenance link itself only for *claims* (they
+    carry a ``source_id``); entities and edges do not, so without this a
+    graph-only facts set would be staleness-blind to the raw source it was drafted
+    from. This declares the dependency edge the entity/edge schema cannot carry —
+    it is not a re-implementation of scrip's hashing: ``scrip stamp`` still
+    computes the ``input-hash`` over the resulting ``derived-from`` set. Done under
+    scrip's write lock, mirroring scrip's own meta writes."""
+    import yaml
+
+    from scrip import lock
+
+    meta_path = root / "vault" / "facts" / "_meta.yaml"
+    with lock.write_lock(root):
+        try:
+            data = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+        except OSError:
+            return  # no meta yet; scrip creates it on the append that precedes this
+        if not isinstance(data, dict):
+            return
+        derived = list(data.get("derived-from") or [])
+        if source_id in derived:
+            return
+        derived.append(source_id)
+        data["derived-from"] = derived
+        data.pop("input-hash", None)  # force a fresh stamp over the new source set
+        meta_path.write_text(
+            yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        )
+
+
 def _fact_add(scrip_cmd: Sequence[str], root: Path, table: str, ndjson: str) -> dict:
     """Append a batch to ``facts/<table>`` and return scrip's ``{appended, skipped}``.
     Entities/edges have no quote findings, so any non-zero exit is a hard error
@@ -435,12 +473,17 @@ def draft_graph_facts(
     # Mint ids and build name->id. Drafted entities win on a name collision so an
     # entity's appended row and the edges pointing at it use the same id; existing
     # entities fill in names this pass did not redraft.
+    # Skip entities the writer would reject (no usable slug, or a blank `kind`),
+    # so the entities batch cannot fail on model data — its append must succeed
+    # before the edges batch runs (the two tables are separate, non-transactional
+    # `fact add` calls, so a mid-stage rejection would leave entities committed
+    # without their edges).
     kept_entities: list[DraftEntity] = []
     skipped_entities: list[str] = []
     name_to_id: dict[str, str] = {}
     for e in draft.entities:
         eid = entity_id(e.name)
-        if not eid:
+        if not eid or not e.kind.strip():
             skipped_entities.append(e.name)
             continue
         kept_entities.append(e)
@@ -448,11 +491,14 @@ def draft_graph_facts(
     for name, eid in _existing_entity_ids(root).items():
         name_to_id.setdefault(name, eid)
 
-    # The honesty guard: keep only edges whose endpoints are real entities.
+    # The honesty guard: keep only edges whose endpoints are real entities and
+    # whose `kind` is non-empty (a blank kind is the other reachable writer
+    # rejection — dropping it keeps the edges batch from failing after entities
+    # have already been committed).
     kept_edges: list[DraftEdge] = []
     dropped_edges: list[dict] = []
     for edge in draft.edges:
-        if edge.src in name_to_id and edge.dst in name_to_id:
+        if edge.src in name_to_id and edge.dst in name_to_id and edge.kind.strip():
             kept_edges.append(edge)
         else:
             dropped_edges.append({"src": edge.src, "dst": edge.dst, "kind": edge.kind})
@@ -472,8 +518,10 @@ def draft_graph_facts(
         else dict(empty)
     )
 
-    # Any append leaves the facts set honestly STALE; stamp it, then prove green.
+    # Any append leaves the facts set honestly STALE; link the source so future
+    # edits to it stale the graph, then stamp and prove the vault green.
     if added_entities["appended"] or added_edges["appended"]:
+        _ensure_source_tracked(root, source_id)
         meta_path = root / "vault" / "facts" / "_meta.yaml"
         r = _scrip(scrip_cmd, ["stamp", str(meta_path), "--root", str(root)])
         if r.returncode != 0:
