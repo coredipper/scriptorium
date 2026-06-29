@@ -241,21 +241,12 @@ def _redact(text: str) -> str:
 def _json_from_text(text: str) -> Any:
     text = text.strip()
     if text.startswith("```"):
-        # ⚡ Bolt: Strip code blocks using O(1) string search instead of allocating
-        # an entire array of splitlines() just to remove the first and last lines.
-        idx = text.find("\n")
-        if idx != -1:
-            text = text[idx + 1:]
-        else:
-            text = ""
-        text = text.rstrip()
-        last_idx = text.rfind("\n")
-        if last_idx != -1:
-            if text[last_idx + 1:].strip() == "```":
-                text = text[:last_idx]
-        elif text.strip() == "```":
-            text = ""
-        text = text.strip()
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
     return json.loads(text)
 
 
