@@ -120,6 +120,11 @@ def main(argv: list[str] | None = None) -> int:
         "--dry-run", action="store_true",
         help="report the decision without mutating any page",
     )
+    pp.add_argument(
+        "--resynthesize", action="store_true",
+        help="on merge, re-draft the target as one coherent page over the union of "
+        "both pages' sources (re-mints anchors) instead of appending the absorbed body",
+    )
     prc = sub.add_parser(
         "reconcile",
         help="adjudicate every open contradiction via a model provider and record the "
@@ -247,9 +252,26 @@ def main(argv: list[str] | None = None) -> int:
                 api_key_file=api_key_file,
             )
 
+        # only --resynthesize needs a drafter (re-drafting the merged page); the
+        # default append merge is deterministic and uses no model.
+        promote_draft_fn = None
+        if args.resynthesize:
+            def _resynth_draft(text: str, *, source_id: str, failures=None):
+                return model_mod.draft_page(
+                    text,
+                    source_id=source_id,
+                    provider=chosen_provider,
+                    model=chosen_model,
+                    failures=failures,
+                    api_key_file=api_key_file,
+                )
+
+            promote_draft_fn = _resynth_draft
+
         try:
             result = promote_page(
                 root, args.slug, kind=args.kind, decide_fn=decide_fn,
+                draft_fn=promote_draft_fn, resynthesize=args.resynthesize,
                 merge_threshold=args.merge_threshold, keep_threshold=args.keep_threshold,
                 dry_run=args.dry_run,
             )
@@ -257,7 +279,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"scrip-harness: {e}", file=sys.stderr)
             return 1
         if result["action"] == "merge":
-            verb = "would merge" if result.get("dry_run") else "merged"
+            verb = "would merge" if result.get("dry_run") else (
+                "resynthesized" if result.get("resynthesized") else "merged"
+            )
             print(f"{verb} {args.kind}/{args.slug} into {result['target']}")
         else:
             print(f"kept {args.kind}/{args.slug} as its own page ({result.get('reason', '')})")

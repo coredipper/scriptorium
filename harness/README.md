@@ -59,11 +59,14 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
 2. **Band** the top score: **≥ `--merge-threshold`** (0.5) → merge into it,
    **deterministically (no model)**; **< `--keep-threshold`** (0.25) → keep the
    page as its own; **in between** → the model decides merge-vs-keep over the small
-   candidate set (the *only* model call in PROMOTE).
-3. **Merge** — append the candidate into the target (its `[^a1]..` footnotes
-   renumbered to avoid collision), union the `derived-from`, record the absorbed
-   id in `supersedes`, delete the absorbed page, then `scrip stamp` + `scrip
-   verify`. `--dry-run` prints the decision and mutates nothing.
+   candidate set (the only model call in PROMOTE unless `--resynthesize` is set).
+3. **Merge** — by default, append the candidate into the target (its `[^a1]..`
+   footnotes renumbered to avoid collision); with `--resynthesize`, instead
+   re-draft the target as one coherent page over the union of both pages' sources
+   (re-minting every anchor via the COMPILE quote-retry loop). Either way: union the
+   `derived-from`, record the absorbed id in `supersedes`, delete the absorbed page,
+   then `scrip stamp` + `scrip verify` (the target is restored byte-for-byte if that
+   fails). `--dry-run` prints the decision and mutates nothing.
 
 ## How an answer runs
 
@@ -172,7 +175,7 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 - Covers **COMPILE** (one or more sources → one wiki page, with the bounded
   quote-retry loop), **EXTRACT** (one or more sources → claims in `facts/`, same retry loop), **ANSWER** (fresh
   compiled evidence first, raw search on miss, verified citations), **PROMOTE**
-  (score → merge/keep, model only in the middle band), **RECONCILE**
+  (score → merge/keep, model only in the middle band or on `--resynthesize`), **RECONCILE**
   (adjudicate every contradiction → record the decision), and **GRAPH** (one
   source → entities + typed edges in `facts/`). `scrip-harness graph <slug>`
   drafts both at once; the runner mints `entity/<slug>` ids and **drops any edge
@@ -184,8 +187,10 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 - COMPILE and EXTRACT both accept one or more sources (`--from raw/a,raw/b`); in a
   multi-source EXTRACT each claim names the source its quote came from and its anchor
   is minted against that source, so a mis-attributed quote fails quote-verify (the
-  retry loop catches it). PROMOTE's merge is **append**, not re-synthesis —
-  multi-source COMPILE now unblocks re-synthesis as a follow-on. `reconcile` records the decision
+  retry loop catches it). PROMOTE's merge is **append** by default (loss-free,
+  deterministic); `--resynthesize` instead re-drafts the target as one coherent page
+  over the union of both pages' sources (re-minting every anchor) — more coherent but
+  it rewrites the body, so it is opt-in. `reconcile` records the decision
   (supersede/qualify/keep-both) and, on a **qualify**, authors the nuancing
   `polarity: qualifies` claim; surfacing the page caveat is left to the read-only
   view layer, not a page mutation.

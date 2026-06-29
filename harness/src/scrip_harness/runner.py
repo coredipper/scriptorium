@@ -126,6 +126,101 @@ def _read_sources(
     return source_ids, valid_sources, source_text, draft_source_id
 
 
+def _synthesize_body(
+    root: Path,
+    source_ids: list[str],
+    valid_sources: dict[str, str],
+    source_text: str,
+    draft_source_id: str,
+    *,
+    draft_fn: DraftFn,
+    scrip_cmd: Sequence[str],
+    max_quote_retries: int,
+    error_cls: type[Exception],
+) -> tuple[DraftPage, list[str]]:
+    """Draft a page over already-resolved sources and mint a verified anchor per
+    claim, with the bounded quote-retry loop. Returns ``(draft, footnotes)`` and
+    writes nothing — the caller scaffolds (COMPILE) or overwrites the target body
+    (PROMOTE ``--resynthesize``) then stamps + verifies. Shared core of those two
+    paths; every guard raises ``error_cls`` so each caller keeps its own taxonomy.
+
+    The model's inline markers must be exactly ``[^a1]..[^aN]`` in order for the N
+    claims (``scrip verify`` only checks footnote *definitions* resolve, so a
+    misnumbered/missing/extra marker could otherwise be stamped with uncited prose).
+    On an AMBIGUOUS/BROKEN quote ``draft_fn`` is called again with ``failures=[...]``
+    (one per failing claim, in order) and must return one corrected claim per failure;
+    the body is kept from the first draft, so each corrected claim keeps its marker
+    slot and nothing is dropped."""
+    draft = draft_fn(source_text, source_id=draft_source_id)
+    markers = extract_markers(draft.body)
+    expected = [f"a{i}" for i in range(1, len(draft.claims) + 1)]
+    if markers != expected:
+        raise error_cls(
+            f"draft footnote markers {markers} do not match claims {expected} in "
+            f"first-appearance order (foreign or malformed labels are rejected)"
+        )
+
+    claims = list(draft.claims)
+    retries = 0
+    while True:
+        footnotes: list[str] = []
+        failures: list[dict] = []
+        for i, claim in enumerate(claims):
+            # resolve which source this claim's quote is from: explicit source_id,
+            # or the sole source. An unknown or (with several sources) missing
+            # source_id is a structural error, not a retryable quote failure.
+            csrc = claim.source_id or (source_ids[0] if len(source_ids) == 1 else "")
+            if csrc not in valid_sources:
+                if claim.source_id:
+                    raise error_cls(
+                        f"claim {i + 1} cites source {claim.source_id!r} not among "
+                        f"the sources {source_ids}"
+                    )
+                raise error_cls(
+                    f"claim {i + 1} has no source_id but there are multiple "
+                    f"sources {source_ids}; set source_id to the quote's source"
+                )
+            r = _scrip(
+                scrip_cmd,
+                ["anchor", claim.quote, "--source", csrc, "--label", f"a{i + 1}",
+                 "--json", "--root", str(root)],
+            )
+            if r.returncode == 0:
+                footnotes.append(json.loads(r.stdout)["footnote"])
+                continue
+            try:
+                status = json.loads(r.stdout).get("status", "BROKEN")
+            except json.JSONDecodeError:
+                status = "BROKEN"
+            failures.append(
+                {"index": i, "status": status, "quote": claim.quote,
+                 "detail": r.stderr.strip()}
+            )
+        if not failures:
+            return draft, footnotes
+        if retries >= max_quote_retries:
+            detail = "; ".join(f"{f['status']} {f['quote']!r}" for f in failures)
+            raise error_cls(
+                f"{len(failures)} quote(s) still failed after {retries} retr"
+                f"{'y' if retries == 1 else 'ies'}: {detail}"
+            )
+        retries += 1
+        replacements = list(draft_fn(source_text, source_id=draft_source_id, failures=failures).claims)
+        if len(replacements) != len(failures):
+            raise error_cls(
+                f"retry returned {len(replacements)} claim(s) for {len(failures)} "
+                f"failure(s) — must be one corrected claim per failure, in order"
+            )
+        for failure, replacement in zip(failures, replacements, strict=True):
+            if not replacement.quote.strip():
+                raise error_cls(
+                    "a retry replacement had an empty quote; this path keeps every "
+                    "claim (the body's markers are positional) — correct the quote "
+                    "instead of dropping it"
+                )
+            claims[failure["index"]] = replacement
+
+
 def compile_page(
     root,
     slug: str,
@@ -160,83 +255,13 @@ def compile_page(
     source_ids, valid_sources, source_text, draft_source_id = _read_sources(
         root, slug, sources, CompileError
     )
-    draft = draft_fn(source_text, source_id=draft_source_id)
-
-    # The model's inline markers must be exactly [^a1]..[^aN] in order for the N
-    # claims. scrip verify only checks footnote *definitions* resolve, so without
-    # this a misnumbered/missing/extra marker could be stamped with uncited prose.
-    markers = extract_markers(draft.body)
-    expected = [f"a{i}" for i in range(1, len(draft.claims) + 1)]
-    if markers != expected:
-        raise CompileError(
-            f"draft footnote markers {markers} do not match claims {expected} in "
-            f"first-appearance order (foreign or malformed labels are rejected)"
-        )
-
-    # Mint a verified anchor per claim. scrip anchor exits non-zero on a quote that
-    # is not present or not unique; instead of failing on the first, collect every
-    # failing claim (scrip anchor --json reports its BROKEN/AMBIGUOUS status even on
-    # exit 1), ask the model to correct exactly those — one per failure, in order —
-    # and re-mint. The body is fixed, so each corrected claim keeps its marker slot.
-    claims = list(draft.claims)
-    retries = 0
-    while True:
-        footnotes: list[str] = []
-        failures: list[dict] = []
-        for i, claim in enumerate(claims):
-            # resolve which source this claim's quote is from: explicit source_id,
-            # or the sole source. An unknown or (with several sources) missing
-            # source_id is a structural error, not a retryable quote failure.
-            csrc = claim.source_id or (source_ids[0] if len(source_ids) == 1 else "")
-            if csrc not in valid_sources:
-                if claim.source_id:
-                    raise CompileError(
-                        f"claim {i + 1} cites source {claim.source_id!r} not among "
-                        f"the compile's sources {source_ids}"
-                    )
-                raise CompileError(
-                    f"claim {i + 1} has no source_id but the compile has multiple "
-                    f"sources {source_ids}; set source_id to the quote's source"
-                )
-            r = _scrip(
-                scrip_cmd,
-                ["anchor", claim.quote, "--source", csrc, "--label", f"a{i + 1}",
-                 "--json", "--root", str(root)],
-            )
-            if r.returncode == 0:
-                footnotes.append(json.loads(r.stdout)["footnote"])
-                continue
-            try:
-                status = json.loads(r.stdout).get("status", "BROKEN")
-            except json.JSONDecodeError:
-                status = "BROKEN"
-            failures.append(
-                {"index": i, "status": status, "quote": claim.quote,
-                 "detail": r.stderr.strip()}
-            )
-        if not failures:
-            break
-        if retries >= max_quote_retries:
-            detail = "; ".join(f"{f['status']} {f['quote']!r}" for f in failures)
-            raise CompileError(
-                f"{len(failures)} quote(s) still failed after {retries} retr"
-                f"{'y' if retries == 1 else 'ies'}: {detail}"
-            )
-        retries += 1
-        replacements = list(draft_fn(source_text, source_id=draft_source_id, failures=failures).claims)
-        if len(replacements) != len(failures):
-            raise CompileError(
-                f"retry returned {len(replacements)} claim(s) for {len(failures)} "
-                f"failure(s) — must be one corrected claim per failure, in order"
-            )
-        for failure, replacement in zip(failures, replacements, strict=True):
-            if not replacement.quote.strip():
-                raise CompileError(
-                    "a retry replacement had an empty quote; COMPILE keeps every "
-                    "claim (the body's markers are positional) — correct the quote "
-                    "instead of dropping it"
-                )
-            claims[failure["index"]] = replacement
+    # Draft the prose + mint a verified anchor per claim (shared with PROMOTE
+    # --resynthesize); the body is then written into a freshly-scaffolded page.
+    draft, footnotes = _synthesize_body(
+        root, source_ids, valid_sources, source_text, draft_source_id,
+        draft_fn=draft_fn, scrip_cmd=scrip_cmd, max_quote_retries=max_quote_retries,
+        error_cls=CompileError,
+    )
 
     r = _scrip(
         scrip_cmd,
@@ -933,6 +958,8 @@ def promote_page(
     *,
     kind: str = "concept",
     decide_fn: DecideFn | None = None,
+    draft_fn: DraftFn | None = None,
+    resynthesize: bool = False,
     merge_threshold: float = 0.5,
     keep_threshold: float = 0.25,
     scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
@@ -944,10 +971,23 @@ def promote_page(
     Banding on the top candidate's combined score: ``>= merge_threshold`` →
     merge (deterministic, no model); ``< keep_threshold`` → keep; in between →
     ``decide_fn(candidate_text, candidates)`` returns a ``PromotionDecision``
-    (the only model use). On merge the absorbed page is appended into the target
-    (footnotes renumbered), its sources/​id folded into the target's
-    ``derived-from``/``supersedes``, then the target is re-stamped and the vault
-    re-verified. Returns a dict describing the action.
+    (the only model use). On merge the absorbed id is folded into the target's
+    ``supersedes`` and its sources into ``derived-from``, then the target is
+    re-stamped and the vault re-verified.
+
+    The merged body is built one of two ways:
+
+    - **append** (default): the absorbed body is concatenated into the target
+      (footnotes renumbered) — loss-free, deterministic, no model.
+    - **re-synthesize** (``resynthesize=True``, needs ``draft_fn``): the target is
+      re-drafted as one coherent page over the *union* of both pages'
+      ``derived-from`` sources via the COMPILE path (``draft_fn`` + the bounded
+      quote-retry loop), re-minting every anchor. More coherent but it rewrites the
+      body and re-mints anchors, so it is opt-in; append stays the honest default.
+
+    Either way the merge is atomic (stamp + verify before the absorbed page is
+    unlinked; the target is restored byte-for-byte on failure). Returns a dict
+    describing the action.
     """
     root = Path(root)
     if not _SLUG_RE.fullmatch(slug):  # guard before building any path we might unlink
@@ -955,6 +995,8 @@ def promote_page(
             f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
             f"separators, '..', or leading dot"
         )
+    if resynthesize and draft_fn is None:
+        raise PromoteError("resynthesize needs a drafter (draft_fn); none given")
     page = root / "vault" / "wiki" / f"{kind}s" / f"{slug}.md"
     if not page.exists():
         raise PromoteError(f"no such {kind} page: {page.relative_to(root)}")
@@ -1001,11 +1043,27 @@ def promote_page(
     target_page = root / target["path"]
     original_target = target_page.read_bytes()  # bytes: rollback must be exact (CRLF, encoding)
     t_meta, t_body = frontmatter.load(target_page)
-    new_body = merge_bodies(t_body, body)
+    # union of both pages' sources — both the new derived-from and (for re-synthesis)
+    # the source set the merged page is re-drafted from.
     df = list(t_meta.get("derived-from") or [])
     for s in sources:
         if s not in df:
             df.append(s)
+    if resynthesize:
+        # re-draft one coherent page over the union via the shared COMPILE core,
+        # re-minting every anchor; the target keeps its own id and title.
+        assert draft_fn is not None  # guarded at entry; narrows the type for the call
+        src_ids, valid_sources, source_text, draft_source_id = _read_sources(
+            root, slug, df, PromoteError
+        )
+        draft, footnotes = _synthesize_body(
+            root, src_ids, valid_sources, source_text, draft_source_id,
+            draft_fn=draft_fn, scrip_cmd=scrip_cmd, max_quote_retries=2,
+            error_cls=PromoteError,
+        )
+        new_body = assemble_body(draft, footnotes)
+    else:
+        new_body = merge_bodies(t_body, body)
     t_meta["derived-from"] = df
     sup = list(t_meta.get("supersedes") or [])
     if cand_id not in sup:
@@ -1034,8 +1092,10 @@ def promote_page(
         target_page.write_bytes(original_target)  # roll back the merge, byte-for-byte
         raise
     page.unlink()  # absorbed page removed; its id lives on in the target's supersedes
-    _append_log(root, f"- PROMOTE: merged {cand_id} into {target_id}")
-    return {"action": "merge", "target": target_id, "absorbed": cand_id}
+    how = "resynthesized" if resynthesize else "merged"
+    _append_log(root, f"- PROMOTE: {how} {cand_id} into {target_id}")
+    return {"action": "merge", "target": target_id, "absorbed": cand_id,
+            "resynthesized": resynthesize}
 
 
 def _span(scrip_cmd: Sequence[str], root: Path, claim_id: str) -> dict:
