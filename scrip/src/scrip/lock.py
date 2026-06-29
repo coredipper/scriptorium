@@ -8,14 +8,18 @@ writers don't interleave stamps and edits. Reads (``status``, ``verify``,
 
 The lock is a small JSON file created atomically with ``O_CREAT|O_EXCL`` holding
 ``{pid, host, acquired_at}``. A lock whose holder is a dead process *on this
-host* is **stale** and is reclaimed automatically on acquire; a lock that looks
-live fails fast (exit 2) and points the user at ``scrip unlock``. A lock from
-another host is treated as live (we can't prove the process dead).
+host* is **stale** and is reclaimed automatically on acquire. A lock that looks
+live is **waited on**: ``acquire`` polls (with backoff) up to a timeout —
+``SCRIP_LOCK_TIMEOUT`` seconds, default 10 — so two agents serialize cooperatively
+rather than one failing immediately. If the lock is still held when the wait
+elapses it fails (exit 2) and points the user at ``scrip unlock``; ``timeout=0``
+keeps the old fail-fast behavior. A lock from another host is treated as live (we
+can't prove the process dead), so it is waited on but never reclaimed.
 
 It is advisory, not a kernel mutex: a tiny TOCTOU window remains when reclaiming
-a stale lock. That is acceptable for the single-machine, single-agent workflow
-this guards; it is a guardrail against accidental concurrent writes, not a
-distributed lock manager.
+a stale lock, and waiting is best-effort polling, not a fair queue. That is
+acceptable for the single-machine workflow this guards; it is a guardrail against
+accidental concurrent writes, not a distributed lock manager.
 """
 
 from __future__ import annotations
@@ -24,12 +28,38 @@ import json
 import os
 import socket
 import tempfile
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import lock_path
 from .errors import LockError, UsageError
+
+# How long ``acquire`` waits for a busy lock before giving up (seconds). The default
+# is cooperative: concurrent writers serialize rather than failing fast. ``0`` keeps
+# the old fail-fast behavior; ``SCRIP_LOCK_TIMEOUT`` overrides it. The poll interval
+# backs off from _POLL_MIN to _POLL_MAX so a freed lock is taken promptly without
+# busy-spinning.
+_DEFAULT_LOCK_TIMEOUT = 10.0
+_POLL_MIN = 0.025
+_POLL_MAX = 0.25
+
+
+def _lock_timeout(explicit: float | None) -> float:
+    """Seconds ``acquire`` should wait for a busy lock. An explicit argument wins;
+    otherwise read ``SCRIP_LOCK_TIMEOUT`` (default :data:`_DEFAULT_LOCK_TIMEOUT`). A
+    missing or unparseable env value falls back to the default; negatives clamp to 0
+    (fail fast)."""
+    if explicit is not None:
+        return max(0.0, explicit)
+    raw = os.environ.get("SCRIP_LOCK_TIMEOUT")
+    if raw is None or not raw.strip():
+        return _DEFAULT_LOCK_TIMEOUT
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return _DEFAULT_LOCK_TIMEOUT
 
 
 def _now() -> str:
@@ -129,45 +159,57 @@ def _create(path: Path, payload: bytes) -> None:
             pass
 
 
-def acquire(root: Path) -> dict:
+def acquire(root: Path, *, timeout: float | None = None) -> dict:
     """Take the lock, returning the holder info. Reclaims a *provably-dead* lock
-    once; raises :class:`LockError` (exit 2) if the lock looks live or is being
-    created by another writer."""
+    immediately. If the lock looks live (or is mid-creation by another writer),
+    *waits* — polling with backoff — up to ``timeout`` seconds for it to free, then
+    raises :class:`LockError` (exit 2) if it is still held. ``timeout`` defaults to
+    ``SCRIP_LOCK_TIMEOUT`` (``10`` s); ``timeout=0`` fails fast (the old behavior).
+    A holder that dies *during* the wait is reclaimed on the next poll."""
     p = lock_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
     info = _holder_info()
     payload = (json.dumps(info, ensure_ascii=False) + "\n").encode("utf-8")
-    try:
-        _create(p, payload)
-        return info
-    except FileExistsError:
-        pass
+    wait = _lock_timeout(timeout)
+    deadline = time.monotonic() + wait
+    poll = _POLL_MIN
+    while True:
+        try:
+            _create(p, payload)
+            return info
+        except FileExistsError:
+            pass
 
-    existing = _read(p)
-    if not _reclaimable(existing):
-        if existing is None:
+        existing = _read(p)
+        if _reclaimable(existing):
+            # A provably-dead lock on this host: break it and retry immediately.
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+            try:
+                _create(p, payload)
+                return info
+            except FileExistsError:
+                pass  # raced with another writer; re-evaluate (and wait if time left)
+            existing = _read(p)
+
+        # Live, other-host, or not-yet-readable. Wait for it to free if the budget
+        # has time left; otherwise give up with the appropriate diagnostic.
+        if time.monotonic() >= deadline:
+            waited = f" after waiting {wait:g}s" if wait else ""
+            if existing is None:
+                raise LockError(
+                    ".kb/lock is held but not yet readable (another writer may be "
+                    f"acquiring it){waited}. Retry; run `scrip unlock --force` if it "
+                    "is stuck."
+                ) from None
             raise LockError(
-                ".kb/lock is held but not yet readable (another writer may be "
-                "acquiring it). Retry; run `scrip unlock --force` if it is stuck."
+                f"vault is locked by another writer ({_describe(existing)}){waited}. "
+                f"Wait for it to finish, or run `scrip unlock --force` if it is stuck."
             ) from None
-        raise LockError(
-            f"vault is locked by another writer ({_describe(existing)}). Wait for "
-            f"it to finish, or run `scrip unlock --force` if it is stuck."
-        ) from None
-
-    # Reclaim a clearly-dead lock and retry once.
-    try:
-        p.unlink()
-    except FileNotFoundError:
-        pass
-    try:
-        _create(p, payload)
-    except FileExistsError:
-        raise LockError(
-            "could not acquire .kb/lock (raced with another writer); retry, or "
-            "`scrip unlock` if it is stuck."
-        ) from None
-    return info
+        time.sleep(min(poll, deadline - time.monotonic()))
+        poll = min(poll * 2, _POLL_MAX)
 
 
 def release(root: Path, info: dict | None = None) -> None:
@@ -187,8 +229,8 @@ def release(root: Path, info: dict | None = None) -> None:
 
 
 @contextmanager
-def write_lock(root: Path):
-    info = acquire(root)
+def write_lock(root: Path, *, timeout: float | None = None):
+    info = acquire(root, timeout=timeout)
     try:
         yield info
     finally:

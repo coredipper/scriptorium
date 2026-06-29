@@ -339,9 +339,14 @@ behaviours; their exit codes are part of the contract surface
   is never observed empty or half-written); reads
   (`status`/`verify`/`query`/`search`) never lock. A lock whose holder is a
   *provably-dead* process on this host is reclaimed automatically on the next
-  acquire; a live, other-host, or not-yet-readable lock is left alone and the
-  blocked write fails fast (exit 2), with `scrip unlock [--force]` to clear a
-  stuck lock. It is advisory, not a kernel mutex, and not part of the
+  acquire. A live, other-host, or not-yet-readable lock is **waited on**: the
+  acquirer polls (with backoff) up to `SCRIP_LOCK_TIMEOUT` seconds (default `10`),
+  so two agents serialize cooperatively rather than one failing immediately; if
+  still held when that elapses the write fails (exit 2), with
+  `scrip unlock [--force]` to clear a stuck lock. `SCRIP_LOCK_TIMEOUT=0` restores
+  fail-fast. A holder that dies *during* the wait is reclaimed on the next poll; an
+  other-host lock is only waited on, never reclaimed. It is advisory, not a kernel
+  mutex (best-effort polling, not a fair queue), and not part of the
   files-are-truth contract — deleting it never affects `status`/`verify`.
 - **Optional adapters** (outside the core contract): an embeddings retrieval rung
   (`scrip index` / `scrip search`, via the `[embeddings]` extra) and an Obsidian

@@ -6,6 +6,8 @@ import os
 import socket
 import stat
 import subprocess
+import threading
+import time
 
 import pytest
 
@@ -83,6 +85,64 @@ def test_release_only_removes_our_own_lock(tmp_path):
     lock.release(tmp_path, ours)
     assert lock_path(tmp_path).exists()  # we did not clobber the other holder
     lock_path(tmp_path).unlink()
+
+
+# --- waiting (cooperative blocking acquire) ---------------------------------
+def test_acquire_timeout_zero_fails_fast_on_live_lock(tmp_path):
+    info = lock.acquire(tmp_path, timeout=0)
+    try:
+        start = time.monotonic()
+        with pytest.raises(errors.LockError) as ei:
+            lock.acquire(tmp_path, timeout=0)
+        assert ei.value.exit_code == 2
+        assert time.monotonic() - start < 0.2  # immediate — no wait at timeout=0
+    finally:
+        lock.release(tmp_path, info)
+
+
+def test_acquire_waits_for_a_busy_lock_then_succeeds(tmp_path):
+    # a writer holds the lock briefly; a waiting acquire grabs it once it frees,
+    # rather than failing fast.
+    info = lock.acquire(tmp_path, timeout=0)
+
+    def _release_after():
+        time.sleep(0.2)
+        lock.release(tmp_path, info)
+
+    t = threading.Thread(target=_release_after)
+    t.start()
+    try:
+        start = time.monotonic()
+        info2 = lock.acquire(tmp_path, timeout=5)  # blocks ~0.2s, then acquires
+        waited = time.monotonic() - start
+        assert waited >= 0.15  # it actually waited for the release
+        assert json.loads(lock_path(tmp_path).read_text())["pid"] == os.getpid()
+        lock.release(tmp_path, info2)
+    finally:
+        t.join()
+
+
+def test_acquire_times_out_while_lock_stays_held(tmp_path):
+    info = lock.acquire(tmp_path, timeout=0)
+    try:
+        start = time.monotonic()
+        with pytest.raises(errors.LockError) as ei:
+            lock.acquire(tmp_path, timeout=0.3)
+        waited = time.monotonic() - start
+        assert ei.value.exit_code == 2
+        assert 0.25 <= waited < 3.0  # waited ~the timeout, then gave up (not forever)
+    finally:
+        lock.release(tmp_path, info)
+
+
+def test_lock_timeout_resolution(monkeypatch):
+    monkeypatch.delenv("SCRIP_LOCK_TIMEOUT", raising=False)
+    assert lock._lock_timeout(None) == 10.0  # default when unset
+    monkeypatch.setenv("SCRIP_LOCK_TIMEOUT", "3.5")
+    assert lock._lock_timeout(None) == 3.5  # env configures the default
+    assert lock._lock_timeout(0) == 0.0  # an explicit timeout wins over the env
+    monkeypatch.setenv("SCRIP_LOCK_TIMEOUT", "nonsense")
+    assert lock._lock_timeout(None) == 10.0  # a bad env value falls back to default
 
 
 # --- staleness --------------------------------------------------------------
