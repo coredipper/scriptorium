@@ -190,7 +190,9 @@ The tests inject a stub draft function (no network, no API key) and drive the re
   retry loop catches it). PROMOTE's merge is **append** by default (loss-free,
   deterministic); `--resynthesize` instead re-drafts the target as one coherent page
   over the union of both pages' sources (re-minting every anchor) — more coherent but
-  it rewrites the body, so it is opt-in. `reconcile` records the decision
+  it rewrites the body, so it is opt-in. (Re-synthesis re-reads whole files, so a
+  block-scoped `derived-from` dep — `raw/x#<block_id>` — is widened to its whole file;
+  safe, since the page can then only go *more* stale.) `reconcile` records the decision
   (supersede/qualify/keep-both) and, on a **qualify**, authors the nuancing
   `polarity: qualifies` claim; surfacing the page caveat is left to the read-only
   view layer, not a page mutation.

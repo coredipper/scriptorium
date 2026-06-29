@@ -1053,8 +1053,18 @@ def promote_page(
         # re-draft one coherent page over the union via the shared COMPILE core,
         # re-minting every anchor; the target keeps its own id and title.
         assert draft_fn is not None  # guarded at entry; narrows the type for the call
+        # derived-from may carry block-scoped deps (raw/x#<block_id>, SPEC §7.2).
+        # Re-synthesis re-reads whole files and re-mints whole-file anchors, so resolve
+        # each dep to its base raw/<slug> (deduped) for the read/mint AND make that the
+        # new derived-from: a re-synthesized page genuinely depends on the whole file,
+        # and widening a block dep to its file is safe (it can only go *more* stale).
+        resynth_sources: list[str] = []
+        for s in df:
+            base = s.split("#", 1)[0]
+            if base not in resynth_sources:
+                resynth_sources.append(base)
         src_ids, valid_sources, source_text, draft_source_id = _read_sources(
-            root, slug, df, PromoteError
+            root, slug, resynth_sources, PromoteError
         )
         draft, footnotes = _synthesize_body(
             root, src_ids, valid_sources, source_text, draft_source_id,
@@ -1062,6 +1072,7 @@ def promote_page(
             error_cls=PromoteError,
         )
         new_body = assemble_body(draft, footnotes)
+        df = resynth_sources  # the re-synthesized page depends on whole files now
     else:
         new_body = merge_bodies(t_body, body)
     t_meta["derived-from"] = df

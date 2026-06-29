@@ -261,6 +261,38 @@ def test_promote_resynthesize_rolls_back_on_bad_draft(tmp_path):
     assert target.read_bytes() == target_before  # target restored byte-for-byte
 
 
+def test_promote_resynthesize_tolerates_block_scoped_derived_from(tmp_path):
+    # derived-from may carry block-scoped deps (raw/x#<block_id>, SPEC §7.2). The
+    # re-draft resolves each to its whole raw file (re-minting over the full file),
+    # instead of choking on the '#'; the re-synthesized page then depends on the
+    # whole files (a safe widening — it can only go *more* stale, never falsely fresh).
+    root = _vault(tmp_path)
+    _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
+    _raw(root, "beta", "# B\n\nBeta one sentence.\n")
+    target = _page(root, "compilation", "Compilation",
+                   ["raw/alpha#deadbeefcafe", "raw/beta"], [("Alpha one sentence.", "alpha")])
+    _page(root, "compilation-redux", "Compilation",
+          ["raw/alpha#deadbeefcafe", "raw/beta"], [("Beta one sentence.", "beta")])
+
+    def draft(source_text, *, source_id, failures=None):
+        assert source_id == "raw/alpha,raw/beta"  # block dep resolved to whole file
+        return DraftPage(
+            title="t",
+            body="Alpha[^a1] and beta[^a2].\n",
+            claims=[
+                DraftClaim(quote="Alpha one sentence.", source_id="raw/alpha"),
+                DraftClaim(quote="Beta one sentence.", source_id="raw/beta"),
+            ],
+        )
+
+    result = promote_page(root, "compilation-redux", decide_fn=None,
+                          resynthesize=True, draft_fn=draft)
+    assert result["action"] == "merge"
+    meta, _ = frontmatter.load(target)
+    assert set(meta["derived-from"]) == {"raw/alpha", "raw/beta"}  # widened to whole files
+    assert _verify(root) == 0
+
+
 # --------------------------------------------------------------------------- #
 # Dry run + guards
 # --------------------------------------------------------------------------- #
