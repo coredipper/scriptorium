@@ -78,10 +78,16 @@ def main(argv: list[str] | None = None) -> int:
     _add_model_args(pc)
     pe = sub.add_parser(
         "extract",
-        help="extract claims from raw/<slug> into facts/ via a model provider "
-        "(anchors minted and verified by `scrip fact add`), then stamp + verify",
+        help="extract claims from raw/<slug> (or several --from sources) into facts/ "
+        "via a model provider (anchors minted and verified by `scrip fact add`), "
+        "then stamp + verify",
     )
     pe.add_argument("slug")
+    pe.add_argument(
+        "--from", dest="sources", metavar="raw/a,raw/b",
+        help="comma-separated source ids to extract claims from (default: raw/<slug>); "
+        "each claim is attributed to one of them",
+    )
     pe.add_argument("--root")
     _add_model_args(pe)
     pg = sub.add_parser(
@@ -268,14 +274,26 @@ def main(argv: list[str] | None = None) -> int:
                 api_key_file=api_key_file,
             )
 
+        extract_sources = None
+        if args.sources is not None:
+            extract_sources = _normalize_sources(args.sources)
+            if not extract_sources:
+                print(
+                    "scrip-harness: --from was given but lists no source ids",
+                    file=sys.stderr,
+                )
+                return 1
         try:
-            result = extract_facts(root, args.slug, draft_fn=extract_draft_fn)
+            result = extract_facts(
+                root, args.slug, sources=extract_sources, draft_fn=extract_draft_fn
+            )
         except (ExtractError, RuntimeError) as e:
             print(f"scrip-harness: {e}", file=sys.stderr)
             return 1
         appended, skipped = result["appended"], result["skipped"]
+        src_label = ",".join(extract_sources) if extract_sources else f"raw/{args.slug}"
         print(
-            f"extracted {len(appended)} claim(s) from raw/{args.slug}  (verified"
+            f"extracted {len(appended)} claim(s) from {src_label}  (verified"
             f"{f', {len(skipped)} duplicate(s) skipped' if skipped else ''})"
         )
         if result["contradictions"]:

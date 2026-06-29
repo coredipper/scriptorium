@@ -50,3 +50,43 @@ def test_graph_command_drafts_entities_and_edges(tmp_path, monkeypatch, capsys):
     assert "entity/pageindex" in ents and "entity/vector-db" in ents
     edges = (tmp_path / "vault" / "facts" / "graph.ndjson").read_text(encoding="utf-8")
     assert '"kind": "alternative-to"' in edges
+
+
+def test_extract_command_multi_source_attributes_each_claim(tmp_path, monkeypatch, capsys):
+    from scrip_harness.extract import DraftExtraction, DraftFact
+
+    for d in ("vault/raw", "vault/wiki/concepts", "vault/facts", ".kb"):
+        (tmp_path / d).mkdir(parents=True)
+    (tmp_path / "SPEC.md").write_text("marker\n", encoding="utf-8")
+    (tmp_path / "vault" / "raw" / "a.md").write_text(
+        "# A\n\nAlpha is documented only in source A.\n", encoding="utf-8"
+    )
+    (tmp_path / "vault" / "raw" / "b.md").write_text(
+        "# B\n\nBeta is documented only in source B.\n", encoding="utf-8"
+    )
+
+    def fake_draft_extraction(text, *, source_id, failures=None, **kw):
+        # --from passes both sources to the model, labelled for attribution
+        assert source_id == "raw/a,raw/b"
+        assert "----- SOURCE raw/a -----" in text
+        return DraftExtraction(
+            claims=[
+                DraftFact(
+                    quote="Alpha is documented only in source A.",
+                    subject="alpha", predicate="in", object="a", source_id="raw/a",
+                ),
+                DraftFact(
+                    quote="Beta is documented only in source B.",
+                    subject="beta", predicate="in", object="b", source_id="raw/b",
+                ),
+            ]
+        )
+
+    monkeypatch.setattr(model, "draft_extraction", fake_draft_extraction)
+
+    rc = cli.main(["extract", "a", "--from", "raw/a,raw/b", "--root", str(tmp_path)])
+
+    assert rc == 0
+    assert "extracted 2 claim(s) from raw/a,raw/b" in capsys.readouterr().out
+    recs = (tmp_path / "vault" / "facts" / "claims.ndjson").read_text(encoding="utf-8")
+    assert '"source_id": "raw/a"' in recs and '"source_id": "raw/b"' in recs

@@ -203,6 +203,99 @@ def test_extract_missing_source_is_a_clean_error(tmp_path):
     assert called is False  # no model call for a source that does not exist
 
 
+def test_to_ndjson_uses_per_claim_source_over_default():
+    facts = [
+        _fact("from a", source_id="raw/a"),
+        _fact("from default"),  # empty source_id falls back to the default
+    ]
+    lines = [json.loads(s) for s in to_ndjson(facts, "raw/default").splitlines()]
+    assert lines[0]["source_id"] == "raw/a"
+    assert lines[1]["source_id"] == "raw/default"
+
+
+# --------------------------------------------------------------------------- #
+# Multi-source extract
+# --------------------------------------------------------------------------- #
+def test_extract_multi_source_attributes_each_claim_to_its_source(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "a.md").write_text(
+        "# A\n\nAlpha is documented only in source A.\n", encoding="utf-8"
+    )
+    (root / "vault" / "raw" / "b.md").write_text(
+        "# B\n\nBeta is documented only in source B.\n", encoding="utf-8"
+    )
+
+    def stub(source_text, *, source_id, failures=None):
+        # multi-source: the draft id names both, and the formatted text labels them
+        assert source_id == "raw/a,raw/b"
+        assert "----- SOURCE raw/a -----" in source_text
+        return DraftExtraction(
+            claims=[
+                _fact("Alpha is documented only in source A.", source_id="raw/a"),
+                _fact("Beta is documented only in source B.", subject="beta", source_id="raw/b"),
+            ]
+        )
+
+    result = extract_facts(root, "a", draft_fn=stub, sources=["raw/a", "raw/b"])
+    recs = _claims_lines(root)
+    assert {r["source_id"] for r in recs} == {"raw/a", "raw/b"}
+    assert len(result["appended"]) == 2
+    # anchors were minted against the RIGHT source (a B quote verified vs raw/a
+    # would be BROKEN) — the vault verifies clean
+    verify = subprocess.run(
+        ["scrip", "verify", "--root", str(root)], capture_output=True, text=True
+    )
+    assert verify.returncode == 0, verify.stdout + verify.stderr
+
+
+def test_extract_multi_source_requires_a_source_id_per_claim(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "a.md").write_text("# A\n\nAlpha here.\n", encoding="utf-8")
+    (root / "vault" / "raw" / "b.md").write_text("# B\n\nBeta here.\n", encoding="utf-8")
+
+    def stub(source_text, *, source_id, failures=None):
+        return DraftExtraction(claims=[_fact("Alpha here.")])  # no source_id given
+
+    with pytest.raises(ExtractError, match="source"):
+        extract_facts(root, "a", draft_fn=stub, sources=["raw/a", "raw/b"])
+    assert _claims_lines(root) == []  # nothing written
+
+
+def test_extract_multi_source_rejects_unknown_source_id(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "a.md").write_text("# A\n\nAlpha here.\n", encoding="utf-8")
+    (root / "vault" / "raw" / "b.md").write_text("# B\n\nBeta here.\n", encoding="utf-8")
+
+    def stub(source_text, *, source_id, failures=None):
+        return DraftExtraction(claims=[_fact("Alpha here.", source_id="raw/ghost")])
+
+    with pytest.raises(ExtractError, match="raw/ghost"):
+        extract_facts(root, "a", draft_fn=stub, sources=["raw/a", "raw/b"])
+
+
+def test_extract_multi_source_retry_replacement_cannot_escape_sources(tmp_path):
+    # a retry must not smuggle in a claim from a source outside --from: the
+    # source-scope check runs on every batch, including the retry-corrected one
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "a.md").write_text("# A\n\nAlpha is here.\n", encoding="utf-8")
+    (root / "vault" / "raw" / "b.md").write_text("# B\n\nBeta is here.\n", encoding="utf-8")
+    # an out-of-scope source that exists AND contains the smuggled quote verbatim
+    (root / "vault" / "raw" / "secret.md").write_text(
+        "# S\n\nSecret leak sentence.\n", encoding="utf-8"
+    )
+
+    def stub(source_text, *, source_id, failures=None):
+        if failures is None:
+            # first draft: a quote not present in raw/a → forces a quote retry
+            return DraftExtraction(claims=[_fact("Not present verbatim.", source_id="raw/a")])
+        # retry: attribute the replacement to raw/secret, which is NOT in --from
+        return DraftExtraction(claims=[_fact("Secret leak sentence.", source_id="raw/secret")])
+
+    with pytest.raises(ExtractError, match="raw/secret"):
+        extract_facts(root, "a", draft_fn=stub, sources=["raw/a", "raw/b"])
+    assert _claims_lines(root) == []  # nothing from the unrequested source was written
+
+
 def test_extract_surfaces_contradiction_candidates(tmp_path):
     from scrip import anchors  # the harness depends on scrip; reuse its anchor math
 
