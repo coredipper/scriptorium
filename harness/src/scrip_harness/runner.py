@@ -89,6 +89,43 @@ def _scrip(
     )
 
 
+def _read_sources(
+    root: Path,
+    slug: str,
+    sources: Sequence[str] | None,
+    error_cls: type[Exception],
+) -> tuple[list[str], dict[str, str], str, str]:
+    """Resolve and read the raw sources a COMPILE/EXTRACT draws from, shared by both.
+
+    ``sources`` is a list of raw ids (``["raw/a", "raw/b"]``), defaulting to the
+    single ``raw/<slug>``. Each is validated (``raw/`` prefix + slug shape) and read.
+    Returns ``(source_ids, valid_sources, source_text, draft_source_id)``: with one
+    source the prompt text is byte-identical to a single-source run; with several it
+    is the labelled ``----- SOURCE <id> -----`` concatenation and ``draft_source_id``
+    is the comma-joined ids, so the model can attribute each quote to its source."""
+    source_ids = list(sources) if sources else [f"raw/{slug}"]
+    valid_sources: dict[str, str] = {}
+    for sid in source_ids:
+        if not sid.startswith("raw/"):
+            raise error_cls(f"source id {sid!r} must start with 'raw/'")
+        s_slug = sid[len("raw/"):]
+        if not _SLUG_RE.fullmatch(s_slug):
+            raise error_cls(f"invalid source id {sid!r}")
+        try:
+            valid_sources[sid] = (
+                (root / "vault" / "raw" / f"{s_slug}.md").read_text(encoding="utf-8")
+            )
+        except OSError as e:
+            raise error_cls(f"cannot read {sid}: {e}") from e
+    if len(source_ids) == 1:
+        source_text = valid_sources[source_ids[0]]
+        draft_source_id = source_ids[0]
+    else:
+        source_text = format_sources([(sid, valid_sources[sid]) for sid in source_ids])
+        draft_source_id = ",".join(source_ids)
+    return source_ids, valid_sources, source_text, draft_source_id
+
+
 def compile_page(
     root,
     slug: str,
@@ -120,28 +157,9 @@ def compile_page(
             f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
             f"separators, '..', or leading dot"
         )
-    source_ids = list(sources) if sources else [f"raw/{slug}"]
-    valid_sources: dict[str, str] = {}
-    for sid in source_ids:
-        if not sid.startswith("raw/"):
-            raise CompileError(f"source id {sid!r} must start with 'raw/'")
-        s_slug = sid[len("raw/"):]
-        if not _SLUG_RE.fullmatch(s_slug):
-            raise CompileError(f"invalid source id {sid!r}")
-        try:
-            valid_sources[sid] = (
-                (root / "vault" / "raw" / f"{s_slug}.md").read_text(encoding="utf-8")
-            )
-        except OSError as e:
-            raise CompileError(f"cannot read {sid}: {e}") from e
-    # One source keeps the prompt byte-identical to a single-source compile; several
-    # are concatenated under labelled headers so the model attributes each quote.
-    if len(source_ids) == 1:
-        source_text = valid_sources[source_ids[0]]
-        draft_source_id = source_ids[0]
-    else:
-        source_text = format_sources([(sid, valid_sources[sid]) for sid in source_ids])
-        draft_source_id = ",".join(source_ids)
+    source_ids, valid_sources, source_text, draft_source_id = _read_sources(
+        root, slug, sources, CompileError
+    )
     draft = draft_fn(source_text, source_id=draft_source_id)
 
     # The model's inline markers must be exactly [^a1]..[^aN] in order for the N
@@ -245,11 +263,19 @@ def extract_facts(
     root,
     slug: str,
     *,
+    sources: Sequence[str] | None = None,
     draft_fn: ExtractDraftFn,
     scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
     max_quote_retries: int = 2,
 ) -> dict:
-    """Extract claims from ``raw/<slug>`` into ``facts/`` and leave the vault green.
+    """Extract claims from ``raw/<slug>`` (or several ``sources``) into ``facts/``
+    and leave the vault green.
+
+    ``sources`` is a list of raw source ids (e.g. ``["raw/a", "raw/b"]``), defaulting
+    to the single ``raw/<slug>``. With several, each claim's ``source_id`` says which
+    source its quote is from and its anchor is minted against that source; a claim
+    with no ``source_id`` (or one naming a source not in ``sources``) is rejected
+    before anything is written.
 
     ``draft_fn(source_text, source_id=...)`` returns a :class:`DraftExtraction`;
     on a quote failure it is called again with ``failures=[...]`` (the per-record
@@ -264,15 +290,31 @@ def extract_facts(
             f"invalid slug {slug!r}: use letters/digits/'.'/'_'/'-', with no path "
             f"separators, '..', or leading dot"
         )
-    source_id = f"raw/{slug}"
-    try:
-        source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
-    except OSError as e:
-        raise ExtractError(f"cannot read {source_id}: {e}") from e
-    draft = draft_fn(source_text, source_id=source_id)
+    source_ids, valid_sources, source_text, draft_source_id = _read_sources(
+        root, slug, sources, ExtractError
+    )
+    draft = draft_fn(source_text, source_id=draft_source_id)
     claims = list(draft.claims)
     if not claims:
-        raise ExtractError(f"the draft proposed no claims for {source_id}")
+        raise ExtractError(f"the draft proposed no claims for {draft_source_id}")
+
+    # Resolve each claim's source before writing: with one source it defaults there;
+    # with several the model must attribute every claim, and an unknown or missing
+    # source_id is a structural error (fail before scrip is touched, nothing written),
+    # not a retryable quote finding. scrip then mints each anchor against that source.
+    default_source = source_ids[0] if len(source_ids) == 1 else ""
+    for i, claim in enumerate(claims):
+        csrc = claim.source_id or default_source
+        if csrc not in valid_sources:
+            if claim.source_id:
+                raise ExtractError(
+                    f"claim {i + 1} cites source {claim.source_id!r} not among the "
+                    f"extract's sources {source_ids}"
+                )
+            raise ExtractError(
+                f"claim {i + 1} has no source_id but the extract has multiple "
+                f"sources {source_ids}; set source_id to the quote's source"
+            )
 
     # Submit; on per-record quote findings (exit 1, nothing written) ask the
     # model to fix exactly the failing quotes and resubmit the corrected batch.
@@ -281,7 +323,7 @@ def extract_facts(
         r = _scrip(
             scrip_cmd,
             ["fact", "add", "--table", "claims", "--stdin", "--json", "--root", str(root)],
-            input_text=to_ndjson(claims, source_id),
+            input_text=to_ndjson(claims, default_source),
         )
         if r.returncode == 0:
             try:
@@ -310,7 +352,7 @@ def extract_facts(
                 f"{'y' if retries == 1 else 'ies'}: {detail}"
             )
         retries += 1
-        revised = draft_fn(source_text, source_id=source_id, failures=failures)
+        revised = draft_fn(source_text, source_id=draft_source_id, failures=failures)
         replacements = list(revised.claims)
         if len(replacements) != len(failures):
             raise ExtractError(
@@ -322,6 +364,11 @@ def extract_facts(
         for failure, replacement in zip(failures, replacements, strict=True):
             i = failure["index"]
             if replacement.quote.strip():
+                # A retry fixes the quote, not the attribution: keep the original
+                # claim's source_id when the replacement omits it, so a multi-source
+                # claim stays minted against the right source.
+                if not replacement.source_id:
+                    replacement.source_id = claims[i].source_id
                 claims[i] = replacement
             else:
                 dropped.append(i)

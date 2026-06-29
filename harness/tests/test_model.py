@@ -29,6 +29,7 @@ class _CapturingClient:
 
     def parse(self, *, messages, **kw):
         self.captured["prompt"] = messages[0]["content"]
+        self.captured["system"] = kw.get("system")
         return type("Resp", (), {"parsed_output": self._parsed})()
 
 
@@ -58,6 +59,19 @@ def test_draft_extraction_retry_uses_the_extract_prompt():
     prompt = client.captured["prompt"]
     # EXTRACT facts are position-independent: an empty quote may drop a claim.
     assert "empty" in prompt.lower() and "drop" in prompt.lower()
+
+
+def test_draft_extraction_system_prompt_instructs_per_source_attribution():
+    # multi-source EXTRACT: the runner labels each source `----- SOURCE <id> -----`
+    # and mints each claim's anchor against its `source_id`. The model only knows to
+    # set that source_id if the system prompt tells it to — guard that wiring here,
+    # since the runner tests stub draft_fn and never exercise the real prompt.
+    client = _CapturingClient(
+        DraftExtraction(claims=[DraftFact(quote="q", subject="s", predicate="p", object="o")])
+    )
+    model_mod.draft_extraction("a distinctive source body", source_id="raw/a,raw/b", client=client)
+    system = client.captured["system"]
+    assert "----- SOURCE" in system and "source_id" in system
 
 
 def test_draft_graph_uses_the_graph_prompt_and_returns_a_graph():

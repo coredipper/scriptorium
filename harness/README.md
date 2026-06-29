@@ -170,7 +170,7 @@ The tests inject a stub draft function (no network, no API key) and drive the re
 ## Scope & limits (v1)
 
 - Covers **COMPILE** (one or more sources → one wiki page, with the bounded
-  quote-retry loop), **EXTRACT** (one source → claims in `facts/`, same retry loop), **ANSWER** (fresh
+  quote-retry loop), **EXTRACT** (one or more sources → claims in `facts/`, same retry loop), **ANSWER** (fresh
   compiled evidence first, raw search on miss, verified citations), **PROMOTE**
   (score → merge/keep, model only in the middle band), **RECONCILE**
   (adjudicate every contradiction → record the decision), and **GRAPH** (one
@@ -181,9 +181,11 @@ The tests inject a stub draft function (no network, no API key) and drive the re
   quote-retry loop and a model can still assert a *wrong* relation between real
   entities; treat the graph as a navigational aid, not verified provenance. You
   can still author them by hand via `scrip fact add --table entities|edges`.
-- COMPILE accepts one or more sources (`--from raw/a,raw/b`); EXTRACT is still one
-  source. PROMOTE's merge is **append**, not re-synthesis — multi-source COMPILE
-  now unblocks re-synthesis as a follow-on. `reconcile` records the decision
+- COMPILE and EXTRACT both accept one or more sources (`--from raw/a,raw/b`); in a
+  multi-source EXTRACT each claim names the source its quote came from and its anchor
+  is minted against that source, so a mis-attributed quote fails quote-verify (the
+  retry loop catches it). PROMOTE's merge is **append**, not re-synthesis —
+  multi-source COMPILE now unblocks re-synthesis as a follow-on. `reconcile` records the decision
   (supersede/qualify/keep-both) and, on a **qualify**, authors the nuancing
   `polarity: qualifies` claim; surfacing the page caveat is left to the read-only
   view layer, not a page mutation.

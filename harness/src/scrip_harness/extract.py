@@ -10,13 +10,16 @@ from typing import Literal
 from pydantic import BaseModel
 
 EXTRACT_SYSTEM = (
-    "You are the scribe for a scriptorium knowledge base. From the single source "
+    "You are the scribe for a scriptorium knowledge base. From the source(s) "
     "you are given, extract atomic factual claims as structured records.\n"
     "Rules:\n"
     "- Extract only what the source supports; do not add outside facts.\n"
     "- Each claim's `quote` is copied VERBATIM from the source (it is "
     "machine-verified against the source text; paraphrases are rejected). Quote "
     "enough words to be unique within the source.\n"
+    "- When several sources are provided (each under a `----- SOURCE <id> -----` "
+    "header), set each claim's `source_id` to the id of the source its quote was "
+    "copied from; with a single source you may leave it empty.\n"
     "- `subject`/`predicate`/`object` form a coarse triple used for grouping and "
     "contradiction detection: keep them short, lowercase noun/verb phrases, and "
     "reuse the same wording for the same idea across claims.\n"
@@ -40,6 +43,10 @@ class DraftFact(BaseModel):
     claim_text: str = ""
     """Optional restatement; empty means the quote itself is the claim text."""
     tags: list[str] = []
+    source_id: str = ""
+    """For multi-source extraction, which ``--from`` source this quote came from
+    (e.g. ``raw/a``); empty means the run's sole source. The runner mints each
+    claim's anchor against this, so a mis-attributed quote fails quote-verify."""
 
 
 class DraftExtraction(BaseModel):
@@ -74,10 +81,12 @@ def build_extract_retry_prompt(source_text: str, failures: list[dict]) -> str:
     )
 
 
-def to_ndjson(facts: list[DraftFact], source_id: str) -> str:
+def to_ndjson(facts: list[DraftFact], default_source_id: str) -> str:
     """Serialize proposed facts as the NDJSON `scrip fact add --stdin` expects.
     scrip owns `anchor`/`claim_id`/`extracted_at`, so they never appear here;
-    empty `claim_text`/`tags` are omitted so scrip applies its defaults."""
+    empty `claim_text`/`tags` are omitted so scrip applies its defaults. Each
+    claim's own `source_id` wins over ``default_source_id`` (the run's sole
+    source), so a multi-source extract attributes each quote to its source."""
     lines = []
     for f in facts:
         rec: dict = {
@@ -87,7 +96,7 @@ def to_ndjson(facts: list[DraftFact], source_id: str) -> str:
             "object": f.object,
             "polarity": f.polarity,
             "confidence": f.confidence,
-            "source_id": source_id,
+            "source_id": f.source_id or default_source_id,
         }
         if f.claim_text:
             rec["claim_text"] = f.claim_text
