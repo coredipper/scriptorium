@@ -17,3 +17,7 @@
 ## 2024-07-28 - Single Pass Block Segmentation
 **Learning:** In operations that process text files line-by-line (like markdown block segmentation), accumulating intermediate lists (e.g., span tuples containing start/end and full lines) introduces significant memory overhead and repeated O(N) iteration loops. Merging the tracking logic directly inside the main `splitlines()` loop saves allocations and iteration cycles.
 **Action:** Always prefer a single pass strategy when generating indices or ranges over raw text files; avoid constructing intermediary sequence arrays (`spans: list[...]`) that are merely used to inform the final range boundaries.
+
+## 2024-07-29 - O(N) Array Allocation in Python `splitlines()` for Trimming
+**Learning:** Extracting string substrings (like removing Markdown ` ``` ` boundaries from LLM JSON payloads) using `splitlines()` followed by `\n.join(lines)` allocates a large array in memory, taking O(N) operations and scaling poorly for large text payloads.
+**Action:** When extracting data by removing boundary lines (such as code block prefix/suffix), use string searching (`find('\n')` and `rfind('\n')`) and slicing rather than full sequence segmentation.
