@@ -135,6 +135,33 @@ def test_acquire_times_out_while_lock_stays_held(tmp_path):
         lock.release(tmp_path, info)
 
 
+def test_acquire_does_not_grab_a_lock_freed_after_the_deadline(tmp_path, monkeypatch):
+    # A writer releases only once the timeout has elapsed. acquire must time out
+    # (exit 2), not wake from its last sleep, retry, and grab the just-freed lock —
+    # which would silently extend the budget past SCRIP_LOCK_TIMEOUT. Driven by a
+    # mocked clock so the boundary is deterministic (real-time races are not).
+    info = lock.acquire(tmp_path, timeout=0)  # our live pid holds it
+    clock = {"t": 100.0}
+    sleeps: list[float] = []
+    monkeypatch.setattr(lock.time, "monotonic", lambda: clock["t"])
+
+    def fake_sleep(d):
+        sleeps.append(d)
+        clock["t"] += d
+        if clock["t"] >= 100.3 and lock_path(tmp_path).exists():
+            lock.release(tmp_path, info)  # freed, but only at/after the deadline
+
+    monkeypatch.setattr(lock.time, "sleep", fake_sleep)
+    try:
+        with pytest.raises(errors.LockError) as ei:
+            lock.acquire(tmp_path, timeout=0.3)  # deadline = 100.0 + 0.3
+        assert ei.value.exit_code == 2
+        assert all(d >= 0 for d in sleeps)  # never a negative sleep duration
+    finally:
+        if lock_path(tmp_path).exists():
+            lock.release(tmp_path, info)
+
+
 def test_lock_timeout_resolution(monkeypatch):
     monkeypatch.delenv("SCRIP_LOCK_TIMEOUT", raising=False)
     assert lock._lock_timeout(None) == 10.0  # default when unset

@@ -173,43 +173,54 @@ def acquire(root: Path, *, timeout: float | None = None) -> dict:
     wait = _lock_timeout(timeout)
     deadline = time.monotonic() + wait
     poll = _POLL_MIN
-    while True:
+
+    def _try_take() -> bool:
+        """One acquisition attempt: True if we now hold the lock. A provably-dead
+        lock on this host is reclaimed and retried once; otherwise we don't hold it."""
         try:
             _create(p, payload)
-            return info
+            return True
         except FileExistsError:
             pass
-
-        existing = _read(p)
-        if _reclaimable(existing):
-            # A provably-dead lock on this host: break it and retry immediately.
+        if _reclaimable(_read(p)):
             try:
                 p.unlink()
             except FileNotFoundError:
                 pass
             try:
                 _create(p, payload)
-                return info
+                return True
             except FileExistsError:
-                pass  # raced with another writer; re-evaluate (and wait if time left)
-            existing = _read(p)
+                pass  # raced with another writer; fall through to wait/retry
+        return False
 
-        # Live, other-host, or not-yet-readable. Wait for it to free if the budget
-        # has time left; otherwise give up with the appropriate diagnostic.
-        if time.monotonic() >= deadline:
-            waited = f" after waiting {wait:g}s" if wait else ""
-            if existing is None:
-                raise LockError(
-                    ".kb/lock is held but not yet readable (another writer may be "
-                    f"acquiring it){waited}. Retry; run `scrip unlock --force` if it "
-                    "is stuck."
-                ) from None
-            raise LockError(
-                f"vault is locked by another writer ({_describe(existing)}){waited}. "
-                f"Wait for it to finish, or run `scrip unlock --force` if it is stuck."
-            ) from None
-        time.sleep(min(poll, deadline - time.monotonic()))
+    # Always attempt once (so a free lock is taken even at timeout=0), then poll —
+    # re-checking the deadline both before sleeping and again after, so we never
+    # retry (and grab) a lock that freed only once the budget was already spent.
+    if _try_take():
+        return info
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(poll, remaining))  # remaining > 0 here, so never negative
         poll = min(poll * 2, _POLL_MAX)
+        if time.monotonic() >= deadline:
+            break
+        if _try_take():
+            return info
+
+    existing = _read(p)  # who holds it now, for the diagnostic
+    waited = f" after waiting {wait:g}s" if wait else ""
+    if existing is None:
+        raise LockError(
+            ".kb/lock is held but not yet readable (another writer may be "
+            f"acquiring it){waited}. Retry; run `scrip unlock --force` if it is stuck."
+        ) from None
+    raise LockError(
+        f"vault is locked by another writer ({_describe(existing)}){waited}. "
+        f"Wait for it to finish, or run `scrip unlock --force` if it is stuck."
+    ) from None
 
 
 def release(root: Path, info: dict | None = None) -> None:
