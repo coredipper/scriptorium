@@ -7,6 +7,16 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Changed
+- **The advisory write lock now waits for a busy lock instead of failing fast.**
+  When `.kb/lock` is held by a live (or another-host, or not-yet-readable) writer,
+  `acquire` polls with backoff up to `SCRIP_LOCK_TIMEOUT` seconds (default `10`)
+  before giving up with exit 2 — so two agents serialize cooperatively rather than
+  one erroring immediately. A holder that dies *during* the wait is reclaimed on the
+  next poll. `SCRIP_LOCK_TIMEOUT=0` restores the previous fail-fast behavior. Reads
+  still never lock, dead-lock reclaim is unchanged, and the lock remains advisory and
+  outside the files-are-truth contract (SPEC §11).
+
 ## [0.6.4] — 2026-06-28
 
 scriptoria moves to 0.6.4 for an NDJSON parsing fix and a block-segmentation

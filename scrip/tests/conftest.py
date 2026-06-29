@@ -16,6 +16,16 @@ import pytest
 from scrip import anchors, blocks, frontmatter, hashing
 
 
+@pytest.fixture(autouse=True)
+def _fail_fast_lock(monkeypatch):
+    """Keep the hermetic suite fast: the write lock now *waits* for a busy lock
+    (``SCRIP_LOCK_TIMEOUT``, default 10s). Pin it to 0 (fail-fast) for tests so the
+    lock-blocked cases return immediately instead of sitting through the wait. Tests
+    of the waiting path pass an explicit ``timeout=`` to :func:`scrip.lock.acquire`,
+    which overrides this env default."""
+    monkeypatch.setenv("SCRIP_LOCK_TIMEOUT", "0")
+
+
 class KB:
     def __init__(self, root: Path):
         self.root = root
