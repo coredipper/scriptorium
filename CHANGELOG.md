@@ -7,6 +7,13 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-29
+
+scriptoria moves to 0.7.0 for cooperative write-lock waiting — concurrent agents
+serialize instead of one failing fast. (Released alongside scrip-harness 0.9.0,
+which closes the pipeline with model-drafted entities/edges and adds multi-source
+EXTRACT + opt-in re-synthesis on PROMOTE; see `harness/README.md`.)
+
 ### Changed
 - **The advisory write lock now waits for a busy lock instead of failing fast.**
   When `.kb/lock` is held by a live (or another-host, or not-yet-readable) writer,
