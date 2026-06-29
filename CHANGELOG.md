@@ -10,9 +10,8 @@ reference CLI. The file **contract** is versioned separately in
 ## [0.7.0] — 2026-06-29
 
 scriptoria moves to 0.7.0 for cooperative write-lock waiting — concurrent agents
-serialize instead of one failing fast. (Released alongside scrip-harness 0.9.0,
-which closes the pipeline with model-drafted entities/edges and adds multi-source
-EXTRACT + opt-in re-synthesis on PROMOTE; see `harness/README.md`.)
+serialize instead of one failing fast. (Released alongside scrip-harness 0.9.0;
+see the [harness-0.9.0] entry below.)
 
 ### Changed
 - **The advisory write lock now waits for a busy lock instead of failing fast.**
@@ -23,6 +22,23 @@ EXTRACT + opt-in re-synthesis on PROMOTE; see `harness/README.md`.)
   next poll. `SCRIP_LOCK_TIMEOUT=0` restores the previous fail-fast behavior. Reads
   still never lock, dead-lock reclaim is unchanged, and the lock remains advisory and
   outside the files-are-truth contract (SPEC §11).
+
+## [harness-0.9.0] — 2026-06-29
+
+scrip-harness closes the six-stage pipeline and deepens synthesis. Moves to 0.9.0
+(still depends on `scriptoria>=0.6.2`). Harness-only; no `scrip` contract change.
+
+### Added
+- **`scrip-harness graph <slug>`** drafts `entities.ndjson` + typed `graph.ndjson`
+  edges from a source in one pass (mirrors EXTRACT). The runner mints `entity/<slug>`
+  ids and drops any edge whose endpoints are not real entities; edges carry no anchor
+  (structural, not cited).
+- **Multi-source EXTRACT.** `scrip-harness extract --from raw/a,raw/b` attributes
+  each claim to its source and mints that claim's anchor against it (a mis-attributed
+  quote fails quote-verify) — EXTRACT parity with COMPILE's `--from`.
+- **Opt-in re-synthesis on PROMOTE.** `scrip-harness promote --resynthesize` re-drafts
+  the merge target as one coherent page over the union of both pages' sources
+  (re-minting every anchor) instead of appending; append stays the loss-free default.
 
 ## [0.6.4] — 2026-06-28
 
@@ -97,7 +113,7 @@ scriptoria moves to 0.6.1; scrip-harness stays 0.7.0 — no behavior or API chan
   is byte-identical: block ids, spans, and hashes are unchanged, so the
   determinism contract and existing manifests/staleness state are unaffected.
 
-## [0.7.0] — 2026-06-24
+## [harness-0.7.0] — 2026-06-24
 
 The compile loop gains depth: COMPILE retries quotes that don't verify and can
 synthesize one page from several sources, and RECONCILE auto-authors the nuancing
@@ -353,8 +369,11 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[harness-0.9.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.9.0
+[0.7.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.7.0
+[0.6.4]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.4
 [harness-0.8.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.8.0
-[0.7.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.7.0
+[harness-0.7.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.7.0
 [0.6.3]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.3
 [0.6.2]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.2
 [0.6.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.1
