@@ -90,3 +90,52 @@ def test_extract_command_multi_source_attributes_each_claim(tmp_path, monkeypatc
     assert "extracted 2 claim(s) from raw/a,raw/b" in capsys.readouterr().out
     recs = (tmp_path / "vault" / "facts" / "claims.ndjson").read_text(encoding="utf-8")
     assert '"source_id": "raw/a"' in recs and '"source_id": "raw/b"' in recs
+
+
+def test_promote_resynthesize_command_redrafts_target(tmp_path, monkeypatch, capsys):
+    from scrip_harness.compile import DraftClaim, DraftPage
+
+    from scrip import anchors, frontmatter
+
+    for d in ("vault/raw", "vault/wiki/concepts", "vault/facts", ".kb"):
+        (tmp_path / d).mkdir(parents=True)
+    (tmp_path / "SPEC.md").write_text("marker\n", encoding="utf-8")
+    (tmp_path / "vault" / "raw" / "alpha.md").write_text(
+        "# A\n\nAlpha one sentence.\n", encoding="utf-8"
+    )
+    (tmp_path / "vault" / "raw" / "beta.md").write_text(
+        "# B\n\nBeta one sentence.\n", encoding="utf-8"
+    )
+
+    def _page(slug, quote, ssl):
+        src = (tmp_path / "vault" / "raw" / f"{ssl}.md").read_text(encoding="utf-8")
+        anchor = anchors.make_anchor(src, quote)
+        body = f'Point.[^a1]\n\n[^a1]: anchor=raw/{ssl}#{anchor}  "{quote[:20]}"\n'
+        meta = {"id": f"concept/{slug}", "type": "wiki.concept", "title": "Compilation",
+                "derived-from": ["raw/alpha", "raw/beta"], "confidence": 0.8}
+        (tmp_path / "vault" / "wiki" / "concepts" / f"{slug}.md").write_text(
+            frontmatter.dump(meta, body), encoding="utf-8"
+        )
+
+    _page("compilation", "Alpha one sentence.", "alpha")
+    _page("compilation-redux", "Beta one sentence.", "beta")
+
+    def fake_draft_page(text, *, source_id, failures=None, **kw):
+        assert source_id == "raw/alpha,raw/beta"  # re-drafts over the union
+        return DraftPage(
+            title="ignored",
+            body="Coherent re-synthesis of alpha[^a1] and beta[^a2].\n",
+            claims=[
+                DraftClaim(quote="Alpha one sentence.", source_id="raw/alpha"),
+                DraftClaim(quote="Beta one sentence.", source_id="raw/beta"),
+            ],
+        )
+
+    monkeypatch.setattr(model, "draft_page", fake_draft_page)
+
+    rc = cli.main(["promote", "compilation-redux", "--resynthesize", "--root", str(tmp_path)])
+
+    assert rc == 0
+    assert "resynthesized concept/compilation-redux into concept/compilation" in capsys.readouterr().out
+    body = (tmp_path / "vault" / "wiki" / "concepts" / "compilation.md").read_text(encoding="utf-8")
+    assert "Coherent re-synthesis of alpha" in body  # body re-drafted, not appended

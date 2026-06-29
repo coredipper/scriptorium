@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import pytest
+from scrip_harness.compile import DraftClaim, DraftPage
 from scrip_harness.promote import PromotionDecision, merge_bodies, renumber, split_body
 from scrip_harness.runner import PromoteError, promote_page
 
@@ -173,6 +174,123 @@ def test_promote_middle_band_without_decider_errors(tmp_path):
     root = _middle_vault(tmp_path)
     with pytest.raises(PromoteError):
         promote_page(root, "solo", decide_fn=None)
+
+
+# --------------------------------------------------------------------------- #
+# Re-synthesis merge (opt-in) — re-draft over the union of sources
+# --------------------------------------------------------------------------- #
+def test_promote_resynthesize_redrafts_over_union_of_sources(tmp_path):
+    root = _vault(tmp_path)
+    _raw(root, "alpha", "# A\n\nAlpha one sentence.\n\nAlpha two sentence.\n")
+    _raw(root, "beta", "# B\n\nBeta one sentence.\n")
+    target = _page(root, "compilation", "Compilation",
+                   ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
+    absorbed = _page(root, "compilation-redux", "Compilation",
+                     ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+
+    calls = {"n": 0}
+
+    def draft(source_text, *, source_id, failures=None):
+        calls["n"] += 1
+        # re-synthesis drafts over the UNION of derived-from sources, multi-source
+        assert source_id == "raw/alpha,raw/beta"
+        assert "----- SOURCE raw/alpha -----" in source_text
+        return DraftPage(
+            title="Re-synthesized title (ignored)",
+            body="Resynthesized prose tying alpha[^a1] and beta[^a2] together.\n",
+            claims=[
+                DraftClaim(quote="Alpha one sentence.", source_id="raw/alpha"),
+                DraftClaim(quote="Beta one sentence.", source_id="raw/beta"),
+            ],
+        )
+
+    result = promote_page(root, "compilation-redux", decide_fn=None,
+                          resynthesize=True, draft_fn=draft)
+    assert result["action"] == "merge" and result["target"] == "concept/compilation"
+    assert calls["n"] == 1  # drafted once (no quote retries needed)
+    assert not absorbed.exists()
+
+    meta, body = frontmatter.load(target)
+    # the body is the fresh re-synthesis, NOT an append of the two old bodies
+    assert "Resynthesized prose tying alpha" in body
+    assert "Point 1." not in body  # the target's old prose was replaced, not appended
+    assert "[^a1]:" in body and "[^a2]:" in body  # anchors re-minted for both claims
+    assert meta["supersedes"] == ["concept/compilation-redux"]
+    assert set(meta["derived-from"]) == {"raw/alpha", "raw/beta"}
+    assert meta["title"] == "Compilation"  # target keeps its identity/title
+    assert _verify(root) == 0  # vault green: every re-minted anchor resolves
+
+
+def test_promote_resynthesize_requires_a_drafter(tmp_path):
+    root = _vault(tmp_path)
+    _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
+    _raw(root, "beta", "# B\n\nBeta one sentence.\n")
+    _page(root, "compilation", "Compilation",
+          ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
+    _page(root, "compilation-redux", "Compilation",
+          ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+
+    with pytest.raises(PromoteError, match="resynthesize"):
+        promote_page(root, "compilation-redux", decide_fn=None, resynthesize=True)
+
+
+def test_promote_resynthesize_rolls_back_on_bad_draft(tmp_path):
+    # a re-synthesis whose quote never verifies must leave BOTH pages untouched —
+    # same atomic guarantee as the append merge
+    root = _vault(tmp_path)
+    _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
+    _raw(root, "beta", "# B\n\nBeta one sentence.\n")
+    target = _page(root, "compilation", "Compilation",
+                   ["raw/alpha", "raw/beta"], [("Alpha one sentence.", "alpha")])
+    absorbed = _page(root, "compilation-redux", "Compilation",
+                     ["raw/alpha", "raw/beta"], [("Beta one sentence.", "beta")])
+    target_before = target.read_bytes()
+
+    def draft(source_text, *, source_id, failures=None):
+        # a quote that is not present in any source — never verifies, exhausts retries
+        return DraftPage(
+            title="x",
+            body="Bad.[^a1]\n",
+            claims=[DraftClaim(quote="Quote absent from every source.", source_id="raw/alpha")],
+        )
+
+    with pytest.raises(PromoteError):
+        promote_page(root, "compilation-redux", decide_fn=None,
+                     resynthesize=True, draft_fn=draft)
+    assert absorbed.exists()  # absorbed not deleted on failure
+    assert target.read_bytes() == target_before  # target restored byte-for-byte
+
+
+def test_promote_resynthesize_tolerates_block_scoped_derived_from(tmp_path):
+    # derived-from may carry block-scoped deps (raw/x#<block_id>, SPEC §7.2). The
+    # re-draft resolves each to its whole raw file (re-minting over the full file),
+    # instead of choking on the '#'; the re-synthesized page then depends on the
+    # whole files (a safe widening — it can only go *more* stale, never falsely fresh).
+    root = _vault(tmp_path)
+    _raw(root, "alpha", "# A\n\nAlpha one sentence.\n")
+    _raw(root, "beta", "# B\n\nBeta one sentence.\n")
+    target = _page(root, "compilation", "Compilation",
+                   ["raw/alpha#deadbeefcafe", "raw/beta"], [("Alpha one sentence.", "alpha")])
+    _page(root, "compilation-redux", "Compilation",
+          ["raw/alpha#deadbeefcafe", "raw/beta"], [("Beta one sentence.", "beta")])
+
+    def draft(source_text, *, source_id, failures=None):
+        assert source_id == "raw/alpha,raw/beta"  # block dep resolved to whole file
+        return DraftPage(
+            title="t",
+            body="Alpha[^a1] and beta[^a2].\n",
+            claims=[
+                DraftClaim(quote="Alpha one sentence.", source_id="raw/alpha"),
+                DraftClaim(quote="Beta one sentence.", source_id="raw/beta"),
+            ],
+        )
+
+    result = promote_page(root, "compilation-redux", decide_fn=None,
+                          resynthesize=True, draft_fn=draft)
+    assert result["action"] == "merge"
+    meta, _ = frontmatter.load(target)
+    assert set(meta["derived-from"]) == {"raw/alpha", "raw/beta"}  # widened to whole files
+    assert _verify(root) == 0
 
 
 # --------------------------------------------------------------------------- #
