@@ -18,6 +18,6 @@
 **Learning:** In operations that process text files line-by-line (like markdown block segmentation), accumulating intermediate lists (e.g., span tuples containing start/end and full lines) introduces significant memory overhead and repeated O(N) iteration loops. Merging the tracking logic directly inside the main `splitlines()` loop saves allocations and iteration cycles.
 **Action:** Always prefer a single pass strategy when generating indices or ranges over raw text files; avoid constructing intermediary sequence arrays (`spans: list[...]`) that are merely used to inform the final range boundaries.
 
-## 2024-07-29 - O(N) Array Allocation in Python `splitlines()` for Trimming
-**Learning:** Extracting string substrings (like removing Markdown ` ``` ` boundaries from LLM JSON payloads) using `splitlines()` followed by `\n.join(lines)` allocates a large array in memory, taking O(N) operations and scaling poorly for large text payloads.
-**Action:** When extracting data by removing boundary lines (such as code block prefix/suffix), use string searching (`find('\n')` and `rfind('\n')`) and slicing rather than full sequence segmentation.
+## 2024-07-29 - String Slicing vs splitlines() Risk
+**Learning:** Replacing `splitlines()` with `find('\n')` for trimming markdown blocks introduces a subtle correctness risk because `splitlines()` handles other line separators (e.g., `U+2028`, `\r\n`) which `find('\n')` misses. Additionally, optimizing cold paths (e.g., `_json_from_text` which runs once per LLM completion, where fallback code paths rarely fire) offers negligible reward but introduces unverified test risks.
+**Action:** Do not micro-optimize cold paths or error fallback branches. When rewriting `splitlines()` to string searching, ensure equivalent behavior for non-`\n` line separators (like `\r\n` and `U+2028`).
