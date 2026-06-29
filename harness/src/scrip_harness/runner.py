@@ -302,24 +302,30 @@ def extract_facts(
     # with several the model must attribute every claim, and an unknown or missing
     # source_id is a structural error (fail before scrip is touched, nothing written),
     # not a retryable quote finding. scrip then mints each anchor against that source.
+    # Run on every batch — including the retry-corrected one — so a replacement can
+    # never set source_id to a `raw/*` outside the run's sources and smuggle in a
+    # claim from an unrequested source.
     default_source = source_ids[0] if len(source_ids) == 1 else ""
-    for i, claim in enumerate(claims):
-        csrc = claim.source_id or default_source
-        if csrc not in valid_sources:
-            if claim.source_id:
+
+    def _check_sources(batch: list[DraftFact]) -> None:
+        for i, claim in enumerate(batch):
+            csrc = claim.source_id or default_source
+            if csrc not in valid_sources:
+                if claim.source_id:
+                    raise ExtractError(
+                        f"claim {i + 1} cites source {claim.source_id!r} not among the "
+                        f"extract's sources {source_ids}"
+                    )
                 raise ExtractError(
-                    f"claim {i + 1} cites source {claim.source_id!r} not among the "
-                    f"extract's sources {source_ids}"
+                    f"claim {i + 1} has no source_id but the extract has multiple "
+                    f"sources {source_ids}; set source_id to the quote's source"
                 )
-            raise ExtractError(
-                f"claim {i + 1} has no source_id but the extract has multiple "
-                f"sources {source_ids}; set source_id to the quote's source"
-            )
 
     # Submit; on per-record quote findings (exit 1, nothing written) ask the
     # model to fix exactly the failing quotes and resubmit the corrected batch.
     retries = 0
     while True:
+        _check_sources(claims)
         r = _scrip(
             scrip_cmd,
             ["fact", "add", "--table", "claims", "--stdin", "--json", "--root", str(root)],

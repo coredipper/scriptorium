@@ -273,6 +273,29 @@ def test_extract_multi_source_rejects_unknown_source_id(tmp_path):
         extract_facts(root, "a", draft_fn=stub, sources=["raw/a", "raw/b"])
 
 
+def test_extract_multi_source_retry_replacement_cannot_escape_sources(tmp_path):
+    # a retry must not smuggle in a claim from a source outside --from: the
+    # source-scope check runs on every batch, including the retry-corrected one
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "a.md").write_text("# A\n\nAlpha is here.\n", encoding="utf-8")
+    (root / "vault" / "raw" / "b.md").write_text("# B\n\nBeta is here.\n", encoding="utf-8")
+    # an out-of-scope source that exists AND contains the smuggled quote verbatim
+    (root / "vault" / "raw" / "secret.md").write_text(
+        "# S\n\nSecret leak sentence.\n", encoding="utf-8"
+    )
+
+    def stub(source_text, *, source_id, failures=None):
+        if failures is None:
+            # first draft: a quote not present in raw/a → forces a quote retry
+            return DraftExtraction(claims=[_fact("Not present verbatim.", source_id="raw/a")])
+        # retry: attribute the replacement to raw/secret, which is NOT in --from
+        return DraftExtraction(claims=[_fact("Secret leak sentence.", source_id="raw/secret")])
+
+    with pytest.raises(ExtractError, match="raw/secret"):
+        extract_facts(root, "a", draft_fn=stub, sources=["raw/a", "raw/b"])
+    assert _claims_lines(root) == []  # nothing from the unrequested source was written
+
+
 def test_extract_surfaces_contradiction_candidates(tmp_path):
     from scrip import anchors  # the harness depends on scrip; reuse its anchor math
 
