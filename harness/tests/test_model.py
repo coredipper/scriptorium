@@ -33,6 +33,15 @@ class _CapturingClient:
         return type("Resp", (), {"parsed_output": self._parsed})()
 
 
+def test_json_from_text_trims_fenced_json_line_endings():
+    for fenced in (
+        '```json\n{"a": 1}\n```',
+        '```json\r\n{"a": 1}\r\n```',
+        '```json\r{"a": 1}\r```',
+    ):
+        assert model_mod._json_from_text(fenced) == {"a": 1}
+
+
 def test_draft_page_retry_uses_the_compile_prompt_not_extracts():
     client = _CapturingClient(
         DraftPage(title="t", body="x[^a1]\n", claims=[DraftClaim(quote="q")])

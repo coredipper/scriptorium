@@ -240,16 +240,26 @@ def _redact(text: str) -> str:
 
 
 def _json_from_text(text: str) -> Any:
-    # ⚡ Bolt: Fast boundary trimming without `splitlines()` to avoid O(N) array allocation on large LLM outputs
     text = text.strip()
     if text.startswith("```"):
-        start_idx = text.find("\n")
+        first_lf = text.find("\n")
+        first_cr = text.find("\r")
+        if first_lf == -1:
+            start_idx = first_cr
+        elif first_cr == -1:
+            start_idx = first_lf
+        else:
+            start_idx = min(first_lf, first_cr)
+
         if start_idx != -1:
-            text = text[start_idx + 1:]
+            start = start_idx + 1
+            if text[start_idx] == "\r" and start < len(text) and text[start] == "\n":
+                start += 1
+            text = text[start:]
         else:
             text = ""
 
-        end_idx = text.rfind("\n")
+        end_idx = max(text.rfind("\n"), text.rfind("\r"))
         if end_idx != -1:
             if text[end_idx + 1:].strip() == "```":
                 text = text[:end_idx]
