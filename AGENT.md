@@ -27,6 +27,12 @@ The data contract these steps assume is normative in [SPEC.md](SPEC.md).
 2. `scrip status --rebuild-manifest` — the new source registers and shows as
    `UNCOMPILED` (nothing depends on it yet).
 
+> **Automation:** `scrip-harness ingest <source>` runs this step and then chains
+> COMPILE → EXTRACT → GRAPH (bounded by `--through`). An opt-in `--clean` first has
+> the model normalize the extracted text into clean Markdown and re-ingests it
+> (a tracked `--reingest`), so `raw/<slug>` becomes the cleaned rendering — anchors
+> then resolve against it, a deliberate provenance trade-off.
+
 ## COMPILE — synthesize a wiki page
 
 1. Read the relevant `raw/` source(s).

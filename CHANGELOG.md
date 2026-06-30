@@ -7,6 +7,15 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Added
+- **`scrip-harness ingest <source>` (harness).** One command takes a URL/file from
+  cold to a verified, compiled, graphed vault: it runs `scrip ingest`, then chains
+  COMPILE → EXTRACT → GRAPH over the new `raw/<slug>`, bounded by
+  `--through ingest|compile|extract|graph` (default `graph`). Opt-in `--clean` has
+  the model normalize the extracted text into clean Markdown (preserving prose
+  verbatim) and re-ingests it, so `raw/<slug>` becomes the cleaned rendering —
+  anchors then resolve against it, a deliberate provenance trade-off.
+
 ## [0.7.0] — 2026-06-29
 
 scriptoria moves to 0.7.0 for cooperative write-lock waiting — concurrent agents

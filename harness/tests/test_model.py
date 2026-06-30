@@ -12,6 +12,7 @@ from scrip_harness.answer import DraftAnswer
 from scrip_harness.compile import DraftClaim, DraftPage
 from scrip_harness.extract import DraftExtraction, DraftFact
 from scrip_harness.graph import DraftEntity, DraftGraph
+from scrip_harness.ingest import DraftCleanSource
 from scrip_harness.promote import PromotionDecision
 
 
@@ -86,6 +87,17 @@ def test_draft_graph_uses_the_graph_prompt_and_returns_a_graph():
     assert "a distinctive source body" in prompt
     assert "entit" in prompt.lower() and "edge" in prompt.lower()
     assert "quote" not in prompt.lower()  # entities/edges are uncited
+
+
+def test_clean_source_routes_the_clean_prompt_and_returns_markdown():
+    # INGEST --clean: clean_source must route the CLEAN prompt + DraftCleanSource
+    # schema and return the cleaned markdown. The system prompt must insist on
+    # preserving wording verbatim — downstream anchors resolve against this text.
+    client = _CapturingClient(DraftCleanSource(markdown="# Clean\n\nReal body.\n"))
+    out = model_mod.clean_source("Nav junk | menu\n\nReal body.", client=client)
+    assert out == "# Clean\n\nReal body.\n"
+    assert "Real body." in client.captured["prompt"]
+    assert "verbatim" in client.captured["system"].lower()
 
 
 def test_auto_provider_uses_default_openai_key_file(tmp_path, monkeypatch):
