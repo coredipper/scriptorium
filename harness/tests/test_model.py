@@ -85,7 +85,8 @@ def test_draft_graph_uses_the_graph_prompt_and_returns_a_graph():
     prompt = client.captured["prompt"]
     assert "a distinctive source body" in prompt
     assert "entit" in prompt.lower() and "edge" in prompt.lower()
-    assert "quote" not in prompt.lower()  # entities/edges are uncited
+    # cited edges: the prompt invites an optional *verbatim* quote per edge
+    assert "quote" in prompt.lower() and "verbatim" in prompt.lower()
 
 
 def test_auto_provider_uses_default_openai_key_file(tmp_path, monkeypatch):

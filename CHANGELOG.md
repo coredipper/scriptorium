@@ -7,6 +7,18 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Added
+- **Cited graph edges (scrip).** An edge in `facts/graph.ndjson` may optionally
+  carry a verbatim `quote` + `source_id`; scrip mints and verifies its `anchor`
+  exactly as for a claim, so `scrip verify` now covers cited edges. Bare
+  `{src,dst,kind}` edges are unchanged — the fields are optional and additive, so
+  the file contract stays `version: 2` (SPEC §11).
+- **`scrip-harness graph` drafts cited edges (harness).** The model may attach a
+  supporting verbatim `quote` to an edge; the runner submits it for anchoring and
+  **degrades** any edge whose quote does not verify to a bare structural edge
+  rather than failing the pass (reported as `degraded_edges`). A cited edge proves
+  its quote resolves, not that the asserted relation is correct.
+
 ## [0.7.0] — 2026-06-29
 
 scriptoria moves to 0.7.0 for cooperative write-lock waiting — concurrent agents

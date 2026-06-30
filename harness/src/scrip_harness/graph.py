@@ -3,10 +3,12 @@ schema, prompt construction, entity-id slugging, and the NDJSON that
 ``scrip fact add --table entities|edges`` consumes. No network, no scrip —
 unit-testable.
 
-Unlike claims, entities and edges carry no provenance anchor (scrip's edge schema
-is exactly ``src``/``dst``/``kind``), so there is no quote to machine-verify and no
-retry loop. The honesty guard lives in the runner: an edge is dropped unless both
-endpoints resolve to a real entity (drafted here or already on disk)."""
+Entities are structural (no anchor). An edge MAY be *cited*: if it carries a
+verbatim ``quote``, scrip mints+verifies an anchor for it (``source_id`` + the
+quote), exactly as for a claim; a bare edge stays ``src``/``dst``/``kind``. The
+honesty guards live in the runner: an edge is dropped unless both endpoints
+resolve to a real entity (drafted here or already on disk), and a cited edge whose
+quote does not verify is degraded to a bare edge rather than failing the batch."""
 
 from __future__ import annotations
 
@@ -28,8 +30,12 @@ GRAPH_SYSTEM = (
     "the `name` of an entity you also list; edges to anything else are discarded.\n"
     "- `kind` on an edge is a short lowercase relationship label (e.g. "
     "`alternative-to`, `part-of`, `builds-on`, `cites`).\n"
-    "- Entities and edges are structural and uncited — keep them conservative and "
-    "few; prefer omitting a relationship to guessing one."
+    "- An edge MAY be *cited*: add a short, **verbatim** `quote` from the source that "
+    "states the relationship, and scrip will anchor it. Copy the span exactly — never "
+    "paraphrase or invent one. Omit `quote` when no single span states the relation; an "
+    "unverifiable quote is simply dropped, leaving a structural edge.\n"
+    "- Keep entities and edges conservative and few; prefer omitting a relationship to "
+    "guessing one."
 )
 
 # Conservative slug shape scrip enforces for entity ids: must start with an
@@ -50,6 +56,10 @@ class DraftEdge(BaseModel):
     dst: str
     """The `name` of the destination entity."""
     kind: str
+    quote: str = ""
+    """Optional verbatim span from the source that states the relationship. When
+    present, the edge is *cited* and scrip mints+verifies an anchor for it; an
+    unverifiable quote is dropped (the edge degrades to bare)."""
 
 
 class DraftGraph(BaseModel):
@@ -78,7 +88,9 @@ def build_graph_prompt(source_text: str) -> str:
     return (
         "Draft the entities and the typed relationships among them from the source "
         "below. Every edge's `src`/`dst` must be the `name` of an entity you also "
-        "list.\n\n----- SOURCE -----\n" + source_text
+        "list. Where a single verbatim span states a relationship, copy it into the "
+        "edge's `quote`; otherwise leave `quote` empty.\n\n----- SOURCE -----\n"
+        + source_text
     )
 
 
@@ -96,13 +108,31 @@ def entities_to_ndjson(entities: list[DraftEntity]) -> str:
     return "".join(line + "\n" for line in lines)
 
 
-def edges_to_ndjson(edges: list[DraftEdge], name_to_id: dict[str, str]) -> str:
-    """Serialize edges as ``scrip fact add --table edges --stdin`` expects, mapping
-    each endpoint *name* to its entity id via ``name_to_id``. The edge schema is
-    exactly ``src``/``dst``/``kind`` (scrip rejects any extra field). Callers must
-    pre-filter edges whose endpoints are absent from ``name_to_id``."""
-    lines = []
+def edge_records(
+    edges: list[DraftEdge], name_to_id: dict[str, str], source_id: str = ""
+) -> list[dict]:
+    """Build the edge records ``scrip fact add --table edges`` consumes, mapping
+    each endpoint *name* to its entity id via ``name_to_id``. A bare edge is
+    exactly ``src``/``dst``/``kind``; an edge with a non-blank ``quote`` (and a
+    ``source_id`` to anchor against) is *cited* — it additionally carries the
+    verbatim ``quote`` and ``source_id``. Callers must pre-filter edges whose
+    endpoints are absent from ``name_to_id``."""
+    records: list[dict] = []
     for e in edges:
-        rec = {"src": name_to_id[e.src], "dst": name_to_id[e.dst], "kind": e.kind}
-        lines.append(json.dumps(rec, ensure_ascii=False))
-    return "".join(line + "\n" for line in lines)
+        rec: dict = {"src": name_to_id[e.src], "dst": name_to_id[e.dst], "kind": e.kind}
+        if source_id and e.quote.strip():
+            rec["quote"] = e.quote
+            rec["source_id"] = source_id
+        records.append(rec)
+    return records
+
+
+def edges_to_ndjson(
+    edges: list[DraftEdge], name_to_id: dict[str, str], source_id: str = ""
+) -> str:
+    """Serialize :func:`edge_records` as ``scrip fact add --table edges --stdin``
+    expects (one JSON object per line)."""
+    return "".join(
+        json.dumps(rec, ensure_ascii=False) + "\n"
+        for rec in edge_records(edges, name_to_id, source_id)
+    )
