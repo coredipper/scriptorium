@@ -34,6 +34,15 @@ class _CapturingClient:
         return type("Resp", (), {"parsed_output": self._parsed})()
 
 
+def test_json_from_text_trims_fenced_json_line_endings():
+    for fenced in (
+        '```json\n{"a": 1}\n```',
+        '```json\r\n{"a": 1}\r\n```',
+        '```json\r{"a": 1}\r```',
+    ):
+        assert model_mod._json_from_text(fenced) == {"a": 1}
+
+
 def test_draft_page_retry_uses_the_compile_prompt_not_extracts():
     client = _CapturingClient(
         DraftPage(title="t", body="x[^a1]\n", claims=[DraftClaim(quote="q")])
@@ -86,7 +95,8 @@ def test_draft_graph_uses_the_graph_prompt_and_returns_a_graph():
     prompt = client.captured["prompt"]
     assert "a distinctive source body" in prompt
     assert "entit" in prompt.lower() and "edge" in prompt.lower()
-    assert "quote" not in prompt.lower()  # entities/edges are uncited
+    # cited edges: the prompt invites an optional *verbatim* quote per edge
+    assert "quote" in prompt.lower() and "verbatim" in prompt.lower()
 
 
 def test_clean_source_routes_the_clean_prompt_and_returns_markdown():

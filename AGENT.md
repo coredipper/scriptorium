@@ -61,7 +61,10 @@ The data contract these steps assume is normative in [SPEC.md](SPEC.md).
      failing record — lengthen the quote and retry), assigns
      `claim_id`/`extracted_at`, skips exact duplicates (safe to re-run), and
      merges the new sources into `facts/_meta.yaml` `derived-from`.
-   - entities / edges (`--table entities|edges`): schema + id checks, no anchors.
+   - entities (`--table entities`): schema + id checks, no anchors. edges
+     (`--table edges`): `{src,dst,kind}` by default; an edge may optionally be
+     **cited** with a verbatim `quote` + `source_id`, and scrip mints+verifies its
+     `anchor` just like a claim (an unverifiable quote fails the batch, exit 1).
 2. `scrip stamp vault/facts/_meta.yaml` — every append (any table) drops the
    set's `input-hash`, so it deliberately shows STALE until you stamp it.
 3. `scrip verify` (anchors resolve) and `scrip query contradictions` (catch

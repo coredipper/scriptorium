@@ -60,7 +60,10 @@ vault/
 Newline-delimited JSON (one record per line), queryable directly as data:
 - `facts/entities.ndjson` — entities (people, works, organizations, systems).
 - `facts/claims.ndjson` — the claims table (§5).
-- `facts/graph.ndjson` — edges between entities/sources (citation/idea graph).
+- `facts/graph.ndjson` — edges between entities/sources (citation/idea graph). An
+  edge is `{src, dst, kind}`; it may optionally be **cited** — carrying a verbatim
+  `quote` + `source_id` whose `anchor` scrip mints and verifies exactly as for a
+  claim (§6). A bare edge stays purely structural.
 - `facts/reconciliations.ndjson` — RECONCILE decisions over contradiction pairs
   (§9.2). Optional: absent until the first reconciliation is recorded.
 - `facts/_meta.yaml` — the **facts-set frontmatter**: this set's `derived-from`,
@@ -324,6 +327,11 @@ behaviours; their exit codes are part of the contract surface
   as an optional facts file. It is backward-compatible: instances without it are
   unaffected, and it does not change block ids, so the manifest `version` stays
   `2` (no cache invalidation).
+- **Cited edges (additive).** An edge in `facts/graph.ndjson` may optionally carry
+  a verbatim `quote` + `source_id`; scrip then mints and verifies an `anchor` for
+  it (§6), so `scrip verify` covers it. Backward-compatible: bare `{src,dst,kind}`
+  edges are unaffected, and the optional fields do not change block ids, so the
+  manifest `version` stays `2`.
 - **v1 → v2 (block ids).** Block ids became content-derived (a digest of the
   normalized block text) instead of positional `b0,b1,…`, making block-precise
   dependencies insertion-stable (§7.2). The id *form* is the only change: a
