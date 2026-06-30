@@ -26,7 +26,7 @@ from .graph import (
     DraftEdge,
     DraftEntity,
     DraftGraph,
-    edges_to_ndjson,
+    edge_records,
     entities_to_ndjson,
     entity_id,
 )
@@ -516,6 +516,54 @@ def _fact_add(scrip_cmd: Sequence[str], root: Path, table: str, ndjson: str) -> 
         raise GraphError(f"could not parse scrip fact add output: {e}\n{r.stdout}") from e
 
 
+def _fact_add_edges(
+    scrip_cmd: Sequence[str], root: Path, records: list[dict]
+) -> tuple[dict, list[dict]]:
+    """Append edge records and return ``(scrip_result, degraded)``.
+
+    A *cited* edge (carrying a ``quote``) whose quote scrip cannot verify is a
+    per-record finding (exit 1). Rather than fail the whole batch, drop the quote
+    on each such edge — leaving a bare ``{src,dst,kind}`` edge — and resubmit once;
+    every other (verified or bare) edge keeps its place. ``degraded`` lists the
+    affected edges with scrip's finding ``status``. A bare-only batch lands in a
+    single exit-0 pass."""
+    def _submit():
+        return _scrip(
+            scrip_cmd,
+            ["fact", "add", "--table", "edges", "--stdin", "--json", "--root", str(root)],
+            input_text="".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records),
+        )
+
+    degraded: list[dict] = []
+    r = _submit()
+    if r.returncode == 1:  # cited-edge quote findings: degrade those edges, resubmit
+        try:
+            failures = json.loads(r.stdout).get("failures", [])
+        except json.JSONDecodeError as e:
+            raise GraphError(f"could not parse scrip fact add failures: {e}\n{r.stdout}") from e
+        for f in failures:
+            i = f.get("index")
+            if not isinstance(i, int) or not (0 <= i < len(records)):
+                raise GraphError(f"unexpected edges finding (bad index): {f}")
+            rec = records[i]
+            degraded.append(
+                {"src": rec["src"], "dst": rec["dst"], "kind": rec["kind"],
+                 "status": f.get("status")}
+            )
+            rec.pop("quote", None)
+            rec.pop("source_id", None)
+        r = _submit()
+    if r.returncode != 0:
+        raise GraphError(
+            f"scrip fact add --table edges failed (exit {r.returncode}): "
+            f"{r.stderr.strip() or r.stdout.strip()}"
+        )
+    try:
+        return json.loads(r.stdout), degraded
+    except json.JSONDecodeError as e:
+        raise GraphError(f"could not parse scrip fact add output: {e}\n{r.stdout}") from e
+
+
 def draft_graph_facts(
     root,
     slug: str,
@@ -590,11 +638,13 @@ def draft_graph_facts(
         if kept_entities
         else dict(empty)
     )
-    added_edges = (
-        _fact_add(scrip_cmd, root, "edges", edges_to_ndjson(kept_edges, name_to_id))
-        if kept_edges
-        else dict(empty)
-    )
+    degraded_edges: list[dict] = []
+    if kept_edges:
+        added_edges, degraded_edges = _fact_add_edges(
+            scrip_cmd, root, edge_records(kept_edges, name_to_id, source_id)
+        )
+    else:
+        added_edges = dict(empty)
 
     # Any append leaves the facts set honestly STALE; link the source so future
     # edits to it stale the graph, then stamp and prove the vault green.
@@ -615,6 +665,8 @@ def draft_graph_facts(
     )
     if dropped_edges:
         note += f", {len(dropped_edges)} edge(s) dropped (unknown endpoint)"
+    if degraded_edges:
+        note += f", {len(degraded_edges)} edge(s) degraded (unverifiable quote)"
     if skipped_entities:
         note += f", {len(skipped_entities)} entity name(s) skipped (no slug)"
     _append_log(root, note)
@@ -623,6 +675,7 @@ def draft_graph_facts(
         "entities": added_entities,
         "edges": added_edges,
         "dropped_edges": dropped_edges,
+        "degraded_edges": degraded_edges,
         "skipped_entities": skipped_entities,
     }
 

@@ -1,7 +1,15 @@
+import json
+
 import pytest
 from scrip.errors import DataError
 
 from scrip import anchors, cli
+
+
+def _write_edge(kb, rec):
+    p = kb.root / "vault" / "facts" / "graph.ndjson"
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def test_cli_verify_fails_on_ambiguous_by_default(kb):
@@ -61,4 +69,34 @@ def test_verify_wiki_footnote_anchor(kb):
     kb.add_wiki("md", ["raw/a"], body=body)
     res = anchors.verify_vault(kb.root)
     assert res["ok"] == 1
+    assert res["broken"] == []
+
+
+def test_verify_cited_edge_anchor_resolves(kb):
+    src = "# A\n\nThe sky is blue today over the hills.\n"
+    kb.add_raw("a", src)
+    anchor = anchors.make_anchor(src, "the sky is blue today")
+    _write_edge(kb, {"src": "entity/sky", "dst": "entity/color", "kind": "is",
+                     "source_id": "raw/a", "anchor": anchor})
+    res = anchors.verify_vault(kb.root)
+    assert res["ok"] == 1
+    assert res["broken"] == []
+
+
+def test_verify_broken_cited_edge_anchor_is_listed(kb):
+    kb.add_raw("a", "# A\n\nThe sky is blue.\n")
+    bogus = "qh:" + ("0" * 64) + "|loc:0.0|len:10"
+    _write_edge(kb, {"src": "entity/a", "dst": "entity/b", "kind": "rel",
+                     "source_id": "raw/a", "anchor": bogus})
+    res = anchors.verify_vault(kb.root)
+    assert len(res["broken"]) == 1
+    assert res["broken"][0]["where"].startswith("edge:")
+
+
+def test_verify_bare_edge_is_not_checked(kb):
+    # an uncited edge has nothing to resolve, so verify ignores it (additive)
+    kb.add_raw("a", "# A\n\nThe sky is blue.\n")
+    _write_edge(kb, {"src": "entity/a", "dst": "entity/b", "kind": "rel"})
+    res = anchors.verify_vault(kb.root)
+    assert res["checked"] == 0
     assert res["broken"] == []

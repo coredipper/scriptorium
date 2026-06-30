@@ -12,6 +12,7 @@ from scrip_harness.graph import (
     DraftEdge,
     DraftEntity,
     DraftGraph,
+    edge_records,
     edges_to_ndjson,
     entities_to_ndjson,
     entity_id,
@@ -67,8 +68,27 @@ def test_edges_to_ndjson_maps_names_to_ids():
         [DraftEdge(src="PageIndex", dst="Vector DB", kind="alternative-to")], name_to_id
     )
     [row] = [json.loads(s) for s in out.splitlines()]
-    # edges allow EXACTLY src/dst/kind (scrip rejects extra fields)
+    # a bare edge is exactly src/dst/kind
     assert row == {"src": "entity/pageindex", "dst": "entity/vector-db", "kind": "alternative-to"}
+
+
+def test_edge_records_attaches_quote_and_source_only_for_cited_edges():
+    name_to_id = {"A": "entity/a", "B": "entity/b"}
+    records = edge_records(
+        [
+            DraftEdge(src="A", dst="B", kind="cites", quote="A cites B verbatim."),
+            DraftEdge(src="A", dst="B", kind="near"),  # no quote -> structural
+            DraftEdge(src="A", dst="B", kind="weak", quote="   "),  # blank quote -> structural
+        ],
+        name_to_id,
+        source_id="raw/topic",
+    )
+    assert records[0] == {
+        "src": "entity/a", "dst": "entity/b", "kind": "cites",
+        "quote": "A cites B verbatim.", "source_id": "raw/topic",
+    }
+    assert records[1] == {"src": "entity/a", "dst": "entity/b", "kind": "near"}
+    assert records[2] == {"src": "entity/a", "dst": "entity/b", "kind": "weak"}
 
 
 # --------------------------------------------------------------------------- #
@@ -279,3 +299,78 @@ def test_graph_skips_entities_with_blank_kind(tmp_path):
     assert result["skipped_entities"] == ["Bad"]
     assert {e["entity_id"] for e in _rows(root, "entities.ndjson")} == {"entity/good"}
     assert _rows(root, "graph.ndjson") == []  # edge referenced a skipped entity
+
+
+# --------------------------------------------------------------------------- #
+# Cited edges: an edge may carry a verbatim quote; scrip mints+verifies its
+# anchor. An unverifiable quote degrades the edge to bare (graceful, never fatal).
+# --------------------------------------------------------------------------- #
+def test_graph_cited_edge_lands_with_verified_anchor(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text(
+        "# T\n\nPageIndex is an alternative to a vector DB for retrieval.\n", encoding="utf-8"
+    )
+
+    def stub(source_text, *, source_id):
+        return DraftGraph(
+            entities=[DraftEntity(name="PageIndex", kind="tool"), DraftEntity(name="Vector DB", kind="tool")],
+            edges=[DraftEdge(src="PageIndex", dst="Vector DB", kind="alternative-to",
+                             quote="PageIndex is an alternative to a vector DB")],
+        )
+
+    result = draft_graph_facts(root, "topic", draft_fn=stub)
+    [edge] = _rows(root, "graph.ndjson")
+    assert edge["src"] == "entity/pageindex" and edge["kind"] == "alternative-to"
+    assert edge["source_id"] == "raw/topic"
+    assert edge["anchor"].startswith("qh:")
+    assert result["degraded_edges"] == []
+    assert subprocess.run(
+        ["scrip", "verify", "--root", str(root)], capture_output=True, text=True
+    ).returncode == 0
+
+
+def test_graph_degrades_cited_edge_with_unverifiable_quote(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text("# T\n\nA relates to B somehow.\n", encoding="utf-8")
+
+    def stub(source_text, *, source_id):
+        return DraftGraph(
+            entities=[DraftEntity(name="A", kind="concept"), DraftEntity(name="B", kind="concept")],
+            edges=[DraftEdge(src="A", dst="B", kind="relates-to",
+                             quote="this quote is absent from the source")],
+        )
+
+    result = draft_graph_facts(root, "topic", draft_fn=stub)
+    # the edge still lands, but bare — the unverifiable quote is dropped, not fatal
+    assert _rows(root, "graph.ndjson") == [{"src": "entity/a", "dst": "entity/b", "kind": "relates-to"}]
+    assert len(result["degraded_edges"]) == 1
+    assert result["degraded_edges"][0]["src"] == "entity/a"
+    assert _status_rc(root) == 0
+
+
+def test_graph_mixed_cited_edges_keep_good_degrade_bad(tmp_path):
+    # the all-or-nothing batch reports failures by index; degrading must drop the
+    # quote on ONLY the unverifiable edge and keep the good cited edge's anchor.
+    root = _vault(tmp_path)
+    (root / "vault" / "raw" / "topic.md").write_text(
+        "# T\n\nAlpha builds on Beta. Gamma is unrelated.\n", encoding="utf-8"
+    )
+
+    def stub(source_text, *, source_id):
+        return DraftGraph(
+            entities=[DraftEntity(name="Alpha", kind="concept"),
+                      DraftEntity(name="Beta", kind="concept"),
+                      DraftEntity(name="Gamma", kind="concept")],
+            edges=[
+                DraftEdge(src="Alpha", dst="Beta", kind="builds-on", quote="Alpha builds on Beta"),
+                DraftEdge(src="Alpha", dst="Gamma", kind="relates-to", quote="absent verbatim text"),
+            ],
+        )
+
+    result = draft_graph_facts(root, "topic", draft_fn=stub)
+    edges = {(e["src"], e["dst"]): e for e in _rows(root, "graph.ndjson")}
+    assert "anchor" in edges[("entity/alpha", "entity/beta")]       # good cited kept
+    assert "anchor" not in edges[("entity/alpha", "entity/gamma")]  # bad degraded to bare
+    assert len(result["degraded_edges"]) == 1
+    assert result["degraded_edges"][0]["dst"] == "entity/gamma"
+    assert _status_rc(root) == 0
