@@ -230,8 +230,10 @@ def _http_timeout() -> int:
 
 def _redact(text: str) -> str:
     for prefix in ("sk-", "sk-proj-", "AIza"):
-        idx = text.find(prefix)
-        if idx >= 0:
+        while True:
+            idx = text.find(prefix)
+            if idx < 0:
+                break
             end = idx
             while end < len(text) and not text[end].isspace() and text[end] not in "\"'<>":
                 end += 1

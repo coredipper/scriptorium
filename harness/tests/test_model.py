@@ -71,6 +71,18 @@ def test_http_json_redacts_non_json_provider_response(monkeypatch):
     assert "***" in str(exc.value)
 
 
+def test_redact_replaces_multiple_same_prefix_secrets():
+    redacted = model_mod._redact(
+        "openai sk-first sk-second google AIza-first AIza-second"
+    )
+
+    assert "sk-first" not in redacted
+    assert "sk-second" not in redacted
+    assert "AIza-first" not in redacted
+    assert "AIza-second" not in redacted
+    assert redacted.count("***") == 4
+
+
 def test_openai_extract_skips_malformed_candidate_before_valid_text():
     assert model_mod._extract_openai_json(
         {
