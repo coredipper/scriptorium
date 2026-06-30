@@ -106,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     pin.add_argument("source", help="a URL or local file (.md/.txt/.html/.pdf) to ingest")
     pin.add_argument("--slug", help="vault slug (default: derived from the source name)")
+    pin.add_argument("--title", help="bibliographic title for the source's .meta.yaml sidecar")
+    pin.add_argument("--author", help="bibliographic author for the source's .meta.yaml sidecar")
     pin.add_argument(
         "--clean", action="store_true",
         help="model-normalize the extracted text into clean markdown before ingesting; "
@@ -234,7 +236,8 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             result = ingest_source(
-                root, args.source, slug=args.slug, clean=args.clean, through=args.through,
+                root, args.source, slug=args.slug, title=args.title, author=args.author,
+                clean=args.clean, through=args.through,
                 clean_fn=clean_fn, compile_draft_fn=_compile_draft,
                 extract_draft_fn=_extract_draft, graph_draft_fn=_graph_draft,
             )

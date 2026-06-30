@@ -14,7 +14,10 @@ reference CLI. The file **contract** is versioned separately in
   `--through ingest|compile|extract|graph` (default `graph`). Opt-in `--clean` has
   the model normalize the extracted text into clean Markdown (preserving prose
   verbatim) and re-ingests it, so `raw/<slug>` becomes the cleaned rendering —
-  anchors then resolve against it, a deliberate provenance trade-off.
+  anchors then resolve against it, a deliberate provenance trade-off (the original
+  source's bibliographic sidecar is preserved across the clean re-ingest). URLs and
+  HTML/PDF need the extraction deps in the harness env: install `scrip-harness[ingest]`
+  (plain `.md`/`.txt` work with the base install).
 
 ## [0.7.0] — 2026-06-29
 

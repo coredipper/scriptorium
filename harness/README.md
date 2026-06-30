@@ -108,7 +108,9 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
 compiled, graphed vault in one command:
 
 1. **Ingest** — `scrip ingest <source>` fetches, extracts, and writes `raw/<slug>`
-   (slug derived from the source name, or `--slug`).
+   (slug derived from the source name, or `--slug`). URLs/HTML/PDF need the
+   extraction deps in the harness env — install `scrip-harness[ingest]`; plain
+   `.md`/`.txt` work with the base install.
 2. **Clean (opt-in)** — `--clean` first has the model normalize the extracted text
    into clean Markdown (dropping nav/boilerplate, preserving the prose *verbatim*)
    and re-ingests it. `raw/<slug>` then holds the cleaned rendering, so anchors
@@ -126,7 +128,9 @@ direct use:
 
 ```sh
 uv tool install scrip-harness            # this package → `scrip-harness` (pulls scriptoria)
-uv tool install 'scriptoria[ingest]'     # optional: `scrip` on PATH + HTML/PDF ingest
+uv tool install 'scrip-harness[ingest]'  # to ingest URLs/HTML/PDF: adds the extraction deps
+                                          # to the harness's own env (PATH is bypassed)
+uv tool install 'scriptoria[ingest]'     # optional: `scrip` on PATH for direct, non-harness use
 export OPENAI_API_KEY=...                 # or ANTHROPIC_API_KEY / GEMINI_API_KEY
 
 scrip-harness ingest <url> --provider openai   # one command: ingest → compile → extract → graph

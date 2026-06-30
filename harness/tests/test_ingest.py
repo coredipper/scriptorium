@@ -109,6 +109,24 @@ def test_ingest_clean_rewrites_raw_with_cleaned_markdown(tmp_path, monkeypatch):
     assert result["stages"] == ["ingest"]
 
 
+def test_ingest_clean_preserves_the_original_source_sidecar(tmp_path, monkeypatch):
+    # the clean re-ingest must NOT overwrite raw/<slug>.meta.yaml with the temp
+    # file's provenance — the original bibliographic metadata (here a title) must
+    # survive, since cleaning changes the text, not where it came from.
+    root = _vault(tmp_path)
+    src = tmp_path / "doc.md"
+    src.write_text("Nav junk\n\nThe kept sentence.\n", encoding="utf-8")
+    _stub_stages(monkeypatch)
+
+    ingest_source(
+        root, str(src), slug="doc", title="Original Title", clean=True, through="ingest",
+        clean_fn=lambda text: "# Doc\n\nThe kept sentence.\n",
+        compile_draft_fn=_noop, extract_draft_fn=_noop, graph_draft_fn=_noop,
+    )
+    meta = (root / "vault" / "raw" / "doc.meta.yaml").read_text(encoding="utf-8")
+    assert "Original Title" in meta  # bibliographic metadata preserved across --clean
+
+
 def test_ingest_clean_without_clean_fn_is_an_error(tmp_path):
     root = _vault(tmp_path)
     src = tmp_path / "doc.md"

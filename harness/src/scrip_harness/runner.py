@@ -640,6 +640,8 @@ def ingest_source(
     source: str,
     *,
     slug: str | None = None,
+    title: str | None = None,
+    author: str | None = None,
     clean: bool = False,
     through: str = "graph",
     clean_fn: Callable[[str], str] | None = None,
@@ -670,20 +672,30 @@ def ingest_source(
     args = ["ingest", source, "--json", "--root", str(root)]
     if slug:
         args += ["--slug", slug]
+    if title:
+        args += ["--title", title]
+    if author:
+        args += ["--author", author]
     _, payload = _scrip_json(scrip_cmd, args, error_cls=IngestError)
     if not isinstance(payload, dict) or not isinstance(payload.get("ingested"), str):
         raise IngestError(f"unexpected scrip ingest output: {payload!r}")
     resolved_slug = payload["ingested"].split("/", 1)[-1]
 
     # 2. optional model cleanup: rewrite raw/<slug> with cleaned markdown. The temp
-    #    lives under .kb/ (not scanned as a source) and is removed afterwards.
+    #    lives under .kb/ (not scanned as a source) and is removed afterwards. The
+    #    re-ingest would regenerate the .meta.yaml sidecar from the *temp* file
+    #    (losing the original source url/title/author), so we preserve the original
+    #    sidecar across it — the sidecar is bibliographic, never hashed (SPEC §2.1),
+    #    and cleaning changes the text, not where it came from.
     if clean:
         assert clean_fn is not None  # guarded above
         raw_path = root / "vault" / "raw" / f"{resolved_slug}.md"
+        meta_path = root / "vault" / "raw" / f"{resolved_slug}.meta.yaml"
         try:
             text = raw_path.read_text(encoding="utf-8")
         except OSError as e:
             raise IngestError(f"cannot read raw/{resolved_slug} to clean it: {e}") from e
+        original_meta = meta_path.read_bytes() if meta_path.exists() else None
         cleaned = clean_fn(text)
         if not isinstance(cleaned, str) or not cleaned.strip():
             raise IngestError("clean_fn returned no usable markdown")
@@ -698,6 +710,8 @@ def ingest_source(
             )
         finally:
             tmp.unlink(missing_ok=True)
+        if original_meta is not None:  # restore the original source's bibliographic sidecar
+            meta_path.write_bytes(original_meta)
 
     # 3. chain the model-backed stages in order, bounded by `through`.
     stages = ["ingest"]
