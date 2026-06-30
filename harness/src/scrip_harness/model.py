@@ -209,7 +209,7 @@ def _http_json(
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"provider returned non-JSON response: {body[:500]}") from e
+        raise RuntimeError(f"provider returned non-JSON response: {_redact(body[:500])}") from e
     if not isinstance(parsed, dict):
         raise RuntimeError("provider returned a non-object JSON response")
     return parsed
@@ -271,22 +271,75 @@ def _json_from_text(text: str) -> Any:
     return json.loads(text)
 
 
+def _provider_error_detail(value: Any) -> str:
+    if isinstance(value, dict):
+        message = value.get("message")
+        if isinstance(message, str) and message:
+            return _redact(message)
+        try:
+            return _redact(json.dumps(value, ensure_ascii=False))
+        except TypeError:
+            pass
+    return _redact(str(value))
+
+
+def _json_from_candidates(provider: str, candidates: list[str], missing: str) -> Any:
+    first_error: json.JSONDecodeError | None = None
+    for text in candidates:
+        try:
+            return _json_from_text(text)
+        except json.JSONDecodeError as e:
+            if first_error is None:
+                first_error = e
+    if first_error is not None:
+        raise RuntimeError(
+            f"{provider} response contained invalid JSON output: {first_error.msg}"
+        ) from first_error
+    raise RuntimeError(f"{provider} response did not contain {missing}")
+
+
 def _extract_openai_json(resp: dict[str, Any]) -> Any:
     if resp.get("status") == "incomplete":
         raise RuntimeError(f"OpenAI response incomplete: {resp.get('incomplete_details')}")
     if resp.get("error"):
-        raise RuntimeError(f"OpenAI response error: {resp['error']}")
-    if isinstance(resp.get("output_text"), str):
-        return _json_from_text(resp["output_text"])
-    for item in resp.get("output", []) or []:
+        raise RuntimeError(f"OpenAI response error: {_provider_error_detail(resp['error'])}")
+
+    candidates: list[str] = []
+    output_text = resp.get("output_text")
+    if output_text is not None:
+        if not isinstance(output_text, str):
+            raise RuntimeError("OpenAI response output_text was not a string")
+        candidates.append(output_text)
+
+    output = resp.get("output")
+    if output is None:
+        return _json_from_candidates("OpenAI", candidates, "output text")
+    if not isinstance(output, list):
+        raise RuntimeError("OpenAI response output was not a list")
+
+    for item in output:
         if not isinstance(item, dict):
+            raise RuntimeError("OpenAI response output item was not an object")
+        content_items = item.get("content")
+        if content_items is None:
             continue
-        for content in item.get("content", []) or []:
+        if not isinstance(content_items, list):
+            raise RuntimeError("OpenAI response output content was not a list")
+        for content in content_items:
             if not isinstance(content, dict):
+                raise RuntimeError("OpenAI response output content item was not an object")
+            refusal = content.get("refusal")
+            if isinstance(refusal, str) and refusal:
+                raise RuntimeError(f"OpenAI response refused: {_redact(refusal)}")
+            if content.get("type") == "refusal":
+                raise RuntimeError(f"OpenAI response refused: {_provider_error_detail(content)}")
+            text = content.get("text")
+            if text is None:
                 continue
-            if isinstance(content.get("text"), str):
-                return _json_from_text(content["text"])
-    raise RuntimeError("OpenAI response did not contain output text")
+            if not isinstance(text, str):
+                raise RuntimeError("OpenAI response output text was not a string")
+            candidates.append(text)
+    return _json_from_candidates("OpenAI", candidates, "output text")
 
 
 def _walk_strings(obj: Any) -> list[str]:
@@ -307,17 +360,53 @@ def _walk_strings(obj: Any) -> list[str]:
 
 
 def _extract_gemini_json(resp: dict[str, Any], output_format: type[BaseModel]) -> Any:
+    if resp.get("error"):
+        raise RuntimeError(f"Gemini response error: {_provider_error_detail(resp['error'])}")
     try:
         output_format.model_validate(resp)
         return resp
     except Exception:
         pass
+
+    candidates: list[str] = []
+    for key in ("output_text", "text"):
+        text = resp.get(key)
+        if text is not None:
+            if not isinstance(text, str):
+                raise RuntimeError(f"Gemini response {key} was not a string")
+            candidates.append(text)
+
+    candidate_items = resp.get("candidates")
+    if candidate_items is not None:
+        if not isinstance(candidate_items, list):
+            raise RuntimeError("Gemini response candidates was not a list")
+        for candidate in candidate_items:
+            if not isinstance(candidate, dict):
+                raise RuntimeError("Gemini response candidate was not an object")
+            content = candidate.get("content")
+            if content is None:
+                continue
+            if not isinstance(content, dict):
+                raise RuntimeError("Gemini response candidate content was not an object")
+            parts = content.get("parts")
+            if parts is None:
+                continue
+            if not isinstance(parts, list):
+                raise RuntimeError("Gemini response candidate parts was not a list")
+            for part in parts:
+                if not isinstance(part, dict):
+                    raise RuntimeError("Gemini response candidate part was not an object")
+                text = part.get("text")
+                if text is None:
+                    continue
+                if not isinstance(text, str):
+                    raise RuntimeError("Gemini response candidate part text was not a string")
+                candidates.append(text)
+
     for text in _walk_strings(resp):
-        try:
-            return _json_from_text(text)
-        except json.JSONDecodeError:
-            continue
-    raise RuntimeError("Gemini response did not contain parseable structured output")
+        if text not in candidates:
+            candidates.append(text)
+    return _json_from_candidates("Gemini", candidates, "parseable structured output")
 
 
 def _anthropic_structured(

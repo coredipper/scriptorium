@@ -7,6 +7,12 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Fixed
+- **Harness provider JSON extraction is stricter and safer.** OpenAI/Gemini
+  structured-output responses now report provider error/refusal envelopes and
+  malformed response shapes clearly, redact secrets from non-JSON provider bodies,
+  and preserve JSON string `U+2028` line separators while trimming Markdown fences.
+
 ## [0.7.0] — 2026-06-29
 
 scriptoria moves to 0.7.0 for cooperative write-lock waiting — concurrent agents
