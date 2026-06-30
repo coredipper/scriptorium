@@ -7,11 +7,49 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-30
+
+scriptoria moves to 0.8.0 for **cited graph edges**. (Released alongside
+scrip-harness 0.10.0; see the [harness-0.10.0] entry below.)
+
+### Added
+- **Cited graph edges.** An edge in `facts/graph.ndjson` may optionally carry a
+  verbatim `quote` + `source_id`; scrip mints and verifies its `anchor` exactly as
+  for a claim, so `scrip verify` now covers cited edges. Bare `{src,dst,kind}` edges
+  are unchanged — the fields are optional and additive, so the file contract stays
+  `version: 2` (SPEC §11, mirroring the reconciliations precedent).
+
+## [harness-0.10.0] — 2026-06-30
+
+scrip-harness moves to 0.10.0 and **requires `scriptoria>=0.8.0`** (cited edges).
+
+### Added
+- **`scrip-harness graph` drafts cited edges.** The model may attach a supporting
+  verbatim `quote` to an edge; the runner submits it for anchoring and **degrades**
+  any edge whose quote does not verify to a bare structural edge rather than failing
+  the pass (reported as `degraded_edges`). A cited edge proves its quote resolves,
+  not that the asserted relation is correct.
+- **`scrip-harness ingest <source>`.** One command takes a URL/file from cold to a
+  verified, compiled, graphed vault: it runs `scrip ingest`, then chains COMPILE →
+  EXTRACT → GRAPH over the new `raw/<slug>`, bounded by
+  `--through ingest|compile|extract|graph` (default `graph`). Opt-in `--clean` has
+  the model normalize the extracted text into clean Markdown (preserving prose
+  verbatim) and re-ingests it, so `raw/<slug>` becomes the cleaned rendering —
+  anchors then resolve against it, a deliberate provenance trade-off (the original
+  source's bibliographic sidecar is preserved across the clean re-ingest). URLs and
+  HTML/PDF need the extraction deps in the harness env: install `scrip-harness[ingest]`
+  (plain `.md`/`.txt` work with the base install).
+
+### Changed
+- **Dependency floor raised to `scriptoria>=0.8.0`.** The cited-edge graph path
+  emits `quote`/`source_id` edge fields that only scriptoria>=0.8.0 accepts.
+
 ### Fixed
-- **Harness provider JSON extraction is stricter and safer.** OpenAI/Gemini
+- **Provider JSON extraction is stricter and safer.** OpenAI/Gemini
   structured-output responses now report provider error/refusal envelopes and
-  malformed response shapes clearly, redact secrets from non-JSON provider bodies,
-  and preserve JSON string `U+2028` line separators while trimming Markdown fences.
+  malformed response shapes clearly, redact repeated secrets from provider error
+  text and non-JSON response bodies, and preserve JSON string `U+2028` line
+  separators while trimming Markdown fences.
 
 ## [0.7.0] — 2026-06-29
 
@@ -375,6 +413,8 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[harness-0.10.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.10.0
+[0.8.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.8.0
 [harness-0.9.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.9.0
 [0.7.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.7.0
 [0.6.4]: https://github.com/coredipper/scriptorium/releases/tag/v0.6.4

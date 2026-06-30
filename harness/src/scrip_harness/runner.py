@@ -26,7 +26,7 @@ from .graph import (
     DraftEdge,
     DraftEntity,
     DraftGraph,
-    edges_to_ndjson,
+    edge_records,
     entities_to_ndjson,
     entity_id,
 )
@@ -79,6 +79,11 @@ class ReconcileError(RuntimeError):
 class AnswerError(RuntimeError):
     """An answer step failed (the vault is not green, evidence/citations are
     invalid, or the model returned unsupported citations)."""
+
+
+class IngestError(RuntimeError):
+    """An ingest-orchestration step failed (scrip ingest erred, an unknown
+    --through stage, or --clean without a cleaner)."""
 
 
 def _scrip(
@@ -516,6 +521,54 @@ def _fact_add(scrip_cmd: Sequence[str], root: Path, table: str, ndjson: str) -> 
         raise GraphError(f"could not parse scrip fact add output: {e}\n{r.stdout}") from e
 
 
+def _fact_add_edges(
+    scrip_cmd: Sequence[str], root: Path, records: list[dict]
+) -> tuple[dict, list[dict]]:
+    """Append edge records and return ``(scrip_result, degraded)``.
+
+    A *cited* edge (carrying a ``quote``) whose quote scrip cannot verify is a
+    per-record finding (exit 1). Rather than fail the whole batch, drop the quote
+    on each such edge — leaving a bare ``{src,dst,kind}`` edge — and resubmit once;
+    every other (verified or bare) edge keeps its place. ``degraded`` lists the
+    affected edges with scrip's finding ``status``. A bare-only batch lands in a
+    single exit-0 pass."""
+    def _submit():
+        return _scrip(
+            scrip_cmd,
+            ["fact", "add", "--table", "edges", "--stdin", "--json", "--root", str(root)],
+            input_text="".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records),
+        )
+
+    degraded: list[dict] = []
+    r = _submit()
+    if r.returncode == 1:  # cited-edge quote findings: degrade those edges, resubmit
+        try:
+            failures = json.loads(r.stdout).get("failures", [])
+        except json.JSONDecodeError as e:
+            raise GraphError(f"could not parse scrip fact add failures: {e}\n{r.stdout}") from e
+        for f in failures:
+            i = f.get("index")
+            if not isinstance(i, int) or not (0 <= i < len(records)):
+                raise GraphError(f"unexpected edges finding (bad index): {f}")
+            rec = records[i]
+            degraded.append(
+                {"src": rec["src"], "dst": rec["dst"], "kind": rec["kind"],
+                 "status": f.get("status")}
+            )
+            rec.pop("quote", None)
+            rec.pop("source_id", None)
+        r = _submit()
+    if r.returncode != 0:
+        raise GraphError(
+            f"scrip fact add --table edges failed (exit {r.returncode}): "
+            f"{r.stderr.strip() or r.stdout.strip()}"
+        )
+    try:
+        return json.loads(r.stdout), degraded
+    except json.JSONDecodeError as e:
+        raise GraphError(f"could not parse scrip fact add output: {e}\n{r.stdout}") from e
+
+
 def draft_graph_facts(
     root,
     slug: str,
@@ -590,11 +643,13 @@ def draft_graph_facts(
         if kept_entities
         else dict(empty)
     )
-    added_edges = (
-        _fact_add(scrip_cmd, root, "edges", edges_to_ndjson(kept_edges, name_to_id))
-        if kept_edges
-        else dict(empty)
-    )
+    degraded_edges: list[dict] = []
+    if kept_edges:
+        added_edges, degraded_edges = _fact_add_edges(
+            scrip_cmd, root, edge_records(kept_edges, name_to_id, source_id)
+        )
+    else:
+        added_edges = dict(empty)
 
     # Any append leaves the facts set honestly STALE; link the source so future
     # edits to it stale the graph, then stamp and prove the vault green.
@@ -615,6 +670,8 @@ def draft_graph_facts(
     )
     if dropped_edges:
         note += f", {len(dropped_edges)} edge(s) dropped (unknown endpoint)"
+    if degraded_edges:
+        note += f", {len(degraded_edges)} edge(s) degraded (unverifiable quote)"
     if skipped_entities:
         note += f", {len(skipped_entities)} entity name(s) skipped (no slug)"
     _append_log(root, note)
@@ -623,8 +680,118 @@ def draft_graph_facts(
         "entities": added_entities,
         "edges": added_edges,
         "dropped_edges": dropped_edges,
+        "degraded_edges": degraded_edges,
         "skipped_entities": skipped_entities,
     }
+
+
+_INGEST_STAGES = ("ingest", "compile", "extract", "graph")
+
+
+def ingest_source(
+    root,
+    source: str,
+    *,
+    slug: str | None = None,
+    title: str | None = None,
+    author: str | None = None,
+    clean: bool = False,
+    through: str = "graph",
+    clean_fn: Callable[[str], str] | None = None,
+    compile_draft_fn: DraftFn | None = None,
+    extract_draft_fn: ExtractDraftFn | None = None,
+    graph_draft_fn: GraphDraftFn | None = None,
+    scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
+) -> dict:
+    """Drive ``scrip ingest <source>`` then chain COMPILE → EXTRACT → GRAPH over the
+    new ``raw/<slug>``, bounded by ``through`` (one of ``ingest|compile|extract|
+    graph``, default ``graph``), leaving the vault green.
+
+    With ``clean=True`` the deterministically-extracted source text is first
+    normalized by ``clean_fn`` (a model) and re-ingested, so ``raw/<slug>`` becomes
+    the cleaned rendering — a deliberate provenance trade-off (anchors then resolve
+    against cleaned text, not the original bytes). Returns
+    ``{"slug", "stages", "cleaned"}``.
+    """
+    root = Path(root)
+    if through not in _INGEST_STAGES:
+        raise IngestError(
+            f"unknown --through stage {through!r}: choose one of {', '.join(_INGEST_STAGES)}"
+        )
+    if clean and clean_fn is None:
+        raise IngestError("clean=True needs a clean_fn")
+
+    # 1. ingest deterministically: scrip fetches, extracts, and writes raw/<slug>.
+    args = ["ingest", source, "--json", "--root", str(root)]
+    if slug:
+        args += ["--slug", slug]
+    if title:
+        args += ["--title", title]
+    if author:
+        args += ["--author", author]
+    _, payload = _scrip_json(scrip_cmd, args, error_cls=IngestError)
+    if not isinstance(payload, dict) or not isinstance(payload.get("ingested"), str):
+        raise IngestError(f"unexpected scrip ingest output: {payload!r}")
+    resolved_slug = payload["ingested"].split("/", 1)[-1]
+
+    # 2. optional model cleanup: rewrite raw/<slug> with cleaned markdown. The temp
+    #    lives under .kb/ (not scanned as a source) and is removed afterwards. The
+    #    re-ingest would regenerate the .meta.yaml sidecar from the *temp* file
+    #    (losing the original source url/title/author), so we preserve the original
+    #    sidecar across it — the sidecar is bibliographic, never hashed (SPEC §2.1),
+    #    and cleaning changes the text, not where it came from.
+    if clean:
+        assert clean_fn is not None  # guarded above
+        raw_path = root / "vault" / "raw" / f"{resolved_slug}.md"
+        meta_path = root / "vault" / "raw" / f"{resolved_slug}.meta.yaml"
+        try:
+            text = raw_path.read_text(encoding="utf-8")
+        except OSError as e:
+            raise IngestError(f"cannot read raw/{resolved_slug} to clean it: {e}") from e
+        original_meta = meta_path.read_bytes() if meta_path.exists() else None
+        cleaned = clean_fn(text)
+        if not isinstance(cleaned, str) or not cleaned.strip():
+            raise IngestError("clean_fn returned no usable markdown")
+        tmp = root / ".kb" / f"_ingest-clean-{resolved_slug}.md"
+        tmp.write_text(cleaned, encoding="utf-8")
+        try:
+            _scrip_json(
+                scrip_cmd,
+                ["ingest", str(tmp), "--slug", resolved_slug, "--reingest",
+                 "--json", "--root", str(root)],
+                error_cls=IngestError,
+            )
+        finally:
+            tmp.unlink(missing_ok=True)
+        if original_meta is not None:  # restore the original source's bibliographic sidecar
+            meta_path.write_bytes(original_meta)
+
+    # 3. chain the model-backed stages in order, bounded by `through`.
+    stages = ["ingest"]
+    limit = _INGEST_STAGES.index(through)
+    if limit >= _INGEST_STAGES.index("compile"):
+        if compile_draft_fn is None:
+            raise IngestError("the compile stage needs compile_draft_fn")
+        compile_page(root, resolved_slug, draft_fn=compile_draft_fn, scrip_cmd=scrip_cmd)
+        stages.append("compile")
+    if limit >= _INGEST_STAGES.index("extract"):
+        if extract_draft_fn is None:
+            raise IngestError("the extract stage needs extract_draft_fn")
+        extract_facts(root, resolved_slug, draft_fn=extract_draft_fn, scrip_cmd=scrip_cmd)
+        stages.append("extract")
+    if limit >= _INGEST_STAGES.index("graph"):
+        if graph_draft_fn is None:
+            raise IngestError("the graph stage needs graph_draft_fn")
+        draft_graph_facts(root, resolved_slug, draft_fn=graph_draft_fn, scrip_cmd=scrip_cmd)
+        stages.append("graph")
+
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _append_log(
+        root,
+        f"- {ts} INGEST raw/{resolved_slug}: {' → '.join(stages)}"
+        + ("  (--clean)" if clean else ""),
+    )
+    return {"slug": resolved_slug, "stages": stages, "cleaned": clean}
 
 
 def _scrip_json(

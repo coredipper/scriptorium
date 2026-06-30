@@ -31,6 +31,12 @@ def _claim(quote, source="raw/s", **kw):
     return rec
 
 
+def _edge(src="entity/a", dst="entity/b", kind="relates-to", **kw):
+    rec = {"src": src, "dst": dst, "kind": kind}
+    rec.update(kw)
+    return rec
+
+
 def _ndjson(*recs):
     return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs)
 
@@ -50,6 +56,13 @@ def _claims_lines(kb):
 
 def _recs_lines(kb):
     p = kb.root / "vault" / "facts" / "reconciliations.ndjson"
+    if not p.exists():
+        return []
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+
+
+def _graph_lines(kb):
+    p = kb.root / "vault" / "facts" / "graph.ndjson"
     if not p.exists():
         return []
     return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
@@ -476,3 +489,63 @@ def test_fact_add_edges_appends_and_skips_duplicates(kb):
     assert _run_add(kb, _ndjson(edge), "--table", "edges") == 0
     lines = (kb.root / "vault" / "facts" / "graph.ndjson").read_text(encoding="utf-8")
     assert len(lines.splitlines()) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Cited edges: an edge may carry a verbatim quote + source_id; scrip mints and
+# verifies an anchor for it exactly as it does for a claim. Bare edges still work.
+# --------------------------------------------------------------------------- #
+def test_fact_add_bare_edge_carries_no_provenance(kb):
+    # additivity guard: an edge with no quote stays purely structural
+    assert _run_add(kb, _ndjson(_edge()), "--table", "edges") == 0
+    [edge] = _graph_lines(kb)
+    assert set(edge) == {"src", "dst", "kind"}
+
+
+def test_fact_add_cited_edge_mints_and_verifies_anchor(kb):
+    kb.add_raw("s", SRC)
+    rc = _run_add(
+        kb,
+        _ndjson(_edge(quote="Caching answers beats recomputing them.", source_id="raw/s")),
+        "--table", "edges",
+    )
+    assert rc == 0
+    [edge] = _graph_lines(kb)
+    assert (edge["src"], edge["dst"], edge["kind"]) == ("entity/a", "entity/b", "relates-to")
+    assert edge["source_id"] == "raw/s"
+    # the minted anchor resolves uniquely in the source, and scrip verify confirms it
+    assert anchors.resolve(SRC, edge["anchor"]) == "OK"
+    assert cli.main(["verify", "--root", str(kb.root)]) == 0
+
+
+def test_fact_add_cited_edge_broken_quote_fails_batch(kb, capsys):
+    kb.add_raw("s", SRC)
+    rc = _run_add(
+        kb,
+        _ndjson(_edge(quote="this sentence is absent from the source", source_id="raw/s")),
+        "--table", "edges", "--json",
+    )
+    assert rc == 1
+    assert _graph_lines(kb) == []  # all-or-nothing: nothing written
+    [failure] = json.loads(capsys.readouterr().out)["failures"]
+    assert failure["status"] == "BROKEN"
+
+
+def test_fact_add_cited_edge_requires_both_quote_and_source_id(kb):
+    kb.add_raw("s", SRC)
+    # a quote needs a source to anchor against, and vice versa — both or neither
+    assert _run_add(kb, _ndjson(_edge(quote="Caching answers beats recomputing them.")),
+                    "--table", "edges") == 3
+    assert _run_add(kb, _ndjson(_edge(source_id="raw/s")), "--table", "edges") == 3
+    assert _graph_lines(kb) == []
+
+
+def test_fact_add_cited_edge_dedups_on_triple(kb, capsys):
+    kb.add_raw("s", SRC)
+    cited = _ndjson(_edge(quote="Caching answers beats recomputing them.", source_id="raw/s"))
+    assert _run_add(kb, cited, "--table", "edges") == 0
+    capsys.readouterr()
+    # same (src,dst,kind) again — even bare — is the same relation, so it's skipped
+    assert _run_add(kb, _ndjson(_edge()), "--table", "edges", "--json") == 0
+    assert len(_graph_lines(kb)) == 1
+    assert json.loads(capsys.readouterr().out)["skipped"][0]["reason"] == "duplicate"

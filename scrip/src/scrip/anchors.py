@@ -199,6 +199,27 @@ def verify_vault(root: Path) -> dict:
                 text = _source_text(root, rec["source_id"], src_cache)
                 record(f"claim:{cid}", rec, resolve(text, rec["anchor"]))
 
+    # cited edges (graph.ndjson): an edge that carries an anchor is verified like
+    # a claim; a bare {src,dst,kind} edge has no citation to resolve and is skipped.
+    edges_path = facts_dir(root) / "graph.ndjson"
+    if edges_path.exists():
+        with edges_path.open(encoding="utf-8") as f:
+            for lineno, raw_line in enumerate(f, start=1):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError as e:
+                    raise DataError(f"graph.ndjson:{lineno}: invalid JSON: {e}") from e
+                if "anchor" not in rec:
+                    continue
+                if "source_id" not in rec:
+                    raise DataError(f"graph.ndjson:{lineno}: cited edge missing 'source_id'")
+                text = _source_text(root, rec["source_id"], src_cache)
+                where = f"edge:{rec.get('src')}->{rec.get('dst')} ({rec.get('kind')})"
+                record(where, rec, resolve(text, rec["anchor"]))
+
     wd = wiki_dir(root)
     if wd.is_dir():
         for path in sorted(wd.rglob("*.md")):

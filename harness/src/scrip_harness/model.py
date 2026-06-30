@@ -30,6 +30,7 @@ from .extract import (
     build_extract_retry_prompt,
 )
 from .graph import GRAPH_SYSTEM, DraftGraph, build_graph_prompt
+from .ingest import CLEAN_SYSTEM, DraftCleanSource, build_clean_prompt
 from .promote import PROMOTE_SYSTEM, PromotionDecision, build_promote_prompt
 from .reconcile import RECONCILE_SYSTEM, ReconciliationDecision, build_reconcile_prompt
 
@@ -654,6 +655,32 @@ def draft_graph(
     if not isinstance(out, DraftGraph):
         raise RuntimeError(f"model returned wrong graph type for {source_id}")
     return out
+
+
+def clean_source(
+    source_text: str,
+    *,
+    model: str | None = None,
+    provider: Provider | None = None,
+    client=None,
+    api_key_file: str | None = None,
+) -> str:
+    """Ask a model to normalize an extracted source into clean Markdown, preserving
+    its prose verbatim (so anchors minted later still resolve). Returns the cleaned
+    Markdown. Opt-in via ``scrip-harness ingest --clean``; see :mod:`ingest`."""
+    out = _complete_structured(
+        CLEAN_SYSTEM,
+        build_clean_prompt(source_text),
+        DraftCleanSource,
+        provider=provider,
+        model=model,
+        max_tokens=8000,
+        client=client,
+        api_key_file=api_key_file,
+    )
+    if not isinstance(out, DraftCleanSource):
+        raise RuntimeError("model returned wrong type for source cleaning")
+    return out.markdown
 
 
 def decide_promotion(

@@ -99,6 +99,27 @@ def main(argv: list[str] | None = None) -> int:
     pg.add_argument("slug")
     pg.add_argument("--root")
     _add_model_args(pg)
+    pin = sub.add_parser(
+        "ingest",
+        help="ingest a source via `scrip ingest`, then drive COMPILE → EXTRACT → "
+        "GRAPH over it (bounded by --through); --clean model-normalizes the text first",
+    )
+    pin.add_argument("source", help="a URL or local file (.md/.txt/.html/.pdf) to ingest")
+    pin.add_argument("--slug", help="vault slug (default: derived from the source name)")
+    pin.add_argument("--title", help="bibliographic title for the source's .meta.yaml sidecar")
+    pin.add_argument("--author", help="bibliographic author for the source's .meta.yaml sidecar")
+    pin.add_argument(
+        "--clean", action="store_true",
+        help="model-normalize the extracted text into clean markdown before ingesting; "
+        "raw/<slug> becomes the cleaned rendering, so anchors resolve against it "
+        "(a provenance trade-off)",
+    )
+    pin.add_argument(
+        "--through", choices=["ingest", "compile", "extract", "graph"], default="graph",
+        help="run the pipeline up to this stage (default: graph)",
+    )
+    pin.add_argument("--root")
+    _add_model_args(pin)
     pp = sub.add_parser(
         "promote",
         help="score a compiled page against existing pages (`scrip similar`) and "
@@ -167,12 +188,14 @@ def main(argv: list[str] | None = None) -> int:
         CompileError,
         ExtractError,
         GraphError,
+        IngestError,
         PromoteError,
         ReconcileError,
         answer_question,
         compile_page,
         draft_graph_facts,
         extract_facts,
+        ingest_source,
         promote_page,
         reconcile_contradictions,
     )
@@ -181,6 +204,52 @@ def main(argv: list[str] | None = None) -> int:
     chosen_model = args.model
     chosen_provider = cast(model_mod.Provider, getattr(args, "provider", "auto"))
     api_key_file = cast(str | None, getattr(args, "api_key_file", None))
+
+    if args.command == "ingest":
+        def _compile_draft(text: str, *, source_id: str, failures=None):
+            return model_mod.draft_page(
+                text, source_id=source_id, provider=chosen_provider,
+                model=chosen_model, failures=failures, api_key_file=api_key_file,
+            )
+
+        def _extract_draft(text: str, *, source_id: str, failures=None):
+            return model_mod.draft_extraction(
+                text, source_id=source_id, provider=chosen_provider,
+                model=chosen_model, failures=failures, api_key_file=api_key_file,
+            )
+
+        def _graph_draft(text: str, *, source_id: str):
+            return model_mod.draft_graph(
+                text, source_id=source_id, provider=chosen_provider,
+                model=chosen_model, api_key_file=api_key_file,
+            )
+
+        clean_fn = None
+        if args.clean:
+            def _clean(text: str):
+                return model_mod.clean_source(
+                    text, provider=chosen_provider, model=chosen_model,
+                    api_key_file=api_key_file,
+                )
+
+            clean_fn = _clean
+
+        try:
+            result = ingest_source(
+                root, args.source, slug=args.slug, title=args.title, author=args.author,
+                clean=args.clean, through=args.through,
+                clean_fn=clean_fn, compile_draft_fn=_compile_draft,
+                extract_draft_fn=_extract_draft, graph_draft_fn=_graph_draft,
+            )
+        except (IngestError, RuntimeError) as e:
+            print(f"scrip-harness: {e}", file=sys.stderr)
+            return 1
+        clean_note = " (cleaned)" if result["cleaned"] else ""
+        print(
+            f"ingested raw/{result['slug']}{clean_note} — ran: "
+            f"{' → '.join(result['stages'])}"
+        )
+        return 0
 
     if args.command == "answer":
         def answer_draft_fn(question: str, *, evidence: dict):

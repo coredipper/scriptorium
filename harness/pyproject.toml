@@ -1,6 +1,6 @@
 [project]
 name = "scrip-harness"
-version = "0.9.0"
+version = "0.10.0"
 description = "Runnable AGENT.md compile loop for scriptorium: drives `scrip` via subprocess + a model provider. Not part of the deterministic scrip core."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,10 +19,18 @@ dependencies = [
     "pydantic>=2",
     # Version floor (not the dev path source below) is what ships in the wheel's
     # Requires-Dist, so an installed scrip-harness pulls scriptoria from PyPI.
-    # >=0.6.2: `scrip-harness answer` relies on contradiction preflight working
-    # even when facts/reconciliations.ndjson exists but has no rows.
-    "scriptoria>=0.6.2",
+    # >=0.8.0: `scrip-harness graph` can emit *cited* edges (quote+source_id), and
+    # only scriptoria>=0.8.0 accepts those edge fields — older versions reject them
+    # as unknown and fail the graph pass.
+    "scriptoria>=0.8.0",
 ]
+
+[project.optional-dependencies]
+# `scrip-harness ingest <url|.html|.pdf>` runs the bundled scriptoria in THIS
+# environment (DEFAULT_SCRIP_CMD = `python -m scrip.cli`, so PATH is bypassed) —
+# the HTML/PDF extraction deps must therefore live here, not in a separately
+# PATH-installed `scriptoria[ingest]`. Plain .md/.txt sources need nothing extra.
+ingest = ["scriptoria[ingest]"]
 
 [project.urls]
 Homepage = "https://github.com/coredipper/scriptorium/tree/main/harness"

@@ -53,7 +53,10 @@ _CLAIM_ALLOWED = frozenset((*_CLAIM_REQUIRED, "claim_text", "tags"))
 _ENTITY_REQUIRED = ("entity_id", "name", "kind")
 _ENTITY_ALLOWED = frozenset((*_ENTITY_REQUIRED, "tags"))
 _EDGE_REQUIRED = ("src", "dst", "kind")
-_EDGE_ALLOWED = frozenset(_EDGE_REQUIRED)
+# An edge may optionally be *cited*: a verbatim ``quote`` + ``source_id`` whose
+# ``anchor`` scrip mints+verifies exactly as for a claim. Bare edges stay
+# structural. ``anchor`` remains scrip-owned (proposing it is a schema error).
+_EDGE_ALLOWED = frozenset((*_EDGE_REQUIRED, "quote", "source_id"))
 _DECISIONS = ("supersede", "qualify", "keep-both")
 _RECON_REQUIRED = ("decision", "claim_a", "claim_b")
 _RECON_ALLOWED = frozenset((*_RECON_REQUIRED, "winner", "rationale"))
@@ -161,6 +164,17 @@ def _validate(table: str, rec: dict, index: int) -> None:
         _check_shape(rec, index, _EDGE_REQUIRED, _EDGE_ALLOWED)
         for key in _EDGE_REQUIRED:
             _check_str(rec, key, index)
+        if "quote" in rec or "source_id" in rec:
+            # both or neither: a quote needs a source to anchor against
+            missing = [k for k in ("quote", "source_id") if k not in rec]
+            if missing:
+                raise DataError(
+                    f"record {index}: a cited edge needs both 'quote' and 'source_id' "
+                    f"(missing: {', '.join(missing)})"
+                )
+            _check_str(rec, "source_id", index)
+            # quote emptiness is a per-record finding (EMPTY_QUOTE), not a schema error
+            _check_str(rec, "quote", index, allow_blank=True)
     else:  # reconciliations
         _check_shape(rec, index, _RECON_REQUIRED, _RECON_ALLOWED, owned=_RECON_OWNED)
         for key in ("decision", "claim_a", "claim_b"):
@@ -390,13 +404,16 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
     resolved: list[dict | None] = [None] * len(proposals)
     path = facts_dir(root) / _FILES[table]
     with lock.write_lock(root):
-        if table == "claims":
-            # Resolve quotes INSIDE the lock: raw/ only changes via a *locked*
-            # `ingest --reingest`, so holding the lock from verification through
-            # append closes the window where a re-ingest could land between the
-            # two and silently break the just-minted anchors.
+        # Resolve quotes INSIDE the lock: raw/ only changes via a *locked*
+        # `ingest --reingest`, so holding the lock from verification through
+        # append closes the window where a re-ingest could land between the
+        # two and silently break the just-minted anchors. Claims always carry a
+        # quote; an edge does only when it is *cited*.
+        if table == "claims" or table == "edges":
             src_cache: dict[str, str | None] = {}
             for i, rec in enumerate(proposals):
+                if table == "edges" and "quote" not in rec:
+                    continue  # bare edge: nothing to anchor
                 fail, res = _resolve_claim(root, rec, i, src_cache)
                 if fail:
                     failures.append(fail)
@@ -478,7 +495,12 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                     skipped.append({"index": i, "reason": "duplicate", "existing_id": None})
                     continue
                 seen_edges.add(key)
-                appended.append({"src": rec["src"], "dst": rec["dst"], "kind": rec["kind"]})
+                full = {"src": rec["src"], "dst": rec["dst"], "kind": rec["kind"]}
+                res = resolved[i]
+                if res is not None:  # cited edge: carry the minted provenance
+                    full["source_id"] = res["source_id"]
+                    full["anchor"] = res["anchor"]
+                appended.append(full)
         else:  # reconciliations
             claim_ids = {c.get("claim_id") for c in _read_table(facts_dir(root) / "claims.ndjson")[0]}
             for i, rec in enumerate(proposals):
@@ -528,10 +550,11 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                     f.write("\n")
                 f.write(payload)
             new_sources: list[str] = []
-            if table == "claims":
+            if table in ("claims", "edges"):
                 for rec in appended:
-                    if rec["source_id"] not in new_sources:
-                        new_sources.append(rec["source_id"])
+                    sid = rec.get("source_id")  # cited edges carry one; bare edges don't
+                    if sid and sid not in new_sources:
+                        new_sources.append(sid)
             _write_meta(root, meta, new_sources)
 
     return {"table": table, "appended": appended, "skipped": skipped, "failures": []}
