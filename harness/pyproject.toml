@@ -19,9 +19,10 @@ dependencies = [
     "pydantic>=2",
     # Version floor (not the dev path source below) is what ships in the wheel's
     # Requires-Dist, so an installed scrip-harness pulls scriptoria from PyPI.
-    # >=0.6.2: `scrip-harness answer` relies on contradiction preflight working
-    # even when facts/reconciliations.ndjson exists but has no rows.
-    "scriptoria>=0.6.2",
+    # >=0.8.0: `scrip-harness graph` can emit *cited* edges (quote+source_id), and
+    # only scriptoria>=0.8.0 accepts those edge fields — older versions reject them
+    # as unknown and fail the graph pass.
+    "scriptoria>=0.8.0",
 ]
 
 [project.urls]
