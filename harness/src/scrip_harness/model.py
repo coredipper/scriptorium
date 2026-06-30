@@ -242,12 +242,32 @@ def _redact(text: str) -> str:
 def _json_from_text(text: str) -> Any:
     text = text.strip()
     if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
+        first_lf = text.find("\n")
+        first_cr = text.find("\r")
+        if first_lf == -1:
+            start_idx = first_cr
+        elif first_cr == -1:
+            start_idx = first_lf
+        else:
+            start_idx = min(first_lf, first_cr)
+
+        if start_idx != -1:
+            start = start_idx + 1
+            if text[start_idx] == "\r" and start < len(text) and text[start] == "\n":
+                start += 1
+            text = text[start:]
+        else:
+            text = ""
+
+        end_idx = max(text.rfind("\n"), text.rfind("\r"))
+        if end_idx != -1:
+            if text[end_idx + 1:].strip() == "```":
+                text = text[:end_idx]
+        else:
+            if text.strip() == "```":
+                text = ""
+
+        text = text.strip()
     return json.loads(text)
 
 
