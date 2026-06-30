@@ -7,6 +7,7 @@ positional-marker contract. These tests guard that boundary."""
 
 import json
 
+import pytest
 from scrip_harness import model as model_mod
 from scrip_harness.answer import DraftAnswer
 from scrip_harness.compile import DraftClaim, DraftPage
@@ -39,8 +40,120 @@ def test_json_from_text_trims_fenced_json_line_endings():
         '```json\n{"a": 1}\n```',
         '```json\r\n{"a": 1}\r\n```',
         '```json\r{"a": 1}\r```',
+        '```\n{"a": 1}\n```',
+        '```json\n{"a": 1}',
     ):
         assert model_mod._json_from_text(fenced) == {"a": 1}
+
+
+def test_json_from_text_preserves_json_line_separator_inside_string():
+    value = model_mod._json_from_text('```json\n{"text": "a\u2028b"}\n```')
+
+    assert value == {"text": "a\u2028b"}
+
+
+def test_http_json_redacts_non_json_provider_response(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return b"not json: sk-test-secret"
+
+    monkeypatch.setattr(model_mod.urllib.request, "urlopen", lambda req, timeout: FakeResponse())
+
+    with pytest.raises(RuntimeError) as exc:
+        model_mod._http_json("https://example.test", {}, {})
+
+    assert "sk-test-secret" not in str(exc.value)
+    assert "***" in str(exc.value)
+
+
+def test_redact_replaces_multiple_same_prefix_secrets():
+    redacted = model_mod._redact(
+        "openai sk-first sk-second google AIza-first AIza-second"
+    )
+
+    assert "sk-first" not in redacted
+    assert "sk-second" not in redacted
+    assert "AIza-first" not in redacted
+    assert "AIza-second" not in redacted
+    assert redacted.count("***") == 4
+
+
+def test_openai_extract_skips_malformed_candidate_before_valid_text():
+    assert model_mod._extract_openai_json(
+        {
+            "status": "completed",
+            "output_text": "not-json",
+            "output": [
+                {
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": json.dumps({"body": "Answer.", "citations": []}),
+                        }
+                    ]
+                }
+            ],
+        }
+    ) == {"body": "Answer.", "citations": []}
+
+
+def test_openai_extract_rejects_malformed_output_shape():
+    with pytest.raises(RuntimeError, match="OpenAI response output was not a list"):
+        model_mod._extract_openai_json({"status": "completed", "output": {}})
+
+
+def test_openai_extract_reports_refusal():
+    with pytest.raises(RuntimeError, match="OpenAI response refused: safety"):
+        model_mod._extract_openai_json(
+            {
+                "status": "completed",
+                "output": [{"content": [{"type": "refusal", "refusal": "safety"}]}],
+            }
+        )
+
+
+def test_gemini_extract_reports_error_envelope():
+    with pytest.raises(RuntimeError, match="Gemini response error: blocked"):
+        model_mod._extract_gemini_json(
+            {"error": {"message": "blocked"}},
+            PromotionDecision,
+        )
+
+
+def test_gemini_extract_reads_candidates_parts_text():
+    assert model_mod._extract_gemini_json(
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps(
+                                    {
+                                        "decision": "keep",
+                                        "target_id": None,
+                                        "reasoning": "distinct",
+                                    }
+                                )
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        PromotionDecision,
+    ) == {"decision": "keep", "target_id": None, "reasoning": "distinct"}
+
+
+def test_gemini_extract_rejects_malformed_candidates_shape():
+    with pytest.raises(RuntimeError, match="Gemini response candidates was not a list"):
+        model_mod._extract_gemini_json({"candidates": {}}, PromotionDecision)
 
 
 def test_draft_page_retry_uses_the_compile_prompt_not_extracts():

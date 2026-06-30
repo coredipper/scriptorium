@@ -44,6 +44,13 @@ scrip-harness moves to 0.10.0 and **requires `scriptoria>=0.8.0`** (cited edges)
 - **Dependency floor raised to `scriptoria>=0.8.0`.** The cited-edge graph path
   emits `quote`/`source_id` edge fields that only scriptoria>=0.8.0 accepts.
 
+### Fixed
+- **Provider JSON extraction is stricter and safer.** OpenAI/Gemini
+  structured-output responses now report provider error/refusal envelopes and
+  malformed response shapes clearly, redact repeated secrets from provider error
+  text and non-JSON response bodies, and preserve JSON string `U+2028` line
+  separators while trimming Markdown fences.
+
 ## [0.7.0] — 2026-06-29
 
 scriptoria moves to 0.7.0 for cooperative write-lock waiting — concurrent agents
