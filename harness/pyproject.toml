@@ -25,6 +25,13 @@ dependencies = [
     "scriptoria>=0.8.0",
 ]
 
+[project.optional-dependencies]
+# `scrip-harness ingest <url|.html|.pdf>` runs the bundled scriptoria in THIS
+# environment (DEFAULT_SCRIP_CMD = `python -m scrip.cli`, so PATH is bypassed) —
+# the HTML/PDF extraction deps must therefore live here, not in a separately
+# PATH-installed `scriptoria[ingest]`. Plain .md/.txt sources need nothing extra.
+ingest = ["scriptoria[ingest]"]
+
 [project.urls]
 Homepage = "https://github.com/coredipper/scriptorium/tree/main/harness"
 Changelog = "https://github.com/coredipper/scriptorium/blob/main/CHANGELOG.md"

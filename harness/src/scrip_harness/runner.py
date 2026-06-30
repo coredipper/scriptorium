@@ -81,6 +81,11 @@ class AnswerError(RuntimeError):
     invalid, or the model returned unsupported citations)."""
 
 
+class IngestError(RuntimeError):
+    """An ingest-orchestration step failed (scrip ingest erred, an unknown
+    --through stage, or --clean without a cleaner)."""
+
+
 def _scrip(
     cmd: Sequence[str], args: list[str], input_text: str | None = None
 ) -> subprocess.CompletedProcess:
@@ -678,6 +683,115 @@ def draft_graph_facts(
         "degraded_edges": degraded_edges,
         "skipped_entities": skipped_entities,
     }
+
+
+_INGEST_STAGES = ("ingest", "compile", "extract", "graph")
+
+
+def ingest_source(
+    root,
+    source: str,
+    *,
+    slug: str | None = None,
+    title: str | None = None,
+    author: str | None = None,
+    clean: bool = False,
+    through: str = "graph",
+    clean_fn: Callable[[str], str] | None = None,
+    compile_draft_fn: DraftFn | None = None,
+    extract_draft_fn: ExtractDraftFn | None = None,
+    graph_draft_fn: GraphDraftFn | None = None,
+    scrip_cmd: Sequence[str] = DEFAULT_SCRIP_CMD,
+) -> dict:
+    """Drive ``scrip ingest <source>`` then chain COMPILE → EXTRACT → GRAPH over the
+    new ``raw/<slug>``, bounded by ``through`` (one of ``ingest|compile|extract|
+    graph``, default ``graph``), leaving the vault green.
+
+    With ``clean=True`` the deterministically-extracted source text is first
+    normalized by ``clean_fn`` (a model) and re-ingested, so ``raw/<slug>`` becomes
+    the cleaned rendering — a deliberate provenance trade-off (anchors then resolve
+    against cleaned text, not the original bytes). Returns
+    ``{"slug", "stages", "cleaned"}``.
+    """
+    root = Path(root)
+    if through not in _INGEST_STAGES:
+        raise IngestError(
+            f"unknown --through stage {through!r}: choose one of {', '.join(_INGEST_STAGES)}"
+        )
+    if clean and clean_fn is None:
+        raise IngestError("clean=True needs a clean_fn")
+
+    # 1. ingest deterministically: scrip fetches, extracts, and writes raw/<slug>.
+    args = ["ingest", source, "--json", "--root", str(root)]
+    if slug:
+        args += ["--slug", slug]
+    if title:
+        args += ["--title", title]
+    if author:
+        args += ["--author", author]
+    _, payload = _scrip_json(scrip_cmd, args, error_cls=IngestError)
+    if not isinstance(payload, dict) or not isinstance(payload.get("ingested"), str):
+        raise IngestError(f"unexpected scrip ingest output: {payload!r}")
+    resolved_slug = payload["ingested"].split("/", 1)[-1]
+
+    # 2. optional model cleanup: rewrite raw/<slug> with cleaned markdown. The temp
+    #    lives under .kb/ (not scanned as a source) and is removed afterwards. The
+    #    re-ingest would regenerate the .meta.yaml sidecar from the *temp* file
+    #    (losing the original source url/title/author), so we preserve the original
+    #    sidecar across it — the sidecar is bibliographic, never hashed (SPEC §2.1),
+    #    and cleaning changes the text, not where it came from.
+    if clean:
+        assert clean_fn is not None  # guarded above
+        raw_path = root / "vault" / "raw" / f"{resolved_slug}.md"
+        meta_path = root / "vault" / "raw" / f"{resolved_slug}.meta.yaml"
+        try:
+            text = raw_path.read_text(encoding="utf-8")
+        except OSError as e:
+            raise IngestError(f"cannot read raw/{resolved_slug} to clean it: {e}") from e
+        original_meta = meta_path.read_bytes() if meta_path.exists() else None
+        cleaned = clean_fn(text)
+        if not isinstance(cleaned, str) or not cleaned.strip():
+            raise IngestError("clean_fn returned no usable markdown")
+        tmp = root / ".kb" / f"_ingest-clean-{resolved_slug}.md"
+        tmp.write_text(cleaned, encoding="utf-8")
+        try:
+            _scrip_json(
+                scrip_cmd,
+                ["ingest", str(tmp), "--slug", resolved_slug, "--reingest",
+                 "--json", "--root", str(root)],
+                error_cls=IngestError,
+            )
+        finally:
+            tmp.unlink(missing_ok=True)
+        if original_meta is not None:  # restore the original source's bibliographic sidecar
+            meta_path.write_bytes(original_meta)
+
+    # 3. chain the model-backed stages in order, bounded by `through`.
+    stages = ["ingest"]
+    limit = _INGEST_STAGES.index(through)
+    if limit >= _INGEST_STAGES.index("compile"):
+        if compile_draft_fn is None:
+            raise IngestError("the compile stage needs compile_draft_fn")
+        compile_page(root, resolved_slug, draft_fn=compile_draft_fn, scrip_cmd=scrip_cmd)
+        stages.append("compile")
+    if limit >= _INGEST_STAGES.index("extract"):
+        if extract_draft_fn is None:
+            raise IngestError("the extract stage needs extract_draft_fn")
+        extract_facts(root, resolved_slug, draft_fn=extract_draft_fn, scrip_cmd=scrip_cmd)
+        stages.append("extract")
+    if limit >= _INGEST_STAGES.index("graph"):
+        if graph_draft_fn is None:
+            raise IngestError("the graph stage needs graph_draft_fn")
+        draft_graph_facts(root, resolved_slug, draft_fn=graph_draft_fn, scrip_cmd=scrip_cmd)
+        stages.append("graph")
+
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _append_log(
+        root,
+        f"- {ts} INGEST raw/{resolved_slug}: {' → '.join(stages)}"
+        + ("  (--clean)" if clean else ""),
+    )
+    return {"slug": resolved_slug, "stages": stages, "cleaned": clean}
 
 
 def _scrip_json(

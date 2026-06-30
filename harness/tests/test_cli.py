@@ -139,3 +139,77 @@ def test_promote_resynthesize_command_redrafts_target(tmp_path, monkeypatch, cap
     assert "resynthesized concept/compilation-redux into concept/compilation" in capsys.readouterr().out
     body = (tmp_path / "vault" / "wiki" / "concepts" / "compilation.md").read_text(encoding="utf-8")
     assert "Coherent re-synthesis of alpha" in body  # body re-drafted, not appended
+
+
+def _ingest_vault(tmp_path):
+    for d in ("vault/raw", "vault/wiki/concepts", "vault/facts", ".kb"):
+        (tmp_path / d).mkdir(parents=True)
+    (tmp_path / "SPEC.md").write_text("marker\n", encoding="utf-8")
+
+
+def test_ingest_command_through_ingest_only(tmp_path, capsys):
+    # the default-orchestration dispatch with no model: just `scrip ingest`.
+    _ingest_vault(tmp_path)
+    src = tmp_path / "topic.md"
+    src.write_text("# Topic\n\nA body sentence.\n", encoding="utf-8")
+
+    rc = cli.main(["ingest", str(src), "--through", "ingest", "--root", str(tmp_path)])
+
+    assert rc == 0
+    assert (tmp_path / "vault" / "raw" / "topic.md").exists()
+    assert "ingest" in capsys.readouterr().out.lower()
+
+
+def test_ingest_command_clean_routes_to_model_clean_source(tmp_path, monkeypatch, capsys):
+    _ingest_vault(tmp_path)
+    src = tmp_path / "topic.md"
+    src.write_text("Nav | Menu\n\nThe kept sentence.\n", encoding="utf-8")
+
+    def fake_clean(text, **kw):
+        assert "kept sentence" in text  # the extracted source text is handed to the model
+        return "# Topic\n\nThe kept sentence.\n"
+
+    monkeypatch.setattr(model, "clean_source", fake_clean)
+
+    rc = cli.main(["ingest", str(src), "--clean", "--through", "ingest", "--root", str(tmp_path)])
+
+    assert rc == 0
+    raw = (tmp_path / "vault" / "raw" / "topic.md").read_text(encoding="utf-8")
+    assert "# Topic" in raw and "Nav | Menu" not in raw  # cleaned text replaced the raw
+    capsys.readouterr()
+
+
+def test_ingest_command_full_pipeline_drives_compile_extract_graph(tmp_path, monkeypatch, capsys):
+    from scrip_harness.compile import DraftClaim, DraftPage
+    from scrip_harness.extract import DraftExtraction, DraftFact
+    from scrip_harness.graph import DraftEdge, DraftEntity, DraftGraph
+
+    _ingest_vault(tmp_path)
+    src = tmp_path / "topic.md"
+    src.write_text(
+        "# Topic\n\nPageIndex is a retrieval tool. It is an alternative to a vector DB.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(model, "draft_page", lambda text, *, source_id, failures=None, **kw: DraftPage(
+        title="Topic",
+        body="PageIndex is a retrieval tool.[^a1]\n",
+        claims=[DraftClaim(quote="PageIndex is a retrieval tool.")],
+    ))
+    monkeypatch.setattr(model, "draft_extraction", lambda text, *, source_id, failures=None, **kw: DraftExtraction(
+        claims=[DraftFact(quote="It is an alternative to a vector DB.",
+                          subject="pageindex", predicate="alternative-to", object="vector-db")],
+    ))
+    monkeypatch.setattr(model, "draft_graph", lambda text, *, source_id, **kw: DraftGraph(
+        entities=[DraftEntity(name="PageIndex", kind="tool"), DraftEntity(name="Vector DB", kind="tool")],
+        edges=[DraftEdge(src="PageIndex", dst="Vector DB", kind="alternative-to")],
+    ))
+
+    rc = cli.main(["ingest", str(src), "--root", str(tmp_path)])  # default --through graph
+
+    assert rc == 0
+    assert (tmp_path / "vault" / "wiki" / "concepts" / "topic.md").exists()
+    assert (tmp_path / "vault" / "facts" / "claims.ndjson").exists()
+    assert "entity/pageindex" in (tmp_path / "vault" / "facts" / "entities.ndjson").read_text(encoding="utf-8")
+    out = capsys.readouterr().out
+    assert "compile" in out and "extract" in out and "graph" in out

@@ -29,6 +29,16 @@ scrip-harness moves to 0.10.0 and **requires `scriptoria>=0.8.0`** (cited edges)
   any edge whose quote does not verify to a bare structural edge rather than failing
   the pass (reported as `degraded_edges`). A cited edge proves its quote resolves,
   not that the asserted relation is correct.
+- **`scrip-harness ingest <source>`.** One command takes a URL/file from cold to a
+  verified, compiled, graphed vault: it runs `scrip ingest`, then chains COMPILE →
+  EXTRACT → GRAPH over the new `raw/<slug>`, bounded by
+  `--through ingest|compile|extract|graph` (default `graph`). Opt-in `--clean` has
+  the model normalize the extracted text into clean Markdown (preserving prose
+  verbatim) and re-ingests it, so `raw/<slug>` becomes the cleaned rendering —
+  anchors then resolve against it, a deliberate provenance trade-off (the original
+  source's bibliographic sidecar is preserved across the clean re-ingest). URLs and
+  HTML/PDF need the extraction deps in the harness env: install `scrip-harness[ingest]`
+  (plain `.md`/`.txt` work with the base install).
 
 ### Changed
 - **Dependency floor raised to `scriptoria>=0.8.0`.** The cited-edge graph path

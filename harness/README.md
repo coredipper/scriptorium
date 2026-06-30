@@ -102,6 +102,23 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
    `scrip stamp` + `scrip verify`. Adjudicated pairs stop being surfaced by `scrip
    query contradictions`. `--dry-run` prints the decisions without recording.
 
+## How an ingest runs
+
+`scrip-harness ingest <source>` takes a URL or file from cold to a verified,
+compiled, graphed vault in one command:
+
+1. **Ingest** — `scrip ingest <source>` fetches, extracts, and writes `raw/<slug>`
+   (slug derived from the source name, or `--slug`). URLs/HTML/PDF need the
+   extraction deps in the harness env — install `scrip-harness[ingest]`; plain
+   `.md`/`.txt` work with the base install.
+2. **Clean (opt-in)** — `--clean` first has the model normalize the extracted text
+   into clean Markdown (dropping nav/boilerplate, preserving the prose *verbatim*)
+   and re-ingests it. `raw/<slug>` then holds the cleaned rendering, so anchors
+   resolve against it — a deliberate provenance trade-off.
+3. **Chain** — COMPILE → EXTRACT → GRAPH run over `raw/<slug>` (each model-backed),
+   leaving the vault green. `--through ingest|compile|extract|graph` (default
+   `graph`) bounds how far the pipeline runs.
+
 ## Install & run
 
 Both packages are on PyPI. `scrip-harness` bundles `scriptoria` as a dependency
@@ -111,13 +128,16 @@ direct use:
 
 ```sh
 uv tool install scrip-harness            # this package → `scrip-harness` (pulls scriptoria)
-uv tool install 'scriptoria[ingest]'     # optional: `scrip` on PATH + HTML/PDF ingest
+uv tool install 'scrip-harness[ingest]'  # to ingest URLs/HTML/PDF: adds the extraction deps
+                                          # to the harness's own env (PATH is bypassed)
+uv tool install 'scriptoria[ingest]'     # optional: `scrip` on PATH for direct, non-harness use
 export OPENAI_API_KEY=...                 # or ANTHROPIC_API_KEY / GEMINI_API_KEY
 
+scrip-harness ingest <url> --provider openai   # one command: ingest → compile → extract → graph
 scrip-harness compile article --provider openai
 scrip-harness extract article            # pull claims into facts/
 scrip-harness answer "What does the corpus say about caching?" --provider openai
-scrip ingest <url> --slug article        # bring a source in (needs the install above)
+scrip ingest <url> --slug article        # or bring a source in deterministically (needs the install above)
 ```
 
 (From a checkout, `uv tool install ./scrip` and `uv tool install ./harness`
