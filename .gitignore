@@ -15,6 +15,10 @@ build/
 # OS
 .DS_Store
 
+# Secrets: harness wiki-publish credentials (gh_username/password/wikirepo).
+# Never commit. The real file lives with the private KB, not in this repo.
+.env
+
 # Embeddings index: a large, regenerable binary cache (rebuild with `scrip index`)
 /.kb/embeddings/
 
