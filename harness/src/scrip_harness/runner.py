@@ -479,13 +479,20 @@ def _ensure_source_tracked(root: Path, source_id: str) -> None:
     computes the ``input-hash`` over the resulting ``derived-from`` set. Done under
     scrip's write lock, mirroring scrip's own meta writes."""
     import yaml
+    try:
+        from yaml import CSafeLoader as SafeLoader
+    except ImportError:
+        from yaml import SafeLoader
 
     from scrip import lock
 
     meta_path = root / "vault" / "facts" / "_meta.yaml"
     with lock.write_lock(root):
         try:
-            data = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+            # OPTIMIZATION: pure-Python yaml.safe_load is slow.
+            # Using CSafeLoader via yaml.load(..., Loader=SafeLoader) speeds up YAML parsing significantly (~7x).
+            # This is particularly helpful here as it reduces time spent holding the write_lock.
+            data = yaml.load(meta_path.read_text(encoding="utf-8"), Loader=SafeLoader) or {}
         except OSError:
             return  # no meta yet; scrip creates it on the append that precedes this
         if not isinstance(data, dict):
