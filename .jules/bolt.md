@@ -21,3 +21,7 @@
 ## 2024-08-01 - Avoid splitlines() for text trimming
 **Learning:** Using `splitlines()` to remove boundary lines (such as markdown code block backticks ` ``` ` around JSON strings) from large text payloads creates a massive, temporary array of all lines in memory. This introduces `O(N)` memory overhead and compute simply to discard the first and last items.
 **Action:** To prevent memory overhead and O(N) allocations when extracting string data by trimming prefix/suffix boundaries, prefer string searching (`find()` and `rfind()`) and slicing rather than full segmentation via `splitlines()`.
+
+## 2024-08-04 - Avoid read_text().splitlines() for small targeted line reads
+**Learning:** `_load_key_from_file` used to read the entire file string and then run `.splitlines()`. Using iterators over open files is not just faster, but also avoids pulling potentially large files completely into memory when reading line-by-line simply to find a target value. It also allows breaking out early without overhead.
+**Action:** When extracting subset metadata (like searching for API keys) from large string files, use python iterators `open(p, "r")` line-by-line reading and `break` loops early instead of using `read_text().splitlines()` or `read()`.
