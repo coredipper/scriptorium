@@ -21,3 +21,6 @@
 ## 2024-08-01 - Avoid splitlines() for text trimming
 **Learning:** Using `splitlines()` to remove boundary lines (such as markdown code block backticks ` ``` ` around JSON strings) from large text payloads creates a massive, temporary array of all lines in memory. This introduces `O(N)` memory overhead and compute simply to discard the first and last items.
 **Action:** To prevent memory overhead and O(N) allocations when extracting string data by trimming prefix/suffix boundaries, prefer string searching (`find()` and `rfind()`) and slicing rather than full segmentation via `splitlines()`.
+## 2024-11-20 - Avoid splitlines() on large configuration files
+**Learning:** Using `Path.read_text().splitlines()` on config files to search for keys (like API keys) forces the entire file into memory at once. If the configuration file is large or if the system is memory constrained, this creates unnecessary memory overhead. Iterating line-by-line using a file object (`for line in f:`) keeps memory usage to O(1).
+**Action:** When searching for specific lines or metadata in files (like API keys), use Python iterators (`open(path, 'r')` and `for line in f:`) to read line-by-line and break early, rather than loading the entire file into memory with `read_text().splitlines()`.
