@@ -21,3 +21,6 @@
 ## 2024-08-01 - Avoid splitlines() for text trimming
 **Learning:** Using `splitlines()` to remove boundary lines (such as markdown code block backticks ` ``` ` around JSON strings) from large text payloads creates a massive, temporary array of all lines in memory. This introduces `O(N)` memory overhead and compute simply to discard the first and last items.
 **Action:** To prevent memory overhead and O(N) allocations when extracting string data by trimming prefix/suffix boundaries, prefer string searching (`find()` and `rfind()`) and slicing rather than full segmentation via `splitlines()`.
+## 2023-10-27 - [Large NDJSON payload allocation]
+**Learning:** [Using `text.split("\n")` on large NDJSON texts creates a massive list of strings in memory allocating an array for the entire file at once. Doing this in `scrip/src/scrip/facts.py` was causing an O(N) allocation bottleneck for large payload parsing.]
+**Action:** [Use `io.StringIO(text, newline="\n")` instead of `text.split("\n")` to lazily iterate over lines without creating a huge array, significantly reducing memory overhead.]

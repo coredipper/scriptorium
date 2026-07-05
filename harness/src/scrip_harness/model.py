@@ -82,22 +82,24 @@ def _make_openai_strict(node: Any) -> None:
 
 def _load_key_from_file(path: Path) -> str | None:
     try:
-        text = path.expanduser().read_text(encoding="utf-8")
+        # Optimization: use an iterator to read line-by-line and break early instead of
+        # loading the entire file into memory with read_text().splitlines().
+        with open(path.expanduser(), encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    _, line = line.split("=", 1)
+                    line = line.strip()
+                if (line.startswith('"') and line.endswith('"')) or (
+                    line.startswith("'") and line.endswith("'")
+                ):
+                    line = line[1:-1].strip()
+                if line:
+                    return line
     except OSError:
         return None
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" in line:
-            _, line = line.split("=", 1)
-            line = line.strip()
-        if (line.startswith('"') and line.endswith('"')) or (
-            line.startswith("'") and line.endswith("'")
-        ):
-            line = line[1:-1].strip()
-        if line:
-            return line
     return None
 
 

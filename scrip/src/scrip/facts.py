@@ -84,7 +84,10 @@ def parse_ndjson(text: str) -> list[dict]:
     # delimited and may legally contain U+2028/U+2029/NEL inside a JSON string,
     # which splitlines() would wrongly treat as record breaks. trailing \r (from
     # \r\n) and the trailing empty element from a final newline are dropped below.
-    for lineno, raw_line in enumerate(text.split("\n"), start=1):
+    # OPTIMIZATION: use io.StringIO(text, newline="\n") instead of text.split("\n")
+    # to avoid allocating an O(N) list of all lines in memory for large payloads.
+    import io
+    for lineno, raw_line in enumerate(io.StringIO(text, newline="\n"), start=1):
         line = raw_line.strip()
         if not line:
             continue
