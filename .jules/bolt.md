@@ -21,3 +21,6 @@
 ## 2024-08-01 - Avoid splitlines() for text trimming
 **Learning:** Using `splitlines()` to remove boundary lines (such as markdown code block backticks ` ``` ` around JSON strings) from large text payloads creates a massive, temporary array of all lines in memory. This introduces `O(N)` memory overhead and compute simply to discard the first and last items.
 **Action:** To prevent memory overhead and O(N) allocations when extracting string data by trimming prefix/suffix boundaries, prefer string searching (`find()` and `rfind()`) and slicing rather than full segmentation via `splitlines()`.
+## 2024-11-20 - io.StringIO over string split
+**Learning:** Using `text.split("\n")` to parse huge NDJSON files into lines copies the entire text into memory as a list of strings, peaking at around ~150MB of RAM for a ~100MB string. By using `io.StringIO(text, newline="\n")` instead, we can process lines lazily, saving significant memory.
+**Action:** When extracting data line-by-line from a large string payload, prefer `io.StringIO(text)` over `text.split()`.

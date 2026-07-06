@@ -9,6 +9,7 @@ staleness from it."""
 
 from __future__ import annotations
 
+import io
 import json
 import re
 import subprocess
@@ -453,7 +454,7 @@ def _existing_entity_ids(root: Path) -> dict[str, str]:
         text = (root / "vault" / "facts" / "entities.ndjson").read_text(encoding="utf-8")
     except OSError:
         return out
-    for line in text.split("\n"):
+    for line in io.StringIO(text, newline="\n"):
         line = line.strip()
         if not line:
             continue
