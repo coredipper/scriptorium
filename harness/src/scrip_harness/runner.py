@@ -449,21 +449,22 @@ def _existing_entity_ids(root: Path) -> dict[str, str]:
     drafted edge may point at an entity from a prior run. Malformed rows are
     skipped here — scrip status/verify is the authority on file validity."""
     out: dict[str, str] = {}
+    path = root / "vault" / "facts" / "entities.ndjson"
     try:
-        text = (root / "vault" / "facts" / "entities.ndjson").read_text(encoding="utf-8")
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                name, eid = rec.get("name"), rec.get("entity_id")
+                if isinstance(name, str) and isinstance(eid, str):
+                    out.setdefault(name, eid)
     except OSError:
         return out
-    for line in text.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        name, eid = rec.get("name"), rec.get("entity_id")
-        if isinstance(name, str) and isinstance(eid, str):
-            out.setdefault(name, eid)
     return out
 
 

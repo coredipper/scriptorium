@@ -4,6 +4,20 @@ from scrip.errors import DataError, UsageError
 from scrip import facts
 
 
+def test_iter_lf_lines_matches_split_newline_semantics():
+    samples = [
+        "",
+        "one",
+        "one\n",
+        "one\n\n",
+        "one\r\ntwo\r\n",
+        "one\rtwo",
+        "one\u2028two\ntwo\u2029three",
+    ]
+    for text in samples:
+        assert list(facts._iter_lf_lines(text)) == text.split("\n")
+
+
 def test_parse_ndjson_basic():
     text = '{"a": 1}\n{"b": 2}\n'
     assert facts.parse_ndjson(text) == [{"a": 1}, {"b": 2}]
