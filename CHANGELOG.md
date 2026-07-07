@@ -7,6 +7,11 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-07-07
+
+scriptoria moves to 0.9.0 for the optional ontology-backed semantic layer.
+(Released alongside scrip-harness 0.11.0; see the [harness-0.11.0] entry below.)
+
 ### Added
 - **Optional ontology vocabulary.** `vault/ontology.yaml` can constrain claim
   predicates, entity kinds, and edge kinds; `scrip ontology` validates and
@@ -14,6 +19,13 @@ reference CLI. The file **contract** is versioned separately in
 - **External entity identity metadata.** Entity rows may carry optional `uri`,
   `same_as`, and `external_ids` fields while keeping local `entity/<slug>` ids as
   the stable contract identity.
+
+## [harness-0.11.0] — 2026-07-07
+
+scrip-harness moves to 0.11.0 and now requires `scriptoria>=0.9.0`, so installed
+harness runs pull the ontology-aware keeper.
+
+### Added
 - **Ontology-aware harness drafting.** `scrip-harness extract` and
   `scrip-harness graph` feed the active ontology summary into model prompts so
   drafts prefer local vocabulary before `scrip fact add` validates them.
@@ -457,6 +469,8 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[harness-0.11.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.0
+[0.9.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.9.0
 [harness-0.10.2]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.10.2
 [0.8.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.8.1
 [harness-0.10.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.10.0

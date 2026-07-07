@@ -145,10 +145,11 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 
 ## Status
 
-**Latest releases: scriptoria v0.8.1 and scrip-harness v0.10.2** (see
-[CHANGELOG.md](CHANGELOG.md)) — the harness now supports multi-provider models
-(`anthropic`, `openai`, `gemini`) and cited graph edges. The maintaining
-loop has runnable support end to end: every [AGENT.md](AGENT.md) stage
+**Latest releases: scriptoria v0.9.0 and scrip-harness v0.11.0** (see
+[CHANGELOG.md](CHANGELOG.md)) — the keeper now supports an optional ontology
+vocabulary, and the harness uses it for extraction/graph drafting while feeding
+bounded graph context into answers. The maintaining loop has runnable support end
+to end: every [AGENT.md](AGENT.md) stage
 (**INGEST · COMPILE · EXTRACT · ANSWER · PROMOTE · RECONCILE**) has deterministic
 `scrip` primitives to branch on, and the model-bearing COMPILE / EXTRACT /
 ANSWER / PROMOTE / RECONCILE steps have bounded `scrip-harness` commands. This
