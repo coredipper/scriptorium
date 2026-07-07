@@ -606,15 +606,16 @@ def draft_extraction(
     client=None,
     failures: list[dict] | None = None,
     api_key_file: str | None = None,
+    ontology: dict[str, Any] | None = None,
 ) -> DraftExtraction:
     """Ask a model to extract structured claims from ``source_text``. With
     ``failures`` (the per-record findings from ``scrip fact add``), asks instead
     for one replacement claim per failure, in order — the retry half of the
     extract loop."""
     prompt = (
-        build_extract_prompt(source_text)
+        build_extract_prompt(source_text, ontology)
         if failures is None
-        else build_extract_retry_prompt(source_text, failures)
+        else build_extract_retry_prompt(source_text, failures, ontology)
     )
     out = _complete_structured(
         EXTRACT_SYSTEM,
@@ -639,6 +640,7 @@ def draft_graph(
     provider: Provider | None = None,
     client=None,
     api_key_file: str | None = None,
+    ontology: dict[str, Any] | None = None,
 ) -> DraftGraph:
     """Ask a model to draft the entities and typed edges a source describes.
     Returns a validated :class:`DraftGraph`. Entities/edges carry no anchors, so
@@ -646,7 +648,7 @@ def draft_graph(
     unsluggable entities instead."""
     out = _complete_structured(
         GRAPH_SYSTEM,
-        build_graph_prompt(source_text),
+        build_graph_prompt(source_text, ontology),
         DraftGraph,
         provider=provider,
         model=model,

@@ -7,6 +7,24 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Added
+- **Optional ontology vocabulary.** `vault/ontology.yaml` can constrain claim
+  predicates, entity kinds, and edge kinds; `scrip ontology` validates and
+  summarizes it; and claim predicate aliases canonicalize before storage.
+- **External entity identity metadata.** Entity rows may carry optional `uri`,
+  `same_as`, and `external_ids` fields while keeping local `entity/<slug>` ids as
+  the stable contract identity.
+- **Ontology-aware harness drafting.** `scrip-harness extract` and
+  `scrip-harness graph` feed the active ontology summary into model prompts so
+  drafts prefer local vocabulary before `scrip fact add` validates them.
+- **Graph-guided answer context.** `scrip-harness answer` includes bounded,
+  ranked entity/edge context when relevant; this context is not citable, so final
+  citations remain verified claim ids or raw quotes.
+
+### Changed
+- **scrip-harness now requires `scriptoria>=0.9.0`.** The harness ontology
+  prompts rely on deterministic ontology enforcement in the keeper.
+
 ## [0.8.1] — 2026-07-07
 
 scriptoria moves to 0.8.1 for a lower-allocation NDJSON parser. (Released

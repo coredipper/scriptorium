@@ -34,6 +34,8 @@ except ImportError:
 
 from . import anchors, facts_dir, lock
 from .errors import DataError, UsageError
+from .ontology import Ontology
+from .ontology import load as load_ontology
 
 _POLARITIES = ("asserts", "denies", "qualifies")
 
@@ -52,7 +54,7 @@ _RECON_OWNED = ("reconciliation_id", "at")
 _CLAIM_REQUIRED = ("quote", "source_id", "subject", "predicate", "object", "polarity", "confidence")
 _CLAIM_ALLOWED = frozenset((*_CLAIM_REQUIRED, "claim_text", "tags"))
 _ENTITY_REQUIRED = ("entity_id", "name", "kind")
-_ENTITY_ALLOWED = frozenset((*_ENTITY_REQUIRED, "tags"))
+_ENTITY_ALLOWED = frozenset((*_ENTITY_REQUIRED, "tags", "uri", "same_as", "external_ids"))
 _EDGE_REQUIRED = ("src", "dst", "kind")
 # An edge may optionally be *cited*: a verbatim ``quote`` + ``source_id`` whose
 # ``anchor`` scrip mints+verifies exactly as for a claim. Bare edges stay
@@ -127,6 +129,26 @@ def _check_tags(rec: dict, index: int) -> None:
         raise DataError(f"record {index}: 'tags' must be a list of strings")
 
 
+def _check_string_list(rec: dict, key: str, index: int) -> None:
+    values = rec.get(key)
+    if values is None:
+        return
+    if not isinstance(values, list) or any(not isinstance(v, str) or not v.strip() for v in values):
+        raise DataError(f"record {index}: '{key}' must be a list of non-empty strings")
+
+
+def _check_string_map(rec: dict, key: str, index: int) -> None:
+    values = rec.get(key)
+    if values is None:
+        return
+    if (
+        not isinstance(values, dict)
+        or any(not isinstance(k, str) or not k.strip() for k in values)
+        or any(not isinstance(v, str) or not v.strip() for v in values.values())
+    ):
+        raise DataError(f"record {index}: '{key}' must be a mapping of strings to strings")
+
+
 def _check_shape(
     rec: dict,
     index: int,
@@ -148,13 +170,14 @@ def _check_shape(
         raise DataError(f"record {index}: missing required field(s): {', '.join(missing)}")
 
 
-def _validate(table: str, rec: dict, index: int) -> None:
+def _validate(table: str, rec: dict, index: int, ont: Ontology) -> None:
     if table == "claims":
         _check_shape(rec, index, _CLAIM_REQUIRED, _CLAIM_ALLOWED)
         # the quote's *emptiness* is a per-record finding, not a schema error
         _check_str(rec, "quote", index, allow_blank=True)
         for key in ("source_id", "subject", "predicate", "object"):
             _check_str(rec, key, index)
+        rec["predicate"] = ont.canonical_claim_predicate(rec["predicate"], index)
         if "claim_text" in rec:
             _check_str(rec, "claim_text", index, allow_blank=True)
         if rec["polarity"] not in _POLARITIES:
@@ -169,14 +192,20 @@ def _validate(table: str, rec: dict, index: int) -> None:
         _check_shape(rec, index, _ENTITY_REQUIRED, _ENTITY_ALLOWED)
         for key in _ENTITY_REQUIRED:
             _check_str(rec, key, index)
+        ont.validate_entity_kind(rec["kind"], index)
         eid = rec["entity_id"]
         if not (eid.startswith("entity/") and _SLUG_RE.fullmatch(eid[len("entity/") :])):
             raise DataError(f"record {index}: entity_id must look like entity/<slug>")
+        if "uri" in rec:
+            _check_str(rec, "uri", index)
+        _check_string_list(rec, "same_as", index)
+        _check_string_map(rec, "external_ids", index)
         _check_tags(rec, index)
     elif table == "edges":
         _check_shape(rec, index, _EDGE_REQUIRED, _EDGE_ALLOWED)
         for key in _EDGE_REQUIRED:
             _check_str(rec, key, index)
+        ont.validate_edge_kind(rec["kind"], index)
         if "quote" in rec or "source_id" in rec:
             # both or neither: a quote needs a source to anchor against
             missing = [k for k in ("quote", "source_id") if k not in rec]
@@ -410,8 +439,9 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
     """
     if table not in _FILES:
         raise UsageError(f"unknown facts table: {table}")
+    ont = load_ontology(root)
     for i, rec in enumerate(proposals):
-        _validate(table, rec, i)
+        _validate(table, rec, i, ont)
 
     failures: list[dict] = []
     resolved: list[dict | None] = [None] * len(proposals)
@@ -470,12 +500,16 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                 appended.append(full)
         elif table == "entities":
             def canon(rec: dict) -> dict:
-                return {
+                out = {
                     "entity_id": rec["entity_id"],
                     "name": rec["name"],
                     "kind": rec["kind"],
                     "tags": rec.get("tags") or [],
                 }
+                for key in ("uri", "same_as", "external_ids"):
+                    if key in rec:
+                        out[key] = rec[key]
+                return out
 
             byid = {rec.get("entity_id"): canon(rec) for rec in existing if "entity_id" in rec
                     and isinstance(rec.get("name"), str) and isinstance(rec.get("kind"), str)}

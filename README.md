@@ -69,6 +69,9 @@ scrip query claims --where "list_contains(tags, 'caching')"
 scrip query contradictions
 scrip query --sql "SELECT source_id, count(*) AS n FROM claims GROUP BY 1 ORDER BY n DESC"
 
+# optional semantic vocabulary: validates fact predicates/kinds when present
+scrip ontology
+
 # rung 4 — retrieve source blocks for an uncompiled question (grep by default)
 scrip search "what makes adding one document expensive?"
 
@@ -79,7 +82,8 @@ scrip similar --title "Compilation over retrieval" --from raw/karpathy-llm-wiki
 ### Optional: answer demo
 
 The optional harness can answer from a green vault with model output constrained
-to verified claim ids or raw quotes. A sanitized fixture is included for demos:
+to verified claim ids or raw quotes; graph neighborhoods may guide the answer
+but are not citable by themselves. A sanitized fixture is included for demos:
 
 ```sh
 scripts/demo_answer.sh --provider openai

@@ -13,7 +13,7 @@ from scrip_harness.answer import (
     build_answer_prompt,
     overlap_score,
 )
-from scrip_harness.runner import AnswerError, answer_question
+from scrip_harness.runner import AnswerError, _read_ndjson, answer_question
 
 from scrip import anchors, frontmatter, hashing
 
@@ -64,6 +64,17 @@ def test_build_answer_prompt_includes_evidence_packet():
 
 def test_overlap_score_counts_question_terms():
     assert overlap_score("cached answers", "Answers are cached by default") == 2
+
+
+def test_graph_context_ndjson_reader_preserves_unicode_line_separator(tmp_path):
+    path = tmp_path / "entities.ndjson"
+    path.write_text(
+        json.dumps({"entity_id": "entity/a", "name": "Alpha\u2028Beta"}, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert _read_ndjson(path, "entities.ndjson")[0]["name"] == "Alpha\u2028Beta"
 
 
 def test_answer_uses_verified_claim_and_raw_citations(tmp_path):
@@ -155,6 +166,75 @@ def test_answer_reads_relevant_wiki_pages_as_context(tmp_path):
         )
 
     answer_question(root, "What about compiled knowledge?", draft_fn=stub)
+
+
+def test_answer_includes_relevant_graph_context_but_does_not_cite_it(tmp_path):
+    root = _vault(tmp_path)
+    _raw(
+        root,
+        "topic",
+        "# Topic\n\nPageIndex is an alternative to a vector DB.\n",
+    )
+    _claim(
+        root,
+        "clm_0001",
+        "topic",
+        "PageIndex is an alternative to a vector DB.",
+        subject="pageindex",
+        predicate="alternative-to",
+    )
+    (root / "vault" / "facts" / "entities.ndjson").write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [
+                {
+                    "entity_id": "entity/pageindex",
+                    "name": "PageIndex",
+                    "kind": "tool",
+                    "tags": ["retrieval"],
+                    "uri": "https://example.test/pageindex",
+                    "same_as": ["https://example.test/page-index"],
+                    "external_ids": {"wikidata": "Q123"},
+                },
+                {
+                    "entity_id": "entity/vector-db",
+                    "name": "Vector DB",
+                    "kind": "tool",
+                    "tags": ["retrieval"],
+                },
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (root / "vault" / "facts" / "graph.ndjson").write_text(
+        json.dumps(
+            {
+                "src": "entity/pageindex",
+                "dst": "entity/vector-db",
+                "kind": "alternative-to",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def stub(question, *, evidence):
+        graph_context = evidence["graph_context"]
+        by_id = {entity["entity_id"]: entity for entity in graph_context["entities"]}
+        assert evidence["policy"]["graph_context"] == "context only; do not cite directly"
+        assert by_id["entity/pageindex"]["uri"] == "https://example.test/pageindex"
+        assert by_id["entity/pageindex"]["external_ids"] == {"wikidata": "Q123"}
+        assert graph_context["edges"][0]["kind"] == "alternative-to"
+        assert graph_context["edges"][0]["src_name"] == "PageIndex"
+        return DraftAnswer(
+            body="PageIndex is framed as an alternative to vector databases.[^a1]",
+            citations=[AnswerCitation(marker="a1", kind="claim", claim_id="clm_0001")],
+        )
+
+    result = answer_question(root, "How does PageIndex relate to vector databases?", draft_fn=stub)
+
+    assert "claim=clm_0001" in result["answer"]
 
 
 def test_answer_falls_back_to_raw_when_only_wiki_context_matches(tmp_path):

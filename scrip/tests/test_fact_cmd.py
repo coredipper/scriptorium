@@ -68,6 +68,17 @@ def _graph_lines(kb):
     return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
 
 
+def _entities_lines(kb):
+    p = kb.root / "vault" / "facts" / "entities.ndjson"
+    if not p.exists():
+        return []
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+
+
+def _write_ontology(kb, text):
+    (kb.root / "vault" / "ontology.yaml").write_text(text, encoding="utf-8")
+
+
 def _two_claims(kb):
     """Seed a contradiction pair to reconcile."""
     kb.add_raw("s", SRC)
@@ -242,6 +253,38 @@ def test_fact_add_json_reports_appended_records(kb, capsys):
     [rec] = data["appended"]
     assert rec["claim_id"] == "clm_0001"
     assert rec["anchor"].startswith("qh:")
+
+
+def test_fact_add_ontology_canonicalizes_claim_predicate_aliases(kb):
+    kb.add_raw("s", SRC)
+    _write_ontology(
+        kb,
+        """
+claim_predicates:
+  - caches
+predicate_aliases:
+  p: caches
+""",
+    )
+    rc = _run_add(
+        kb,
+        _ndjson(_claim("Caching answers beats recomputing them.", predicate="p")),
+    )
+    assert rc == 0
+    assert _claims_lines(kb)[0]["predicate"] == "caches"
+
+
+def test_fact_add_ontology_rejects_unknown_claim_predicate(kb):
+    kb.add_raw("s", SRC)
+    _write_ontology(kb, "claim_predicates:\n  - caches\n")
+
+    rc = _run_add(
+        kb,
+        _ndjson(_claim("Caching answers beats recomputing them.", predicate="p")),
+    )
+
+    assert rc == 3
+    assert _claims_lines(kb) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -481,6 +524,93 @@ def test_fact_add_entities_appends_and_conflicts(kb, capsys):
     [failure] = json.loads(capsys.readouterr().out)["failures"]
     assert failure["status"] == "ID_CONFLICT"
     assert len(lines.splitlines()) == 1  # nothing else was appended
+
+
+def test_fact_add_entities_accept_optional_uri_metadata(kb):
+    ent = {
+        "entity_id": "entity/duckdb",
+        "name": "DuckDB",
+        "kind": "tool",
+        "uri": "https://duckdb.org/",
+        "same_as": ["https://www.wikidata.org/wiki/Q118533698"],
+        "external_ids": {"wikidata": "Q118533698"},
+    }
+
+    assert _run_add(kb, _ndjson(ent), "--table", "entities") == 0
+
+    [stored] = _entities_lines(kb)
+    assert stored["uri"] == "https://duckdb.org/"
+    assert stored["same_as"] == ["https://www.wikidata.org/wiki/Q118533698"]
+    assert stored["external_ids"] == {"wikidata": "Q118533698"}
+
+
+def test_fact_add_ontology_rejects_unknown_entity_kind_and_edge_kind(kb):
+    _write_ontology(
+        kb,
+        """
+entity_kinds:
+  - tool
+edge_kinds:
+  - depends-on
+""",
+    )
+
+    assert (
+        _run_add(
+            kb,
+            _ndjson({"entity_id": "entity/a", "name": "A", "kind": "concept"}),
+            "--table",
+            "entities",
+        )
+        == 3
+    )
+    assert _run_add(kb, _ndjson(_edge(kind="relates-to")), "--table", "edges") == 3
+    assert _run_add(kb, _ndjson(_edge(kind="depends-on")), "--table", "edges") == 0
+
+
+def test_ontology_command_reports_optional_vocabulary(kb, capsys):
+    _write_ontology(
+        kb,
+        """
+entity_kinds:
+  - tool
+edge_kinds:
+  - depends-on
+claim_predicates:
+  - caches
+predicate_aliases:
+  p: caches
+""",
+    )
+
+    assert cli.main(["ontology", "--json", "--root", str(kb.root)]) == 0
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["active"] is True
+    assert data["entity_kinds"] == ["tool"]
+    assert data["edge_kinds"] == ["depends-on"]
+    assert data["claim_predicates"] == ["caches"]
+    assert data["predicate_aliases"] == {"p": "caches"}
+
+
+def test_ontology_rejects_alias_to_unknown_predicate(kb):
+    _write_ontology(
+        kb,
+        """
+claim_predicates:
+  - caches
+predicate_aliases:
+  p: stores
+""",
+    )
+
+    assert cli.main(["ontology", "--root", str(kb.root)]) == 3
+
+
+def test_ontology_rejects_unknown_top_level_key(kb):
+    _write_ontology(kb, "claim_predicate:\n  - caches\n")
+
+    assert cli.main(["ontology", "--root", str(kb.root)]) == 3
 
 
 def test_fact_add_edges_appends_and_skips_duplicates(kb):
