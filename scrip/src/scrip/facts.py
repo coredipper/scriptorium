@@ -19,6 +19,7 @@ mirroring how ``scrip anchor`` mints citations for wiki prose:
 
 from __future__ import annotations
 
+import io
 import json
 import re
 from datetime import datetime, timezone
@@ -84,7 +85,9 @@ def parse_ndjson(text: str) -> list[dict]:
     # delimited and may legally contain U+2028/U+2029/NEL inside a JSON string,
     # which splitlines() would wrongly treat as record breaks. trailing \r (from
     # \r\n) and the trailing empty element from a final newline are dropped below.
-    for lineno, raw_line in enumerate(text.split("\n"), start=1):
+    # We use io.StringIO to iterate lazily instead of text.split("\n") to prevent
+    # O(N) memory allocation when parsing large payloads.
+    for lineno, raw_line in enumerate(io.StringIO(text, newline="\n"), start=1):
         line = raw_line.strip()
         if not line:
             continue
