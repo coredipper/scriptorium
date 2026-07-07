@@ -5,7 +5,8 @@ network, no scrip — unit-testable."""
 from __future__ import annotations
 
 import json
-from typing import Literal
+from collections.abc import Mapping
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -53,15 +54,36 @@ class DraftExtraction(BaseModel):
     claims: list[DraftFact]
 
 
-def build_extract_prompt(source_text: str) -> str:
+def _ontology_guidance(ontology: Mapping[str, Any] | None) -> str:
+    if not ontology or not ontology.get("active"):
+        return ""
+    lines = ["\n\nLOCAL ONTOLOGY:"]
+    predicates = ontology.get("claim_predicates") or []
+    aliases = ontology.get("predicate_aliases") or {}
+    if predicates:
+        lines.append("- Use claim `predicate` values only from: " + ", ".join(predicates) + ".")
+    if aliases:
+        rendered = ", ".join(f"{alias} -> {target}" for alias, target in sorted(aliases.items()))
+        lines.append("- Prefer canonical predicates; accepted aliases map as: " + rendered + ".")
+    return "\n".join(lines)
+
+
+def build_extract_prompt(source_text: str, ontology: Mapping[str, Any] | None = None) -> str:
     return (
         "Extract the atomic factual claims from the source below as structured "
         "records. Each claim needs a verbatim `quote`, a subject/predicate/object "
-        "triple, and a polarity.\n\n----- SOURCE -----\n" + source_text
+        "triple, and a polarity."
+        + _ontology_guidance(ontology)
+        + "\n\n----- SOURCE -----\n"
+        + source_text
     )
 
 
-def build_extract_retry_prompt(source_text: str, failures: list[dict]) -> str:
+def build_extract_retry_prompt(
+    source_text: str,
+    failures: list[dict],
+    ontology: Mapping[str, Any] | None = None,
+) -> str:
     """Ask for a replacement for each failed quote, in the reported order. An
     empty replacement quote tells the runner to drop that claim."""
     listing = "\n".join(
@@ -77,7 +99,10 @@ def build_extract_retry_prompt(source_text: str, failures: list[dict]) -> str:
         "Return exactly one replacement claim per failed quote, in the same "
         "order, with the corrected verbatim `quote` and the claim's triple/"
         "polarity. If a claim cannot be supported by a verbatim quote, return it "
-        "with an empty `quote` to drop it.\n\n----- SOURCE -----\n" + source_text
+        "with an empty `quote` to drop it."
+        + _ontology_guidance(ontology)
+        + "\n\n----- SOURCE -----\n"
+        + source_text
     )
 
 

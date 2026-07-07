@@ -65,6 +65,10 @@ The data contract these steps assume is normative in [SPEC.md](SPEC.md).
      (`--table edges`): `{src,dst,kind}` by default; an edge may optionally be
      **cited** with a verbatim `quote` + `source_id`, and scrip mints+verifies its
      `anchor` just like a claim (an unverifiable quote fails the batch, exit 1).
+   - if `vault/ontology.yaml` exists, `scrip fact add` also validates entity
+     kinds, edge kinds, and claim predicates against it, and canonicalizes claim
+     predicate aliases before storage. Use `scrip ontology` to check the optional
+     vocabulary directly.
 2. `scrip stamp vault/facts/_meta.yaml` — every append (any table) drops the
    set's `input-hash`, so it deliberately shows STALE until you stamp it.
 3. `scrip verify` (anchors resolve) and `scrip query contradictions` (catch
@@ -92,10 +96,11 @@ reconciliations.
 
 `scrip-harness answer "<question>"` runs the safe form of this ladder: it refuses
 stale artifacts, broken anchors, and open contradictions by default; gathers
-facts/wiki evidence first; falls back to `scrip search` when compiled evidence is
-thin; and accepts the model answer only after every claim citation resolves via
-`scrip span` or every raw quote mints via `scrip anchor`. `--save` writes the
-verified answer to `wiki/explorations/`.
+facts/wiki evidence first; includes bounded graph context when relevant; falls
+back to `scrip search` when compiled evidence is thin; and accepts the model
+answer only after every claim citation resolves via `scrip span` or every raw
+quote mints via `scrip anchor`. Graph context and wiki pages are not citable by
+themselves. `--save` writes the verified answer to `wiki/explorations/`.
 
 ## PROMOTE — turn a good answer into a page
 
@@ -157,6 +162,7 @@ caveat is left to the read-only view layer rather than mutating a stamped page.
 | record provenance hashes after compiling | `scrip stamp [path…]` |
 | check every citation still resolves | `scrip verify` |
 | query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |
+| validate optional semantic vocabulary | `scrip ontology` |
 | retrieve source blocks (rung 4) | `scrip search "<question>"` |
 | build the semantic index (optional) | `scrip index` *(needs the `[embeddings]` extra)* |
 | answer with verified citations | `scrip-harness answer "<question>" [--save]` |

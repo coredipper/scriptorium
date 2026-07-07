@@ -57,3 +57,33 @@ Keep comparisons honest:
 
 Future work should integrate with those layers where useful, rather than
 rebuilding their entire product surface.
+
+## Phase 5 — Semantic Layer
+
+Status: initial implementation started.
+
+The Knowledge Graph Guys' recurring lesson maps cleanly onto the next layer of
+scriptorium: a graph becomes more useful when its identifiers and relationships
+are constrained by explicit semantics, not just free-text labels.
+
+Implemented:
+
+- Optional `vault/ontology.yaml` vocabulary.
+- `scrip ontology` validates and summarizes that vocabulary.
+- `scrip fact add` validates claim predicates, entity kinds, and edge kinds when
+  the ontology exists.
+- Claim predicate aliases canonicalize before storage, improving deterministic
+  contradiction grouping without adding model judgment.
+- Entity rows may carry optional external identity metadata (`uri`, `same_as`,
+  `external_ids`) while retaining local `entity/<slug>` ids as the contract
+  identity.
+- Harness EXTRACT and GRAPH prompts include the active ontology summary, so model
+  drafts prefer local vocabulary before deterministic validation runs.
+- `scrip-harness answer` includes a bounded, ranked `graph_context` packet from
+  relevant entities and edges. This is context-only: final citations still have
+  to be claim ids or verified raw quotes.
+
+Next:
+
+- Add focused views over the graph rather than whole-graph visualization, avoiding
+  the usual unreadable graph hairball.

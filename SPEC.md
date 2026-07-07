@@ -44,6 +44,7 @@ vault/
   raw/      immutable sources (+ .meta.yaml sidecars)   ← never edited after ingest
   facts/    structured extractions, queryable as data   ← derived from raw/
   wiki/     synthesized prose (concepts, entities)       ← derived from raw/
+  ontology.yaml   optional semantic vocabulary           ← validates facts if present
 ```
 
 ### 2.1 `raw/`
@@ -59,6 +60,9 @@ vault/
 ### 2.2 `facts/`
 Newline-delimited JSON (one record per line), queryable directly as data:
 - `facts/entities.ndjson` — entities (people, works, organizations, systems).
+  Entities have local `entity/<slug>` ids and may optionally carry external
+  identity metadata (`uri`, `same_as`, `external_ids`) without changing their
+  local contract identity.
 - `facts/claims.ndjson` — the claims table (§5).
 - `facts/graph.ndjson` — edges between entities/sources (citation/idea graph). An
   edge is `{src, dst, kind}`; it may optionally be **cited** — carrying a verbatim
@@ -80,6 +84,31 @@ appends without rewrites and diffs line-by-line in git.
 - `wiki/log.md` — an append-only journal of compiles, answers, reconciliations
   (not a tracked derived artifact).
 
+### 2.4 `ontology.yaml` (optional)
+
+`vault/ontology.yaml` is an optional semantic vocabulary. If absent, facts remain
+validated only by their base schema. If present, `scrip fact add` uses it to
+constrain selected free-text fields and canonicalize claim predicates via aliases:
+
+```yaml
+entity_kinds: [tool, concept, person, organization]
+edge_kinds: [depends-on, part-of, cites, alternative-to]
+claim_predicates: [caches, depends-on, contradicts]
+predicate_aliases:
+  stores: caches
+```
+
+- `entity_kinds` constrains `facts/entities.ndjson` `kind`.
+- `edge_kinds` constrains `facts/graph.ndjson` `kind`.
+- `claim_predicates` constrains `facts/claims.ndjson` `predicate`.
+- `predicate_aliases` maps proposed predicates to canonical predicates before
+  storage; alias targets must be listed in `claim_predicates` when that list is
+  present.
+
+The ontology is a checked source file, not a cache. It does not affect staleness
+hashes or provenance anchors; it only makes fact writes stricter and more
+canonical when operators opt in.
+
 ---
 
 ## 3. Identifiers
@@ -93,6 +122,11 @@ appends without rewrites and diffs line-by-line in git.
 
 A `raw/<slug>` id maps to the file `vault/raw/<slug>.md`. Block-scoped ids append
 `#<block_id>` (§7.2), e.g. `raw/friston-2010#b3f9a1c2d4e5`.
+
+Entity ids remain local, stable `entity/<slug>` identifiers even when an entity
+also carries an external `uri`, `same_as`, or `external_ids` mapping. External
+identity enriches integration; it does not replace the local id used by facts,
+wiki pages, and graph edges.
 
 ---
 
@@ -257,7 +291,8 @@ source of truth; deleting `.kb/` and recomputing from `vault/` must be a no-op.
 Answering a question is a descent through rungs; stop at the first that applies:
 
 1. **Consult compiled** — look in `wiki/` and query `facts/` first
-   (index-before-search).
+   (index-before-search). Entity/edge neighborhoods may guide context, but they
+   are not citations by themselves.
 2. **Hit & fresh** (`scrip status` clean) → answer from the compiled layer and
    cite anchors. *Cheapest path; no re-derivation.*
 3. **Hit & stale** → recompile only the stale artifact from its sources
@@ -332,6 +367,12 @@ behaviours; their exit codes are part of the contract surface
   it (§6), so `scrip verify` covers it. Backward-compatible: bare `{src,dst,kind}`
   edges are unaffected, and the optional fields do not change block ids, so the
   manifest `version` stays `2`.
+- **Optional ontology vocabulary (additive).** `vault/ontology.yaml` may constrain
+  entity kinds, edge kinds, and claim predicates, and may canonicalize claim
+  predicate aliases before append. Instances without the file are unaffected.
+  Entity rows may also carry optional `uri`, `same_as`, and `external_ids`
+  metadata. These are backward-compatible schema additions and do not change
+  block ids, so the manifest `version` stays `2`.
 - **v1 → v2 (block ids).** Block ids became content-derived (a digest of the
   normalized block text) instead of positional `b0,b1,…`, making block-precise
   dependencies insertion-stable (§7.2). The id *form* is the only change: a

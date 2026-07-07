@@ -12,6 +12,7 @@ from scrip_harness.graph import (
     DraftEdge,
     DraftEntity,
     DraftGraph,
+    build_graph_prompt,
     edge_records,
     edges_to_ndjson,
     entities_to_ndjson,
@@ -89,6 +90,21 @@ def test_edge_records_attaches_quote_and_source_only_for_cited_edges():
     }
     assert records[1] == {"src": "entity/a", "dst": "entity/b", "kind": "near"}
     assert records[2] == {"src": "entity/a", "dst": "entity/b", "kind": "weak"}
+
+
+def test_build_graph_prompt_includes_local_ontology_guidance():
+    ontology = {
+        "active": True,
+        "entity_kinds": ["tool", "concept"],
+        "edge_kinds": ["alternative-to", "part-of"],
+    }
+
+    prompt = build_graph_prompt("PageIndex relates to Vector DB.", ontology)
+
+    assert "LOCAL ONTOLOGY" in prompt
+    assert "Use entity `kind` values only from: tool, concept." in prompt
+    assert "Use edge `kind` values only from: alternative-to, part-of." in prompt
+    assert "PageIndex relates to Vector DB." in prompt
 
 
 # --------------------------------------------------------------------------- #
@@ -283,6 +299,33 @@ def test_graph_drops_edges_with_blank_kind(tmp_path):
     assert len(result["edges"]["appended"]) == 1
     assert result["dropped_edges"] == [{"src": "A", "dst": "B", "kind": "   "}]
     assert _status_rc(root) == 0  # entities + the one good edge committed, vault green
+
+
+def test_graph_drops_ontology_invalid_edge_kind_before_appending(tmp_path):
+    root = _vault(tmp_path)
+    (root / "vault" / "ontology.yaml").write_text(
+        "entity_kinds:\n  - concept\nedge_kinds:\n  - relates-to\n",
+        encoding="utf-8",
+    )
+    (root / "vault" / "raw" / "topic.md").write_text("# T\n\nA made B.\n", encoding="utf-8")
+
+    def stub(source_text, *, source_id):
+        return DraftGraph(
+            entities=[DraftEntity(name="A", kind="concept"), DraftEntity(name="B", kind="concept")],
+            edges=[DraftEdge(src="A", dst="B", kind="made-by")],
+        )
+
+    result = draft_graph_facts(root, "topic", draft_fn=stub)
+
+    assert result["dropped_edges"] == [
+        {"src": "A", "dst": "B", "kind": "made-by", "reason": "invalid kind"}
+    ]
+    assert {e["entity_id"] for e in _rows(root, "entities.ndjson")} == {
+        "entity/a",
+        "entity/b",
+    }
+    assert _rows(root, "graph.ndjson") == []
+    assert _status_rc(root) == 0
 
 
 def test_graph_skips_entities_with_blank_kind(tmp_path):

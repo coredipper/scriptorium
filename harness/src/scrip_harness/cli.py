@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 
 def _resolve_root(root_arg: str | None) -> Path:
@@ -33,6 +33,22 @@ def _normalize_sources(raw: str) -> list[str]:
         for p in (part.strip() for part in raw.split(","))
         if p
     ]
+
+
+def _ontology_for_model(root: Path) -> dict[str, Any] | None:
+    try:
+        import scrip.ontology as ontology_mod
+        from scrip.errors import DataError
+    except ImportError as e:
+        raise RuntimeError(
+            "ontology-aware harness commands require scriptoria>=0.9.0"
+        ) from e
+
+    try:
+        ont = ontology_mod.load(root)
+    except DataError as e:
+        raise RuntimeError(str(e)) from e
+    return ont.summary() if ont.active else None
 
 
 def _add_model_args(parser: argparse.ArgumentParser, *, include_provider: bool = True) -> None:
@@ -204,6 +220,14 @@ def main(argv: list[str] | None = None) -> int:
     chosen_model = args.model
     chosen_provider = cast(model_mod.Provider, getattr(args, "provider", "auto"))
     api_key_file = cast(str | None, getattr(args, "api_key_file", None))
+    needs_ontology = args.command in {"extract", "graph"} or (
+        args.command == "ingest" and args.through in {"extract", "graph"}
+    )
+    try:
+        local_ontology = _ontology_for_model(root) if needs_ontology else None
+    except RuntimeError as e:
+        print(f"scrip-harness: {e}", file=sys.stderr)
+        return 1
 
     if args.command == "ingest":
         def _compile_draft(text: str, *, source_id: str, failures=None):
@@ -216,12 +240,14 @@ def main(argv: list[str] | None = None) -> int:
             return model_mod.draft_extraction(
                 text, source_id=source_id, provider=chosen_provider,
                 model=chosen_model, failures=failures, api_key_file=api_key_file,
+                ontology=local_ontology,
             )
 
         def _graph_draft(text: str, *, source_id: str):
             return model_mod.draft_graph(
                 text, source_id=source_id, provider=chosen_provider,
                 model=chosen_model, api_key_file=api_key_file,
+                ontology=local_ontology,
             )
 
         clean_fn = None
@@ -365,6 +391,7 @@ def main(argv: list[str] | None = None) -> int:
                 model=chosen_model,
                 failures=failures,
                 api_key_file=api_key_file,
+                ontology=local_ontology,
             )
 
         extract_sources = None
@@ -404,6 +431,7 @@ def main(argv: list[str] | None = None) -> int:
                 provider=chosen_provider,
                 model=chosen_model,
                 api_key_file=api_key_file,
+                ontology=local_ontology,
             )
 
         try:
@@ -419,7 +447,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         extras = []
         if result["dropped_edges"]:
-            extras.append(f"{len(result['dropped_edges'])} edge(s) dropped (unknown endpoint)")
+            extras.append(f"{len(result['dropped_edges'])} edge(s) dropped")
         if result["skipped_entities"]:
             extras.append(f"{len(result['skipped_entities'])} entity name(s) skipped (no slug)")
         if extras:

@@ -23,6 +23,7 @@ uv run --project scrip scrip --help
 | `scrip status` | Report `STALE` / `OK` / `UNCOMPILED` artifacts from the dependency graph. `--no-cache` recomputes from files; `--rebuild-manifest` regenerates the cache. |
 | `scrip verify` | Check every provenance anchor still resolves to text in its source; check referenced sources exist and `claim_id`s are unique. Fails on `BROKEN` and `AMBIGUOUS` by default; `--allow-ambiguous` downgrades `AMBIGUOUS` to a warning. |
 | `scrip query [claims\|entities\|edges\|contradictions\|reconciliations]` | Structured query over `vault/facts/*.ndjson` via DuckDB. `--sql "<duckdb>"`, `--where`, `--limit`. |
+| `scrip ontology` | Validate and summarize optional `vault/ontology.yaml` vocabulary for fact predicates, entity kinds, and edge kinds. |
 | `scrip ingest <url\|file>` | Fetch/read a source and write canonical `vault/raw/<slug>.md` plus sidecar metadata. HTML/PDF need the optional `[ingest]` extra. |
 | `scrip new concept\|entity <slug> --from raw/...` | Scaffold a derived wiki page for the agent to fill. |
 | `scrip anchor "<quote>" --source raw/<slug>` | Mint a content-anchored footnote for a verbatim source quote. |

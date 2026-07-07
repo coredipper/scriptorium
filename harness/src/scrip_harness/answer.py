@@ -24,8 +24,8 @@ ANSWER_SYSTEM = (
     "Avoid generic table headers; quote enough source words to be unique.\n"
     "- Keep the body free of footnote definitions; the harness mints and appends "
     "verified definitions after your draft.\n"
-    "- Do not cite wiki pages directly. They are context; final citations must be "
-    "claim ids or raw quotes."
+    "- Do not cite wiki pages or graph context directly. They are context; final "
+    "citations must be claim ids or raw quotes."
 )
 
 

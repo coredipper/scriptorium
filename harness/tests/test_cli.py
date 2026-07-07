@@ -29,9 +29,15 @@ def test_graph_command_drafts_entities_and_edges(tmp_path, monkeypatch, capsys):
     for d in ("vault/raw", "vault/wiki/concepts", "vault/facts", ".kb"):
         (tmp_path / d).mkdir(parents=True)
     (tmp_path / "SPEC.md").write_text("marker\n", encoding="utf-8")
+    (tmp_path / "vault" / "ontology.yaml").write_text(
+        "entity_kinds:\n  - tool\nedge_kinds:\n  - alternative-to\n",
+        encoding="utf-8",
+    )
     (tmp_path / "vault" / "raw" / "topic.md").write_text("# T\n\nText.\n", encoding="utf-8")
+    seen = {}
 
     def fake_draft_graph(text, *, source_id, **kw):
+        seen["ontology"] = kw.get("ontology")
         return DraftGraph(
             entities=[
                 DraftEntity(name="PageIndex", kind="tool"),
@@ -45,6 +51,8 @@ def test_graph_command_drafts_entities_and_edges(tmp_path, monkeypatch, capsys):
     rc = cli.main(["graph", "topic", "--root", str(tmp_path)])
 
     assert rc == 0
+    assert seen["ontology"]["entity_kinds"] == ["tool"]
+    assert seen["ontology"]["edge_kinds"] == ["alternative-to"]
     assert "drafted 2 entities and 1 edge(s)" in capsys.readouterr().out
     ents = (tmp_path / "vault" / "facts" / "entities.ndjson").read_text(encoding="utf-8")
     assert "entity/pageindex" in ents and "entity/vector-db" in ents
@@ -90,6 +98,46 @@ def test_extract_command_multi_source_attributes_each_claim(tmp_path, monkeypatc
     assert "extracted 2 claim(s) from raw/a,raw/b" in capsys.readouterr().out
     recs = (tmp_path / "vault" / "facts" / "claims.ndjson").read_text(encoding="utf-8")
     assert '"source_id": "raw/a"' in recs and '"source_id": "raw/b"' in recs
+
+
+def test_extract_command_passes_local_ontology_to_model(tmp_path, monkeypatch, capsys):
+    from scrip_harness.extract import DraftExtraction, DraftFact
+
+    for d in ("vault/raw", "vault/wiki/concepts", "vault/facts", ".kb"):
+        (tmp_path / d).mkdir(parents=True)
+    (tmp_path / "SPEC.md").write_text("marker\n", encoding="utf-8")
+    (tmp_path / "vault" / "ontology.yaml").write_text(
+        "claim_predicates:\n  - caches\npredicate_aliases:\n  cached-by: caches\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "vault" / "raw" / "topic.md").write_text(
+        "# Topic\n\nCached answers avoid recomputation.\n", encoding="utf-8"
+    )
+    seen = {}
+
+    def fake_draft_extraction(text, *, source_id, failures=None, **kw):
+        seen["ontology"] = kw.get("ontology")
+        return DraftExtraction(
+            claims=[
+                DraftFact(
+                    quote="Cached answers avoid recomputation.",
+                    subject="answers",
+                    predicate="cached-by",
+                    object="work",
+                )
+            ]
+        )
+
+    monkeypatch.setattr(model, "draft_extraction", fake_draft_extraction)
+
+    rc = cli.main(["extract", "topic", "--root", str(tmp_path)])
+
+    assert rc == 0
+    assert seen["ontology"]["claim_predicates"] == ["caches"]
+    assert seen["ontology"]["predicate_aliases"] == {"cached-by": "caches"}
+    assert "extracted 1 claim(s)" in capsys.readouterr().out
+    recs = (tmp_path / "vault" / "facts" / "claims.ndjson").read_text(encoding="utf-8")
+    assert '"predicate": "caches"' in recs
 
 
 def test_promote_resynthesize_command_redrafts_target(tmp_path, monkeypatch, capsys):

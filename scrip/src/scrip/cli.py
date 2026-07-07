@@ -493,6 +493,25 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
     return 1 if result["failures"] else 0
 
 
+def cmd_ontology(args: argparse.Namespace) -> int:
+    from . import ontology
+
+    root = resolve_root(args.root)
+    ont = ontology.load(root)
+    result = {"path": str(ontology.ontology_path(root).relative_to(root)), **ont.summary()}
+    if args.json:
+        _emit(result)
+    else:
+        state = "active" if ont.active else "not present or empty"
+        print(f"ontology: {state}")
+        if ont.active:
+            print(f"  entity kinds: {', '.join(result['entity_kinds']) or '(none)'}")
+            print(f"  edge kinds: {', '.join(result['edge_kinds']) or '(none)'}")
+            print(f"  claim predicates: {', '.join(result['claim_predicates']) or '(none)'}")
+            print(f"  predicate aliases: {len(result['predicate_aliases'])}")
+    return 0
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     from . import ingest, lock
 
@@ -763,6 +782,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--stdin", action="store_true", help="read proposed records from stdin"
     )
     pfa.set_defaults(func=cmd_fact_add)
+
+    po = sub.add_parser(
+        "ontology",
+        parents=[common],
+        help="validate and summarize optional vault/ontology.yaml vocabulary",
+    )
+    po.set_defaults(func=cmd_ontology)
 
     pin = sub.add_parser(
         "ingest",

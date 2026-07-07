@@ -13,11 +13,14 @@ import json
 import re
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
+from scrip.errors import DataError
+
 from scrip import frontmatter  # reuse the deterministic frontmatter helper
+from scrip import ontology as ontology_mod
 
 from .answer import DraftAnswer, overlap_score, tokenize
 from .compile import DraftPage, assemble_body, extract_markers, format_sources
@@ -606,6 +609,10 @@ def draft_graph_facts(
         source_text = (root / "vault" / "raw" / f"{slug}.md").read_text(encoding="utf-8")
     except OSError as e:
         raise GraphError(f"cannot read {source_id}: {e}") from e
+    try:
+        ont = ontology_mod.load(root)
+    except DataError as e:
+        raise GraphError(str(e)) from e
 
     draft = draft_fn(source_text, source_id=source_id)
 
@@ -625,6 +632,10 @@ def draft_graph_facts(
         if not eid or not e.kind.strip():
             skipped_entities.append(e.name)
             continue
+        try:
+            ont.validate_entity_kind(e.kind, len(kept_entities))
+        except DataError as e:
+            raise GraphError(str(e)) from e
         kept_entities.append(e)
         name_to_id[e.name] = eid
     for name, eid in _existing_entity_ids(root).items():
@@ -637,10 +648,17 @@ def draft_graph_facts(
     kept_edges: list[DraftEdge] = []
     dropped_edges: list[dict] = []
     for edge in draft.edges:
-        if edge.src in name_to_id and edge.dst in name_to_id and edge.kind.strip():
-            kept_edges.append(edge)
-        else:
+        if edge.src not in name_to_id or edge.dst not in name_to_id or not edge.kind.strip():
             dropped_edges.append({"src": edge.src, "dst": edge.dst, "kind": edge.kind})
+            continue
+        try:
+            ont.validate_edge_kind(edge.kind, len(kept_edges))
+        except DataError:
+            dropped_edges.append(
+                {"src": edge.src, "dst": edge.dst, "kind": edge.kind, "reason": "invalid kind"}
+            )
+            continue
+        kept_edges.append(edge)
 
     if not kept_entities and not kept_edges:
         raise GraphError(f"the draft proposed no entities or edges for {source_id}")
@@ -677,7 +695,7 @@ def draft_graph_facts(
         f"{source_id}: +{n_ent} entit{'y' if n_ent == 1 else 'ies'}, +{n_edge} edge(s)"
     )
     if dropped_edges:
-        note += f", {len(dropped_edges)} edge(s) dropped (unknown endpoint)"
+        note += f", {len(dropped_edges)} edge(s) dropped (invalid endpoint/kind)"
     if degraded_edges:
         note += f", {len(degraded_edges)} edge(s) degraded (unverifiable quote)"
     if skipped_entities:
@@ -886,6 +904,157 @@ def _rank_claims(question: str, claims: list[dict], top: int) -> list[dict]:
     return ranked[:top]
 
 
+def _iter_lf_lines(text: str) -> Iterator[str]:
+    start = 0
+    while True:
+        end = text.find("\n", start)
+        if end == -1:
+            yield text[start:]
+            return
+        yield text[start:end]
+        start = end + 1
+
+
+def _read_ndjson(path: Path, label: str) -> list[dict]:
+    if not path.exists():
+        return []
+    rows: list[dict] = []
+    for lineno, line in enumerate(_iter_lf_lines(path.read_text(encoding="utf-8")), start=1):
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError as e:
+            raise AnswerError(f"{label}:{lineno}: invalid JSON: {e}") from e
+        if not isinstance(rec, dict):
+            raise AnswerError(f"{label}:{lineno}: expected a JSON object")
+        rows.append(rec)
+    return rows
+
+
+def _flatten_text(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        out: list[str] = []
+        for k, v in value.items():
+            out.append(str(k))
+            out.extend(_flatten_text(v))
+        return out
+    if isinstance(value, list):
+        out: list[str] = []
+        for item in value:
+            out.extend(_flatten_text(item))
+        return out
+    return [str(value)]
+
+
+def _token_overlap(seed: set[str], *values) -> int:
+    text = " ".join(part for value in values for part in _flatten_text(value))
+    return len(tokenize(text) & seed)
+
+
+def _entity_context(rec: dict, score: int) -> dict:
+    out = {
+        "entity_id": rec.get("entity_id"),
+        "name": rec.get("name"),
+        "kind": rec.get("kind"),
+        "tags": rec.get("tags") or [],
+        "score": score,
+    }
+    for key in ("uri", "same_as", "external_ids"):
+        if rec.get(key):
+            out[key] = rec[key]
+    return out
+
+
+def _graph_answer_context(
+    root: Path,
+    question: str,
+    ranked_claims: list[dict],
+    *,
+    top: int,
+) -> dict:
+    entities = _read_ndjson(root / "vault" / "facts" / "entities.ndjson", "entities.ndjson")
+    edges = _read_ndjson(root / "vault" / "facts" / "graph.ndjson", "graph.ndjson")
+    if not entities and not edges:
+        return {"entities": [], "edges": []}
+
+    seed_text = [question]
+    for claim in ranked_claims:
+        seed_text.extend(_flatten_text(claim.get("text")))
+        seed_text.extend(_flatten_text(claim.get("triple")))
+        seed_text.extend(_flatten_text(claim.get("tags")))
+    seed = tokenize(" ".join(seed_text))
+    if not seed:
+        return {"entities": [], "edges": []}
+
+    ranked_entities: list[tuple[int, str, dict]] = []
+    for rec in entities:
+        score = _token_overlap(
+            seed,
+            rec.get("entity_id"),
+            rec.get("name"),
+            rec.get("kind"),
+            rec.get("tags"),
+            rec.get("uri"),
+            rec.get("same_as"),
+            rec.get("external_ids"),
+        )
+        if score > 0:
+            ranked_entities.append((score, str(rec.get("entity_id") or ""), rec))
+    ranked_entities.sort(key=lambda item: (-item[0], item[1]))
+    selected_entities = ranked_entities[:top]
+    selected_entity_ids = {
+        str(rec.get("entity_id")) for _, _, rec in selected_entities if rec.get("entity_id")
+    }
+    entity_by_id = {
+        str(rec.get("entity_id")): rec for rec in entities if isinstance(rec.get("entity_id"), str)
+    }
+
+    ranked_edges: list[tuple[int, str, str, str, dict]] = []
+    for rec in edges:
+        src = str(rec.get("src") or "")
+        dst = str(rec.get("dst") or "")
+        src_ent = entity_by_id.get(src, {})
+        dst_ent = entity_by_id.get(dst, {})
+        score = _token_overlap(
+            seed,
+            src,
+            dst,
+            rec.get("kind"),
+            src_ent.get("name"),
+            src_ent.get("kind"),
+            dst_ent.get("name"),
+            dst_ent.get("kind"),
+        )
+        if src in selected_entity_ids or dst in selected_entity_ids:
+            score += 2
+        if score > 0:
+            ranked_edges.append((score, src, dst, str(rec.get("kind") or ""), rec))
+    ranked_edges.sort(key=lambda item: (-item[0], item[1], item[2], item[3]))
+
+    context_edges: list[dict] = []
+    for score, src, dst, _kind, rec in ranked_edges[:top]:
+        edge = {
+            "src": src,
+            "dst": dst,
+            "kind": rec.get("kind"),
+            "src_name": entity_by_id.get(src, {}).get("name"),
+            "dst_name": entity_by_id.get(dst, {}).get("name"),
+            "score": score,
+        }
+        for key in ("source_id", "anchor"):
+            if rec.get(key):
+                edge[key] = rec[key]
+        context_edges.append(edge)
+
+    return {
+        "entities": [_entity_context(rec, score) for score, _, rec in selected_entities],
+        "edges": context_edges,
+    }
+
+
 def _gather_answer_evidence(
     root: Path,
     question: str,
@@ -905,6 +1074,7 @@ def _gather_answer_evidence(
         claims = rows
     ranked_claims = _rank_claims(question, claims, k)
     pages = _read_wiki_pages(root, question, k)
+    graph_context = _graph_answer_context(root, question, ranked_claims, top=k)
 
     raw_blocks: list[dict] = []
     # Wiki pages are context-only: the model may read them, but final citations
@@ -934,11 +1104,13 @@ def _gather_answer_evidence(
     return {
         "claims": ranked_claims,
         "wiki_pages": pages,
+        "graph_context": graph_context,
         "raw_blocks": raw_blocks,
         "policy": {
             "claim_citations": "cite by claim_id",
             "raw_citations": "cite by source_id plus verbatim quote",
             "wiki_pages": "context only; do not cite directly",
+            "graph_context": "context only; do not cite directly",
         },
     }
 

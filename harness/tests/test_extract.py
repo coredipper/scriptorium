@@ -7,7 +7,13 @@ import json
 import subprocess
 
 import pytest
-from scrip_harness.extract import DraftExtraction, DraftFact, to_ndjson
+from scrip_harness.extract import (
+    DraftExtraction,
+    DraftFact,
+    build_extract_prompt,
+    build_extract_retry_prompt,
+    to_ndjson,
+)
 from scrip_harness.runner import ExtractError, extract_facts
 
 
@@ -50,6 +56,35 @@ def test_to_ndjson_serializes_proposals_for_scrip():
     # scrip owns these — proposals must never carry them
     for line in lines:
         assert "anchor" not in line and "claim_id" not in line and "extracted_at" not in line
+
+
+def test_build_extract_prompt_includes_local_ontology_guidance():
+    ontology = {
+        "active": True,
+        "claim_predicates": ["alternative-to", "builds-on"],
+        "predicate_aliases": {"competes-with": "alternative-to"},
+    }
+
+    prompt = build_extract_prompt("PageIndex is an alternative.", ontology)
+
+    assert "LOCAL ONTOLOGY" in prompt
+    assert "alternative-to, builds-on" in prompt
+    assert "competes-with -> alternative-to" in prompt
+    assert "PageIndex is an alternative." in prompt
+
+
+def test_build_extract_retry_prompt_keeps_local_ontology_guidance():
+    ontology = {"active": True, "claim_predicates": ["caches"]}
+
+    prompt = build_extract_retry_prompt(
+        "Cached answers avoid recomputation.",
+        [{"status": "BROKEN", "quote": "Cached answer", "detail": "not present"}],
+        ontology,
+    )
+
+    assert "LOCAL ONTOLOGY" in prompt
+    assert "Use claim `predicate` values only from: caches." in prompt
+    assert "BROKEN" in prompt
 
 
 # --------------------------------------------------------------------------- #

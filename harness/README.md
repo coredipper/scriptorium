@@ -76,8 +76,8 @@ So the model owns *what to say*; `scrip` owns *what is true on disk*.
    contradictions` must be clean by default. Stale artifacts, broken anchors, or
    open contradiction pairs stop the answer before any model call.
 2. **Gather** — the harness ranks claims from `facts/`, reads relevant compiled
-   wiki pages as context, and falls back to `scrip search` when compiled evidence
-   is thin.
+   wiki pages and graph neighborhoods as context, and falls back to `scrip search`
+   when compiled evidence is thin. Wiki/graph context cannot be cited directly.
 3. **Draft** — the selected provider answers from that bounded evidence packet and returns
    structured citation records: either an existing `claim_id` or a verbatim raw
    quote.

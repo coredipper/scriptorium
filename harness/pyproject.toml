@@ -1,6 +1,6 @@
 [project]
 name = "scrip-harness"
-version = "0.10.2"
+version = "0.11.0"
 description = "Runnable AGENT.md compile loop for scriptorium: drives `scrip` via subprocess + a model provider. Not part of the deterministic scrip core."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,9 +19,9 @@ dependencies = [
     "pydantic>=2",
     # Version floor (not the dev path source below) is what ships in the wheel's
     # Requires-Dist, so an installed scrip-harness pulls scriptoria from PyPI.
-    # >=0.8.1: includes cited-edge support plus the LF-only NDJSON parser fix the
-    # harness shells through when it submits fact batches.
-    "scriptoria>=0.8.1",
+    # >=0.9.0: includes optional ontology vocabulary enforcement used by the
+    # harness prompt hints and the deterministic fact writer.
+    "scriptoria>=0.9.0",
 ]
 
 [project.optional-dependencies]

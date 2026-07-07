@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -84,12 +86,27 @@ def entity_id(name: str) -> str:
     return f"entity/{s}" if s else ""
 
 
-def build_graph_prompt(source_text: str) -> str:
+def _ontology_guidance(ontology: Mapping[str, Any] | None) -> str:
+    if not ontology or not ontology.get("active"):
+        return ""
+    lines = ["\n\nLOCAL ONTOLOGY:"]
+    entity_kinds = ontology.get("entity_kinds") or []
+    edge_kinds = ontology.get("edge_kinds") or []
+    if entity_kinds:
+        lines.append("- Use entity `kind` values only from: " + ", ".join(entity_kinds) + ".")
+    if edge_kinds:
+        lines.append("- Use edge `kind` values only from: " + ", ".join(edge_kinds) + ".")
+    return "\n".join(lines)
+
+
+def build_graph_prompt(source_text: str, ontology: Mapping[str, Any] | None = None) -> str:
     return (
         "Draft the entities and the typed relationships among them from the source "
         "below. Every edge's `src`/`dst` must be the `name` of an entity you also "
         "list. Where a single verbatim span states a relationship, copy it into the "
-        "edge's `quote`; otherwise leave `quote` empty.\n\n----- SOURCE -----\n"
+        "edge's `quote`; otherwise leave `quote` empty."
+        + _ontology_guidance(ontology)
+        + "\n\n----- SOURCE -----\n"
         + source_text
     )
 
