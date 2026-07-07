@@ -24,3 +24,7 @@
 ## 2024-11-20 - io.StringIO over string split
 **Learning:** Using `text.split("\n")` to parse huge NDJSON files into lines copies the entire text into memory as a list of strings, peaking at around ~150MB of RAM for a ~100MB string. By using `io.StringIO(text, newline="\n")` instead, we can process lines lazily, saving significant memory.
 **Action:** When extracting data line-by-line from a large string payload, prefer `io.StringIO(text)` over `text.split()`.
+
+## 2024-11-20 - io.StringIO memory peak [Superseded]
+**Learning:** `io.StringIO(text)` over `text.split("\n")` was previously thought to reduce peak memory for in-memory NDJSON strings, however this is incorrect. A different approach (LF-only iterator and direct file streaming) is required to properly reduce memory for parsing large text strings in memory.
+**Action:** Do not rely on `io.StringIO` to reduce memory peaks for large string variables; explore file streams or true lazy iterators instead.
