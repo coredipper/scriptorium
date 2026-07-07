@@ -11,4 +11,4 @@ into a stamped page.
 way. The harness is optional and lives outside the deterministic core.
 """
 
-__version__ = "0.10.1"
+__version__ = "0.10.2"

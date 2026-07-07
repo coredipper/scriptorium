@@ -7,6 +7,32 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-07-07
+
+scriptoria moves to 0.8.1 for a lower-allocation NDJSON parser. (Released
+alongside scrip-harness 0.10.2; see the [harness-0.10.2] entry below.)
+
+### Fixed
+- **`facts.parse_ndjson()` keeps LF-only semantics without materializing all
+  lines.** The parser now uses a small `"\n"` iterator instead of
+  `text.split("\n")`, preserving the existing CRLF handling and keeping
+  `U+2028`/`U+2029` inside JSON strings while avoiding the full list allocation
+  on large in-memory payloads.
+
+## [harness-0.10.2] — 2026-07-07
+
+scrip-harness moves to 0.10.2 and now requires `scriptoria>=0.8.1`, so installed
+harness runs pull the corrected NDJSON parser.
+
+### Changed
+- **Existing graph entity lookup streams `entities.ndjson`.** The graph runner no
+  longer reads the whole entity table into memory before resolving edges to
+  entities from previous runs.
+
+### Fixed
+- **Runtime package version metadata is aligned.** `scrip_harness.__version__`
+  now matches the published package version on this release line.
+
 ## [0.8.0] — 2026-06-30
 
 scriptoria moves to 0.8.0 for **cited graph edges**. (Released alongside
@@ -413,6 +439,8 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[harness-0.10.2]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.10.2
+[0.8.1]: https://github.com/coredipper/scriptorium/releases/tag/v0.8.1
 [harness-0.10.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.10.0
 [0.8.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.8.0
 [harness-0.9.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.9.0
