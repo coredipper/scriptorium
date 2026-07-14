@@ -412,10 +412,7 @@ def _load_meta(root: Path) -> dict:
 
 def _write_meta(root: Path, data: dict, new_sources: list[str]) -> None:
     derived = list(data.get("derived-from") or [])
-    for sid in new_sources:
-        if sid not in derived:
-            derived.append(sid)
-    data["derived-from"] = derived
+    data["derived-from"] = list(dict.fromkeys(derived + new_sources))
     # Drop the stamp on EVERY append: with an unchanged derived-from the
     # recomputed input-hash would still match the stored one, and status would
     # report OK over facts nobody has blessed. Removing input-hash forces STALE
@@ -596,12 +593,12 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                 if not ends_with_newline:
                     f.write("\n")
                 f.write(payload)
-            new_sources: list[str] = []
+            new_sources_dict: dict[str, None] = {}
             if table in ("claims", "edges"):
                 for rec in appended:
                     sid = rec.get("source_id")  # cited edges carry one; bare edges don't
-                    if sid and sid not in new_sources:
-                        new_sources.append(sid)
-            _write_meta(root, meta, new_sources)
+                    if sid:
+                        new_sources_dict[sid] = None
+            _write_meta(root, meta, list(new_sources_dict.keys()))
 
     return {"table": table, "appended": appended, "skipped": skipped, "failures": []}

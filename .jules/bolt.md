@@ -24,3 +24,6 @@
 ## 2024-11-20 - Avoid splitlines() on large configuration files
 **Learning:** Using `Path.read_text().splitlines()` on config files to search for keys (like API keys) forces the entire file into memory at once. If the configuration file is large or if the system is memory constrained, this creates unnecessary memory overhead. Iterating line-by-line using a file object (`for line in f:`) keeps memory usage to O(1).
 **Action:** When searching for specific lines or metadata in files (like API keys), use Python iterators (`open(path, 'r')` and `for line in f:`) to read line-by-line and break early, rather than loading the entire file into memory with `read_text().splitlines()`.
+## 2024-11-21 - O(N) List Deduplication
+**Learning:** Using `if item not in seen_list: seen_list.append(item)` scales terribly to O(N²) for loops processing large collections of items because checking membership in a Python list takes O(N) time.
+**Action:** Replace this pattern with `list(dict.fromkeys(items))` to deduplicate iterables in O(1) membership check time, which scales nicely to O(N) while perfectly preserving insertion order since Python 3.7.
