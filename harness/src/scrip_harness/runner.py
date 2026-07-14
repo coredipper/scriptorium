@@ -1392,10 +1392,7 @@ def promote_page(
     t_meta, t_body = frontmatter.load(target_page)
     # union of both pages' sources — both the new derived-from and (for re-synthesis)
     # the source set the merged page is re-drafted from.
-    df = list(t_meta.get("derived-from") or [])
-    for s in sources:
-        if s not in df:
-            df.append(s)
+    df = list(dict.fromkeys(list(t_meta.get("derived-from") or []) + list(sources)))
     if resynthesize:
         # re-draft one coherent page over the union via the shared COMPILE core,
         # re-minting every anchor; the target keeps its own id and title.
@@ -1405,11 +1402,7 @@ def promote_page(
         # each dep to its base raw/<slug> (deduped) for the read/mint AND make that the
         # new derived-from: a re-synthesized page genuinely depends on the whole file,
         # and widening a block dep to its file is safe (it can only go *more* stale).
-        resynth_sources: list[str] = []
-        for s in df:
-            base = s.split("#", 1)[0]
-            if base not in resynth_sources:
-                resynth_sources.append(base)
+        resynth_sources = list(dict.fromkeys(s.split("#", 1)[0] for s in df))
         src_ids, valid_sources, source_text, draft_source_id = _read_sources(
             root, slug, resynth_sources, PromoteError
         )
@@ -1424,9 +1417,7 @@ def promote_page(
         new_body = merge_bodies(t_body, body)
     t_meta["derived-from"] = df
     sup = list(t_meta.get("supersedes") or [])
-    if cand_id not in sup:
-        sup.append(cand_id)
-    t_meta["supersedes"] = sup
+    t_meta["supersedes"] = list(dict.fromkeys(sup + [cand_id]))
     confs = [c for c in (t_meta.get("confidence"), meta.get("confidence"))
              if isinstance(c, (int, float))]
     if confs:
