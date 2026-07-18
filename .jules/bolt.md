@@ -24,3 +24,6 @@
 ## 2024-11-20 - Avoid splitlines() on large configuration files
 **Learning:** Using `Path.read_text().splitlines()` on config files to search for keys (like API keys) forces the entire file into memory at once. If the configuration file is large or if the system is memory constrained, this creates unnecessary memory overhead. Iterating line-by-line using a file object (`for line in f:`) keeps memory usage to O(1).
 **Action:** When searching for specific lines or metadata in files (like API keys), use Python iterators (`open(path, 'r')` and `for line in f:`) to read line-by-line and break early, rather than loading the entire file into memory with `read_text().splitlines()`.
+## 2024-11-20 - O(1) Deduplication Preserving Insertion Order
+**Learning:** Using `if item not in seen: seen.append(item)` where `seen` is a list creates an O(N^2) operation. In Python 3.7+, dictionaries preserve insertion order natively, making `list(dict.fromkeys(iterator))` the fastest and most idiomatic way to deduplicate an iterable while maintaining order.
+**Action:** Replace list-based deduplication loops with `dict.fromkeys()` or `seen[item] = None` dict assignments for O(1) membership checks anywhere order preservation is required.
