@@ -24,3 +24,6 @@
 ## 2024-11-20 - Avoid splitlines() on large configuration files
 **Learning:** Using `Path.read_text().splitlines()` on config files to search for keys (like API keys) forces the entire file into memory at once. If the configuration file is large or if the system is memory constrained, this creates unnecessary memory overhead. Iterating line-by-line using a file object (`for line in f:`) keeps memory usage to O(1).
 **Action:** When searching for specific lines or metadata in files (like API keys), use Python iterators (`open(path, 'r')` and `for line in f:`) to read line-by-line and break early, rather than loading the entire file into memory with `read_text().splitlines()`.
+## 2025-07-19 - O(1) Label Deduplication for Footnotes
+**Learning:** In string parsing functions that extract sequences iteratively via regex `finditer()` (like tracking distinct footnote labels in a page body), checking `if label not in seen` on a growing list (`seen.append(label)`) creates $O(N^2)$ algorithmic time complexity. As the number of footnotes grows, the parsing time spikes non-linearly.
+**Action:** To achieve $O(1)$ membership checks and deduplication while preserving insertion order in Python (without custom logic), use `dict.fromkeys(item for item in iterable)` instead of list iterations (`if item not in seen: seen.append(item)`).
