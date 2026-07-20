@@ -31,11 +31,12 @@ def split_body(body: str) -> tuple[str, list[str]]:
 
 
 def _labels_in_order(body: str) -> list[str]:
-    seen: list[str] = []
+    seen: dict[str, None] = {}
     for m in _MARKER.finditer(body):
-        if m.group(1) not in seen:
-            seen.append(m.group(1))
-    return seen
+        label = m.group(1)
+        if label not in seen:
+            seen[label] = None
+    return list(seen)
 
 
 def renumber(body: str, start: int) -> str:
