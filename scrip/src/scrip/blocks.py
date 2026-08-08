@@ -38,43 +38,45 @@ def split_blocks(text: str) -> list[dict]:
     # Use splitlines(keepends=True): its boundary set (form feed, NEL, U+2028/9,
     # …) is part of the deterministic segmentation contract — io.StringIO only
     # splits on \r/\n and would re-hash existing blocks that contain those chars.
-    ranges: list[list[int]] = []  # [start, end] per block
-    cur: list[int] | None = None
+    # Emit blocks in a single pass: a running [cur_start, cur_end] paragraph is
+    # flushed at each boundary, so no intermediate `ranges` list is allocated.
+    out: list[dict] = []
+    seen: dict[str, int] = {}
+
+    def emit(s: int, e: int) -> None:
+        slice_text = text[s:e]
+        out.append(
+            {
+                "block_id": _block_id(slice_text, seen),
+                "span": [s, e],
+                "hash": hashing.sha256_text(slice_text),
+            }
+        )
+
+    cur_start: int | None = None
+    cur_end = 0
     start = 0
 
     for line in text.splitlines(keepends=True):
         end = start + len(line)
         if _is_blank(line):
-            if cur is not None:
-                ranges.append(cur)
-                cur = None
+            if cur_start is not None:
+                emit(cur_start, cur_end)
+                cur_start = None
         elif _is_heading(line):
-            if cur is not None:
-                ranges.append(cur)
-                cur = None
-            ranges.append([start, end])  # a heading is its own block
+            if cur_start is not None:
+                emit(cur_start, cur_end)
+                cur_start = None
+            emit(start, end)  # a heading is its own block
         else:
-            if cur is None:
-                cur = [start, end]
-            else:
-                cur[1] = end
+            if cur_start is None:
+                cur_start = start
+            cur_end = end
         start = end
 
-    if cur is not None:
-        ranges.append(cur)
+    if cur_start is not None:
+        emit(cur_start, cur_end)
 
-    out: list[dict] = []
-    seen: dict[str, int] = {}
-    for s, e in ranges:
-        slice_text = text[s:e]
-        block_id = _block_id(slice_text, seen)
-        out.append(
-            {
-                "block_id": block_id,
-                "span": [s, e],
-                "hash": hashing.sha256_text(slice_text),
-            }
-        )
     return out
 
 
