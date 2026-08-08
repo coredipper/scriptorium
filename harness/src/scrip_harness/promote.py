@@ -31,12 +31,11 @@ def split_body(body: str) -> tuple[str, list[str]]:
 
 
 def _labels_in_order(body: str) -> list[str]:
-    # ⚡ Bolt: O(1) membership and deduplication by exploiting dict insertion order
-    # (replaces O(N^2) list tracking).
-    seen: dict[str, None] = {}
+    seen: list[str] = []
     for m in _MARKER.finditer(body):
-        seen[m.group(1)] = None
-    return list(seen)
+        if m.group(1) not in seen:
+            seen.append(m.group(1))
+    return seen
 
 
 def renumber(body: str, start: int) -> str:
