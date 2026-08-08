@@ -18,12 +18,7 @@ def extract_markers(body: str) -> list[str]:
     """Footnote reference *labels* in ``body``, distinct, in first-appearance order
     (``[^a1]`` → ``"a1"``). Returned verbatim — the caller requires them to be
     exactly ``a1..aN`` (no leading zeros, no foreign labels) before stamping."""
-    seen: list[str] = []
-    for m in _MARKER.finditer(body):
-        label = m.group(1)
-        if label not in seen:
-            seen.append(label)
-    return seen
+    return list(dict.fromkeys(m.group(1) for m in _MARKER.finditer(body)))
 
 SYSTEM = (
     "You are the scribe for a scriptorium knowledge base. From the source(s) "
