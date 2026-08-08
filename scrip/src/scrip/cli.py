@@ -35,12 +35,20 @@ def _safe_slug(slug: str, what: str = "slug") -> str:
 # --------------------------------------------------------------------------- #
 # Root resolution
 # --------------------------------------------------------------------------- #
+def _looks_like_root(cand: Path) -> bool:
+    """True if ``cand`` looks like a scriptorium instance root: a directory
+    containing ``vault/`` plus either ``SPEC.md`` or ``.kb/``."""
+    return (cand / "vault").is_dir() and (
+        (cand / "SPEC.md").exists() or (cand / ".kb").is_dir()
+    )
+
+
 def resolve_root(root_arg: str | None) -> Path:
     """Return the scriptorium root.
 
     With ``--root`` the path is used verbatim (must be a directory). Otherwise we
-    walk up from the cwd for the nearest ancestor that looks like an instance: a
-    directory containing ``vault/`` plus either ``SPEC.md`` or ``.kb/``.
+    walk up from the cwd for the nearest ancestor that looks like an instance
+    (see :func:`_looks_like_root`).
     """
     if root_arg:
         root = Path(root_arg).expanduser().resolve()
@@ -50,13 +58,12 @@ def resolve_root(root_arg: str | None) -> Path:
 
     cur = Path.cwd().resolve()
     for cand in (cur, *cur.parents):
-        if (cand / "vault").is_dir() and (
-            (cand / "SPEC.md").exists() or (cand / ".kb").is_dir()
-        ):
+        if _looks_like_root(cand):
             return cand
     raise errors.UsageError(
         "could not locate a scriptorium root (looked for a parent with vault/ and "
-        "SPEC.md or .kb/). Pass --root explicitly."
+        "SPEC.md or .kb/). Run `scrip init` to start one here, or pass --root "
+        "explicitly."
     )
 
 
@@ -68,6 +75,53 @@ def _emit(payload: dict) -> None:
 # --------------------------------------------------------------------------- #
 # Subcommand handlers  ->  return an int exit code
 # --------------------------------------------------------------------------- #
+def cmd_init(args: argparse.Namespace) -> int:
+    from . import graph, manifest_path
+
+    target = Path(args.path or ".").expanduser().resolve()
+    if target.exists() and not target.is_dir():
+        raise errors.UsageError(f"init target is not a directory: {target}")
+    if _looks_like_root(target):
+        if args.json:
+            _emit({"root": str(target), "status": "exists", "created": []})
+        else:
+            print(f"already a scriptorium root: {target} (nothing to do)")
+        return 0
+    # Refuse to create a nested instance: an inner vault/ would shadow the outer
+    # root for every command run beneath it (resolve_root stops at the nearest
+    # ancestor).
+    for cand in target.parents:
+        if _looks_like_root(cand):
+            raise errors.UsageError(
+                f"refusing to create a nested scriptorium: {target} is inside the "
+                f"root at {cand}. Run `scrip init` at that root, or pick a "
+                f"directory outside it."
+            )
+
+    created: list[str] = []
+    for rel in ("vault/raw", "vault/facts", "vault/wiki", ".kb"):
+        d = target / rel
+        if not d.is_dir():
+            d.mkdir(parents=True, exist_ok=True)
+            created.append(rel + "/")
+    # Same as `scrip status --rebuild-manifest`: scan the (empty) vault and write
+    # the .kb/manifest.json cache, so the instance starts warm and detectable.
+    graph.compute_status(target, rebuild=True)
+    created.append(str(manifest_path(target).relative_to(target)))
+
+    if args.json:
+        _emit({"root": str(target), "status": "initialized", "created": created})
+    else:
+        print(f"initialized scriptorium root at {target}")
+        for c in created:
+            print(f"  + {c}")
+        print(
+            "  next: add a source (`scrip ingest <url|file>`), compile a page "
+            "(`scrip new` + `scrip anchor` + `scrip stamp`), then `scrip verify`"
+        )
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     from . import graph
 
@@ -554,6 +608,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--version", action="version", version=f"scrip {__version__}")
     sub = p.add_subparsers(dest="command", required=True, metavar="<command>")
+
+    pinit = sub.add_parser(
+        "init",
+        help="create the root skeleton (vault/{raw,facts,wiki}/ + .kb/ cache) and its manifest",
+    )
+    pinit.add_argument(
+        "path",
+        nargs="?",
+        metavar="DIR",
+        help="directory to initialize (default: current directory; created if absent)",
+    )
+    pinit.add_argument(
+        "--json", action="store_true", help="machine-readable JSON output"
+    )
+    pinit.set_defaults(func=cmd_init)
 
     ps = sub.add_parser(
         "status",

@@ -20,6 +20,7 @@ uv run --project scrip scrip --help
 
 | Command | What it does |
 |---|---|
+| `scrip init [DIR]` | Create the root skeleton — `vault/{raw,facts,wiki}/` plus the `.kb/` cache and its manifest — in `DIR` (default: the current directory). Idempotent in an existing root; refuses to nest a new instance inside one. |
 | `scrip status` | Report `STALE` / `OK` / `UNCOMPILED` artifacts from the dependency graph. `--no-cache` recomputes from files; `--rebuild-manifest` regenerates the cache. |
 | `scrip verify` | Check every provenance anchor still resolves to text in its source; check referenced sources exist and `claim_id`s are unique. Fails on `BROKEN` and `AMBIGUOUS` by default; `--allow-ambiguous` downgrades `AMBIGUOUS` to a warning. |
 | `scrip query [claims\|entities\|edges\|contradictions\|reconciliations]` | Structured query over `vault/facts/*.ndjson` via DuckDB. `--sql "<duckdb>"`, `--where`, `--limit`. |
@@ -36,7 +37,8 @@ uv run --project scrip scrip --help
 | `scrip pageindex search "<question>" [--source raw/<slug>]` | Search cached PageIndex sections, returning only snippets mapped back to canonical `vault/raw/` text. |
 | `scrip watch` / `scrip unlock` | Watch vault health in a poll loop; clear a stale advisory write lock. |
 
-Every command accepts `--root DIR` and `--json`.
+Every command accepts `--root DIR` and `--json` (`init` takes its target as a
+positional path instead of `--root`).
 
 The optional `scrip-harness` package adds the model-bearing commands, including
 `scrip-harness answer "<question>"`, which gathers evidence with these primitives
