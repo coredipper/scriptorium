@@ -38,10 +38,20 @@ def split_blocks(text: str) -> list[dict]:
     # Use splitlines(keepends=True): its boundary set (form feed, NEL, U+2028/9,
     # …) is part of the deterministic segmentation contract — io.StringIO only
     # splits on \r/\n and would re-hash existing blocks that contain those chars.
-    # ⚡ Bolt Optimization: Calculate blocks in a single pass to avoid O(N) memory
-    # allocation overhead from intermediate `ranges` list.
+    # Emit blocks in a single pass: a running [cur_start, cur_end] paragraph is
+    # flushed at each boundary, so no intermediate `ranges` list is allocated.
     out: list[dict] = []
     seen: dict[str, int] = {}
+
+    def emit(s: int, e: int) -> None:
+        slice_text = text[s:e]
+        out.append(
+            {
+                "block_id": _block_id(slice_text, seen),
+                "span": [s, e],
+                "hash": hashing.sha256_text(slice_text),
+            }
+        )
 
     cur_start: int | None = None
     cur_end = 0
@@ -51,35 +61,13 @@ def split_blocks(text: str) -> list[dict]:
         end = start + len(line)
         if _is_blank(line):
             if cur_start is not None:
-                slice_text = text[cur_start:cur_end]
-                out.append(
-                    {
-                        "block_id": _block_id(slice_text, seen),
-                        "span": [cur_start, cur_end],
-                        "hash": hashing.sha256_text(slice_text),
-                    }
-                )
+                emit(cur_start, cur_end)
                 cur_start = None
         elif _is_heading(line):
             if cur_start is not None:
-                slice_text = text[cur_start:cur_end]
-                out.append(
-                    {
-                        "block_id": _block_id(slice_text, seen),
-                        "span": [cur_start, cur_end],
-                        "hash": hashing.sha256_text(slice_text),
-                    }
-                )
+                emit(cur_start, cur_end)
                 cur_start = None
-
-            slice_text = text[start:end]
-            out.append(
-                {
-                    "block_id": _block_id(slice_text, seen),
-                    "span": [start, end],
-                    "hash": hashing.sha256_text(slice_text),
-                }
-            )
+            emit(start, end)  # a heading is its own block
         else:
             if cur_start is None:
                 cur_start = start
@@ -87,14 +75,7 @@ def split_blocks(text: str) -> list[dict]:
         start = end
 
     if cur_start is not None:
-        slice_text = text[cur_start:cur_end]
-        out.append(
-            {
-                "block_id": _block_id(slice_text, seen),
-                "span": [cur_start, cur_end],
-                "hash": hashing.sha256_text(slice_text),
-            }
-        )
+        emit(cur_start, cur_end)
 
     return out
 
