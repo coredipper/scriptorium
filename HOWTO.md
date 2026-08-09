@@ -16,6 +16,16 @@ the synthesis; you curate and ask. For the agent's own protocol see
 
 ## One-time setup
 
+From PyPI (the usual path — start your own instance anywhere):
+
+```sh
+uv tool install scriptoria              # the `scrip` command (or: pip install scriptoria)
+scrip init my-kb && cd my-kb            # creates vault/{raw,facts,wiki}/ + the .kb/ cache
+```
+
+Or from a checkout (this repo is itself a live instance — its `vault/` is the
+dogfooded example, so no `scrip init` needed):
+
 ```sh
 git clone https://github.com/coredipper/scriptorium
 cd scriptorium

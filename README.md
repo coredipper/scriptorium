@@ -58,6 +58,9 @@ the import package are both `scrip` (`pip install scriptoria` → run `scrip`).
 # install the deterministic keeper
 uv tool install scriptoria        # or: pip install scriptoria   (from a checkout: ./scrip)
 
+# start your own instance: creates vault/{raw,facts,wiki}/ + the .kb/ cache
+scrip init my-kb && cd my-kb
+
 # what's stale / what's uncompiled
 scrip status
 

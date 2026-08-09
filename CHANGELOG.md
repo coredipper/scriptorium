@@ -7,6 +7,14 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Added
+- **`scrip init [DIR]`.** Create the root skeleton — `vault/{raw,facts,wiki}/`
+  plus the `.kb/` cache with its manifest — so a fresh PyPI install starts with a
+  detectable, green instance instead of a "could not locate a scriptorium root"
+  error. Idempotent in an existing root (no-op); refuses (exit 2) to nest a new
+  instance inside an existing one. The root-not-found error now also points at
+  `scrip init`.
+
 ## [0.9.0] — 2026-07-07
 
 scriptoria moves to 0.9.0 for the optional ontology-backed semantic layer.
