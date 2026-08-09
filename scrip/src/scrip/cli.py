@@ -101,9 +101,14 @@ def cmd_init(args: argparse.Namespace) -> int:
     created: list[str] = []
     for rel in ("vault/raw", "vault/facts", "vault/wiki", ".kb"):
         d = target / rel
-        if not d.is_dir():
-            d.mkdir(parents=True, exist_ok=True)
-            created.append(rel + "/")
+        if d.is_dir():
+            continue
+        if d.exists():
+            raise errors.UsageError(
+                f"cannot create {rel}/: a file already exists at {d}"
+            )
+        d.mkdir(parents=True, exist_ok=True)
+        created.append(rel + "/")
     # Same as `scrip status --rebuild-manifest`: scan the (empty) vault and write
     # the .kb/manifest.json cache, so the instance starts warm and detectable.
     graph.compute_status(target, rebuild=True)

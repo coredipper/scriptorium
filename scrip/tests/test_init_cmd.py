@@ -80,6 +80,15 @@ def test_init_fills_in_missing_layers(tmp_path):
         assert (root / rel).is_dir()
 
 
+def test_init_layer_path_is_a_file_refused_exit_2(tmp_path):
+    """A file squatting a layer path is refused cleanly (exit 2), not an
+    uncaught FileExistsError mapped to the internal-error exit code."""
+    root = tmp_path / "kb"
+    (root / "vault").mkdir(parents=True)
+    (root / "vault" / "facts").write_text("oops\n", encoding="utf-8")
+    assert cli.main(["init", str(root)]) == 2
+
+
 def test_init_json_shape(tmp_path, capsys):
     root = tmp_path / "kb"
     assert cli.main(["init", "--json", str(root)]) == 0
