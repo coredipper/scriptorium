@@ -408,9 +408,9 @@ def _extract_gemini_json(resp: dict[str, Any], output_format: type[BaseModel]) -
                     raise RuntimeError("Gemini response candidate part text was not a string")
                 candidates.append(text)
 
-    for text in _walk_strings(resp):
-        if text not in candidates:
-            candidates.append(text)
+    # ⚡ Bolt: Replace O(N²) list membership check with O(1) deduplication while preserving order
+    candidates.extend(_walk_strings(resp))
+    candidates = list(dict.fromkeys(candidates))
     return _json_from_candidates("Gemini", candidates, "parseable structured output")
 
 
