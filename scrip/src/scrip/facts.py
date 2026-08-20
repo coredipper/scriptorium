@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -79,18 +78,6 @@ def _now() -> str:
 # --------------------------------------------------------------------------- #
 # Input parsing & structural validation (DataError, exit 3)
 # --------------------------------------------------------------------------- #
-def _iter_lf_lines(text: str) -> Iterator[str]:
-    """Yield ``text.split("\n")``-equivalent lines without allocating the list."""
-    start = 0
-    while True:
-        end = text.find("\n", start)
-        if end == -1:
-            yield text[start:]
-            return
-        yield text[start:end]
-        start = end + 1
-
-
 def parse_ndjson(text: str) -> list[dict]:
     """Parse proposed records (one JSON object per line). Malformed input is a
     :class:`DataError` with its line number; an empty input is a usage error."""
@@ -99,7 +86,12 @@ def parse_ndjson(text: str) -> list[dict]:
     # delimited and may legally contain U+2028/U+2029/NEL inside a JSON string,
     # which splitlines() would wrongly treat as record breaks. trailing \r (from
     # \r\n) and the trailing empty element from a final newline are dropped below.
-    for lineno, raw_line in enumerate(_iter_lf_lines(text), start=1):
+    # Optimization: using io.StringIO(text, newline="\n") is faster than custom iteration
+    import io
+
+    for lineno, raw_line in enumerate(io.StringIO(text, newline="\n"), start=1):
+        if raw_line.endswith("\n"):
+            raw_line = raw_line[:-1]
         line = raw_line.strip()
         if not line:
             continue
@@ -181,9 +173,7 @@ def _validate(table: str, rec: dict, index: int, ont: Ontology) -> None:
         if "claim_text" in rec:
             _check_str(rec, "claim_text", index, allow_blank=True)
         if rec["polarity"] not in _POLARITIES:
-            raise DataError(
-                f"record {index}: polarity must be one of {', '.join(_POLARITIES)}"
-            )
+            raise DataError(f"record {index}: polarity must be one of {', '.join(_POLARITIES)}")
         c = rec["confidence"]
         if isinstance(c, bool) or not isinstance(c, (int, float)) or not 0 <= c <= 1:
             raise DataError(f"record {index}: confidence must be a number in [0, 1]")
@@ -229,9 +219,7 @@ def _validate(table: str, rec: dict, index: int, ont: Ontology) -> None:
         if rec["decision"] == "supersede":
             winner = rec.get("winner")
             if winner not in (rec["claim_a"], rec["claim_b"]):
-                raise DataError(
-                    f"record {index}: supersede needs 'winner' = claim_a or claim_b"
-                )
+                raise DataError(f"record {index}: supersede needs 'winner' = claim_a or claim_b")
         elif "winner" in rec:
             raise DataError(f"record {index}: 'winner' is only valid for decision 'supersede'")
 
@@ -496,6 +484,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                 keys[key] = cid
                 appended.append(full)
         elif table == "entities":
+
             def canon(rec: dict) -> dict:
                 out = {
                     "entity_id": rec["entity_id"],
@@ -508,8 +497,13 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                         out[key] = rec[key]
                 return out
 
-            byid = {rec.get("entity_id"): canon(rec) for rec in existing if "entity_id" in rec
-                    and isinstance(rec.get("name"), str) and isinstance(rec.get("kind"), str)}
+            byid = {
+                rec.get("entity_id"): canon(rec)
+                for rec in existing
+                if "entity_id" in rec
+                and isinstance(rec.get("name"), str)
+                and isinstance(rec.get("kind"), str)
+            }
             for i, rec in enumerate(proposals):
                 new = canon(rec)
                 seen = byid.get(new["entity_id"])
@@ -530,9 +524,7 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                         }
                     )
         elif table == "edges":
-            seen_edges = {
-                (rec.get("src"), rec.get("dst"), rec.get("kind")) for rec in existing
-            }
+            seen_edges = {(rec.get("src"), rec.get("dst"), rec.get("kind")) for rec in existing}
             for i, rec in enumerate(proposals):
                 key = (rec["src"], rec["dst"], rec["kind"])
                 if key in seen_edges:
@@ -546,17 +538,23 @@ def add(root: Path, table: str, proposals: list[dict]) -> dict:
                     full["anchor"] = res["anchor"]
                 appended.append(full)
         else:  # reconciliations
-            claim_ids = {c.get("claim_id") for c in _read_table(facts_dir(root) / "claims.ndjson")[0]}
+            claim_ids = {
+                c.get("claim_id") for c in _read_table(facts_dir(root) / "claims.ndjson")[0]
+            }
             for i, rec in enumerate(proposals):
                 refs = [rec["claim_a"], rec["claim_b"]]
                 if rec["decision"] == "supersede":
                     refs.append(rec["winner"])
                 missing = next((r for r in refs if r not in claim_ids), None)
                 if missing is not None:
-                    failures.append({
-                        "index": i, "status": "MISSING_CLAIM", "claim": missing,
-                        "detail": f"{missing!r} is not a claim in claims.ndjson",
-                    })
+                    failures.append(
+                        {
+                            "index": i,
+                            "status": "MISSING_CLAIM",
+                            "claim": missing,
+                            "detail": f"{missing!r} is not a claim in claims.ndjson",
+                        }
+                    )
             if failures:
                 return {"table": table, "appended": [], "skipped": [], "failures": failures}
             seen_pairs = {frozenset((r.get("claim_a"), r.get("claim_b"))) for r in existing}
