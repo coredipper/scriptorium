@@ -27,6 +27,7 @@
 ## 2024-11-21 - O(N) List Deduplication
 **Learning:** Using `if item not in seen_list: seen_list.append(item)` scales terribly to O(N²) for loops processing large collections of items because checking membership in a Python list takes O(N) time.
 **Action:** Replace this pattern with `list(dict.fromkeys(items))` to deduplicate iterables in O(1) membership check time, which scales nicely to O(N) while perfectly preserving insertion order since Python 3.7.
-## 2024-11-22 - O(1) Iteration for NDJSON parsing
-**Learning:** To prevent O(N) memory allocations when parsing large string payloads (such as NDJSON files), using `io.StringIO(text, newline="\n")` to create a lazy iterator is much faster and cleaner than writing custom loops using `find` and `yield`.
-**Action:** When working with large newline-delimited strings, use `io.StringIO` for lazy and efficient parsing instead of `splitlines()` or custom search/slice iterators.
+
+## 2024-11-22 - io.StringIO vs custom find() generator for NDJSON
+**Learning:** Replacing a custom string-searching generator (`find("\n")` and `yield`) with `io.StringIO(text, newline="\n")` for large NDJSON string parsing yields no measurable performance improvement because `json.loads()` dominates the time cost. Furthermore, replacing custom iterators might lose tests that explicitly pin boundary contracts (like preserving `\r` and `\u2028`). Finally, the repository uses `ruff check` but not `ruff format` in CI, so avoid reformatting unrelated code.
+**Action:** Do not micro-optimize string splitting in NDJSON parsing as `json.loads` is the bottleneck. Always preserve explicit tests for line terminator contracts. Do not run `ruff format` if the repository explicitly leaves formatting to the author.
