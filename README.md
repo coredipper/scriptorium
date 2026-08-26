@@ -148,10 +148,11 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 
 ## Status
 
-**Latest releases: scriptoria v0.9.0 and scrip-harness v0.11.0** (see
-[CHANGELOG.md](CHANGELOG.md)) — the keeper now supports an optional ontology
-vocabulary, and the harness uses it for extraction/graph drafting while feeding
-bounded graph context into answers. The maintaining loop has runnable support end
+**Latest releases: scriptoria v0.10.0 and scrip-harness v0.11.0** (see
+[CHANGELOG.md](CHANGELOG.md)) — `scrip init` gives a fresh install a first
+command to run; the keeper supports an optional ontology vocabulary, and the
+harness uses it for extraction/graph drafting while feeding bounded graph context
+into answers. The maintaining loop has runnable support end
 to end: every [AGENT.md](AGENT.md) stage
 (**INGEST · COMPILE · EXTRACT · ANSWER · PROMOTE · RECONCILE**) has deterministic
 `scrip` primitives to branch on, and the model-bearing COMPILE / EXTRACT /

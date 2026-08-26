@@ -7,6 +7,17 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Performance
+- **O(N) deduplication in the harness.** `compile.extract_markers`,
+  `promote._labels_in_order`, `runner`, and the Gemini structured-output reader
+  replaced `if x not in list: list.append(x)` (O(N²)) with `dict.fromkeys()`,
+  which preserves first-appearance order. Ships with the next `scrip-harness`
+  release.
+
+## [0.10.0] — 2026-08-26
+
+scriptoria moves to 0.10.0 so a fresh PyPI install has a first command to run.
+
 ### Added
 - **`scrip init [DIR]`.** Create the root skeleton — `vault/{raw,facts,wiki}/`
   plus the `.kb/` cache with its manifest — so a fresh PyPI install starts with a
@@ -14,6 +25,13 @@ reference CLI. The file **contract** is versioned separately in
   error. Idempotent in an existing root (no-op); refuses (exit 2) to nest a new
   instance inside an existing one. The root-not-found error now also points at
   `scrip init`.
+
+### Performance
+- **Single-pass markdown block segmentation.** `blocks.split_blocks` no longer
+  re-scans the body per block; the fence/heading walk emits as it goes. Output is
+  unchanged.
+- **O(N) deduplication in `facts`.** Replaced list-membership dedup (O(N²)) with
+  `dict.fromkeys()`, which preserves first-appearance order.
 
 ## [0.9.0] — 2026-07-07
 
@@ -477,6 +495,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[0.10.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.10.0
 [harness-0.11.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.0
 [0.9.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.9.0
 [harness-0.10.2]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.10.2
