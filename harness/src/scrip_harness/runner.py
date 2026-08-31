@@ -13,7 +13,7 @@ import json
 import re
 import subprocess
 import sys
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -904,31 +904,21 @@ def _rank_claims(question: str, claims: list[dict], top: int) -> list[dict]:
     return ranked[:top]
 
 
-def _iter_lf_lines(text: str) -> Iterator[str]:
-    start = 0
-    while True:
-        end = text.find("\n", start)
-        if end == -1:
-            yield text[start:]
-            return
-        yield text[start:end]
-        start = end + 1
-
-
 def _read_ndjson(path: Path, label: str) -> list[dict]:
     if not path.exists():
         return []
     rows: list[dict] = []
-    for lineno, line in enumerate(_iter_lf_lines(path.read_text(encoding="utf-8")), start=1):
-        if not line.strip():
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError as e:
-            raise AnswerError(f"{label}:{lineno}: invalid JSON: {e}") from e
-        if not isinstance(rec, dict):
-            raise AnswerError(f"{label}:{lineno}: expected a JSON object")
-        rows.append(rec)
+    with path.open(encoding="utf-8") as f:
+        for lineno, line in enumerate(f, start=1):
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise AnswerError(f"{label}:{lineno}: invalid JSON: {e}") from e
+            if not isinstance(rec, dict):
+                raise AnswerError(f"{label}:{lineno}: expected a JSON object")
+            rows.append(rec)
     return rows
 
 
