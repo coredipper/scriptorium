@@ -81,14 +81,14 @@ def _now() -> str:
 # --------------------------------------------------------------------------- #
 def _iter_lf_lines(text: str) -> Iterator[str]:
     """Yield ``text.split("\n")``-equivalent lines without allocating the list."""
-    start = 0
-    while True:
-        end = text.find("\n", start)
-        if end == -1:
-            yield text[start:]
-            return
-        yield text[start:end]
-        start = end + 1
+    if not text:
+        yield ""
+        return
+    import io
+    for line in io.StringIO(text, newline="\n"):
+        yield line[:-1] if line.endswith("\n") else line
+    if text.endswith("\n"):
+        yield ""
 
 
 def parse_ndjson(text: str) -> list[dict]:

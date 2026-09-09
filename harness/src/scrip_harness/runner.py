@@ -919,16 +919,18 @@ def _read_ndjson(path: Path, label: str) -> list[dict]:
     if not path.exists():
         return []
     rows: list[dict] = []
-    for lineno, line in enumerate(_iter_lf_lines(path.read_text(encoding="utf-8")), start=1):
-        if not line.strip():
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError as e:
-            raise AnswerError(f"{label}:{lineno}: invalid JSON: {e}") from e
-        if not isinstance(rec, dict):
-            raise AnswerError(f"{label}:{lineno}: expected a JSON object")
-        rows.append(rec)
+    # Bolt optimization: stream large NDJSON files to maintain O(1) memory usage
+    with path.open(encoding="utf-8") as f:
+        for lineno, line in enumerate(f, start=1):
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise AnswerError(f"{label}:{lineno}: invalid JSON: {e}") from e
+            if not isinstance(rec, dict):
+                raise AnswerError(f"{label}:{lineno}: expected a JSON object")
+            rows.append(rec)
     return rows
 
 

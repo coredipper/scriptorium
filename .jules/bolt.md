@@ -27,3 +27,7 @@
 ## 2024-11-21 - O(N) List Deduplication
 **Learning:** Using `if item not in seen_list: seen_list.append(item)` scales terribly to O(N²) for loops processing large collections of items because checking membership in a Python list takes O(N) time.
 **Action:** Replace this pattern with `list(dict.fromkeys(items))` to deduplicate iterables in O(1) membership check time, which scales nicely to O(N) while perfectly preserving insertion order since Python 3.7.
+
+## 2024-05-30 - O(N) memory allocation with path.read_text()
+**Learning:** Reading large NDJSON files using `path.read_text(encoding="utf-8")` into `_iter_lf_lines` or `splitlines()` causes O(N) memory allocation because the entire payload must exist in memory at once as a single large string before yielding lines.
+**Action:** When parsing large NDJSON files, avoid loading the entire file into memory. Instead, stream the file line-by-line using `with path.open(encoding='utf-8') as f: for line in f:` to maintain O(1) memory usage. For large in-memory string variables, use `io.StringIO(text, newline="\n")` instead of `text.split("\n")`.
