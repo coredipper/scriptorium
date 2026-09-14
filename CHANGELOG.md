@@ -7,12 +7,20 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [harness-0.11.1] — 2026-09-14
+
+scrip-harness patch release: memory and allocation cleanups in the runner and
+draft readers. No API or behavior change.
+
 ### Performance
 - **O(N) deduplication in the harness.** `compile.extract_markers`,
   `promote._labels_in_order`, `runner`, and the Gemini structured-output reader
   replaced `if x not in list: list.append(x)` (O(N²)) with `dict.fromkeys()`,
-  which preserves first-appearance order. Ships with the next `scrip-harness`
-  release.
+  which preserves first-appearance order.
+- **Streaming NDJSON reads in the harness runner.** `runner._read_ndjson` now
+  iterates the file line-by-line via `path.open()` instead of `read_text()` plus
+  a manual line splitter, dropping the transient whole-file string. Parsing and
+  error semantics are unchanged.
 
 ## [0.10.0] — 2026-08-26
 
@@ -496,6 +504,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   optional embeddings retrieval rung, and a dogfooded example vault.
 
 [0.10.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.10.0
+[harness-0.11.1]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.1
 [harness-0.11.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.0
 [0.9.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.9.0
 [harness-0.10.2]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.10.2
