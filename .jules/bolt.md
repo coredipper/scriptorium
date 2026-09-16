@@ -31,3 +31,6 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+## 2024-11-22 - Fast memory-efficient string line iteration
+**Learning:** Custom python `find`/`yield` loops for iterating lines in a large string payload add significant loop overhead in Python space. Using `io.StringIO(text, newline="\n")` pushes the iteration into optimized C code, providing a much faster lazy iterator that avoids O(N) memory allocations.
+**Action:** To prevent O(N) memory allocations and high loop overhead when parsing large string payloads (such as NDJSON files), use `io.StringIO(text, newline="\n")` to create a lazy iterator instead of `text.split("\n")`, `splitlines()`, or custom `find`/`yield` loops.
