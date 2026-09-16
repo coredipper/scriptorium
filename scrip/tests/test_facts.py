@@ -4,8 +4,6 @@ from scrip.errors import DataError, UsageError
 from scrip import facts
 
 
-
-
 def test_parse_ndjson_basic():
     text = '{"a": 1}\n{"b": 2}\n'
     assert facts.parse_ndjson(text) == [{"a": 1}, {"b": 2}]
