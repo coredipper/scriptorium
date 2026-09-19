@@ -287,8 +287,10 @@ def _load_cached(root: Path, source_id: str | None = None) -> tuple[list[dict], 
         if not tree_p.exists() or not meta_p.exists():
             continue
         try:
-            tree = json.loads(tree_p.read_text(encoding="utf-8"))
-            meta = json.loads(meta_p.read_text(encoding="utf-8"))
+            with tree_p.open(encoding="utf-8") as f:
+                tree = json.load(f)
+            with meta_p.open(encoding="utf-8") as f:
+                meta = json.load(f)
         except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             continue
         sid = meta.get("source_id") or tree.get("source_id")

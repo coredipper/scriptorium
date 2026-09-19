@@ -72,7 +72,8 @@ def _holder_info() -> dict:
 
 def _read(path: Path) -> dict | None:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return None
     return data if isinstance(data, dict) else None

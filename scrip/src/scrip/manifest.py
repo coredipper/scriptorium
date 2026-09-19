@@ -29,7 +29,8 @@ def load(root: Path) -> dict | None:
     if not p.exists():
         return None
     try:
-        data = json.loads(p.read_text(encoding="utf-8"))
+        with p.open(encoding="utf-8") as f:
+            data = json.load(f)
     except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return None
     if not isinstance(data, dict) or data.get("version") != VERSION:
