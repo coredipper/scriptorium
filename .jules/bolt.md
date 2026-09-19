@@ -31,3 +31,6 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+## 2025-02-18 - json.load(f) vs json.loads(f.read_text())
+**Learning:** In standard CPython, `json.load(f)` internally calls `f.read()` under the hood. Replacing `json.loads(path.read_text())` with `with path.open() as f: json.load(f)` provides virtually identical performance and memory footprint, making it a stylistic/semantic improvement rather than a measurable optimization.
+**Action:** Do not use `json.load(f)` vs `json.loads(text)` as a meaningful performance optimization in CPython unless dealing with custom C-extensions or alternative JSON parsers (like `orjson` or `ujson`) that explicitly support true streaming or zero-copy parsing.

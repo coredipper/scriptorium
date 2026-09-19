@@ -128,7 +128,8 @@ def vector_search(root: Path, query: str, k: int = 5):
         return None
     import numpy as np  # pyright: ignore[reportMissingImports]
 
-    meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    with (d / "meta.json").open(encoding="utf-8") as f:
+        meta = json.load(f)
     items = meta["items"]
     vecs = np.load(d / "vectors.npy")
     stale = meta.get("fingerprint") != _fingerprint(root)
