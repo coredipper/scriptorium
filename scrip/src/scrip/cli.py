@@ -517,14 +517,16 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
     from . import facts
 
     root = resolve_root(args.root)
-    if args.file:
-        try:
-            text = Path(args.file).read_text(encoding="utf-8")
-        except OSError as e:
-            raise errors.UsageError(f"cannot read --file: {e}") from e
-    else:
-        text = sys.stdin.read()
-    result = facts.add(root, args.table, facts.parse_ndjson(text))
+    try:
+        if args.file:
+            with open(args.file, encoding="utf-8", newline="\n") as f:
+                records = facts.parse_ndjson(f)
+        else:
+            records = facts.parse_ndjson(sys.stdin)
+    except OSError as e:
+        raise errors.UsageError(f"cannot read input: {e}") from e
+
+    result = facts.add(root, args.table, records)
     if args.json:
         _emit(result)
     else:
