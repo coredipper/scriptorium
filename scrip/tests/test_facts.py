@@ -1,48 +1,41 @@
+import io
+
 import pytest
 from scrip.errors import DataError, UsageError
 
 from scrip import facts
 
 
-def test_iter_lf_lines_matches_split_newline_semantics():
-    samples = [
-        "",
-        "one",
-        "one\n",
-        "one\n\n",
-        "one\r\ntwo\r\n",
-        "one\rtwo",
-        "one\u2028two\ntwo\u2029three",
-    ]
-    for text in samples:
-        assert list(facts._iter_lf_lines(text)) == text.split("\n")
-
-
 def test_parse_ndjson_basic():
     text = '{"a": 1}\n{"b": 2}\n'
-    assert facts.parse_ndjson(text) == [{"a": 1}, {"b": 2}]
+    f = io.StringIO(text, newline="\n")
+    assert facts.parse_ndjson(f) == [{"a": 1}, {"b": 2}]
 
 
 def test_parse_ndjson_skips_blank_lines_and_strips_crlf():
     text = '{"a": 1}\r\n\r\n{"b": 2}\r\n'
-    assert facts.parse_ndjson(text) == [{"a": 1}, {"b": 2}]
+    f = io.StringIO(text, newline="\n")
+    assert facts.parse_ndjson(f) == [{"a": 1}, {"b": 2}]
 
 
 def test_parse_ndjson_keeps_u2028_inside_json_string():
     # U+2028 / U+2029 are legal *inside* a JSON string value. str.splitlines()
     # treats them as line breaks and would split this record into invalid
-    # fragments; splitting on "\n" only keeps the record intact.
+    # fragments; reading from a stream with newline="\n" keeps the record intact.
     text = '{"a": "x y z"}\n{"b": 2}\n'
-    assert facts.parse_ndjson(text) == [{"a": "x y z"}, {"b": 2}]
+    f = io.StringIO(text, newline="\n")
+    assert facts.parse_ndjson(f) == [{"a": "x y z"}, {"b": 2}]
 
 
 def test_parse_ndjson_reports_line_number_on_bad_json():
     text = '{"a": 1}\nnot json\n'
+    f = io.StringIO(text, newline="\n")
     with pytest.raises(DataError) as exc:
-        facts.parse_ndjson(text)
+        facts.parse_ndjson(f)
     assert "line 2" in str(exc.value)
 
 
 def test_parse_ndjson_empty_is_usage_error():
+    f = io.StringIO("  \n  \n", newline="\n")
     with pytest.raises(UsageError):
-        facts.parse_ndjson("  \n  \n")
+        facts.parse_ndjson(f)

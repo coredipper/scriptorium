@@ -31,3 +31,7 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+
+## 2024-11-23 - Streaming NDJSON parsing avoids O(N) memory allocation
+**Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead. Custom generator implementations like `_iter_lf_lines` are unnecessary and slow.
+**Action:** Always process large text files line-by-line using `with open(..., newline="\n") as f: for line in f:` and `Iterable[str]` typing to maintain O(1) memory usage.
