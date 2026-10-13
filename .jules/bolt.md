@@ -31,3 +31,6 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+## 2024-10-13 - Patching sys.stdin with test compatibility
+**Learning:** When streaming `sys.stdin` directly by wrapping `sys.stdin.buffer` in an `io.TextIOWrapper` (to enforce encoding and strict newline characters), standard execution works perfectly. However, test environments like `pytest` frequently monkeypatch `sys.stdin` with `io.StringIO` mocks, which lack the `.buffer` attribute.
+**Action:** When wrapping `sys.stdin` in `io.TextIOWrapper` (e.g., using `sys.stdin.buffer` for encoding/newline control), be aware that test runners like `pytest` monkeypatch `sys.stdin` with `io.StringIO`. Use conditionally safe patterns like `hasattr(sys.stdin, 'buffer')` to handle both standard execution and test environments gracefully.

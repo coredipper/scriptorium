@@ -517,14 +517,21 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
     from . import facts
 
     root = resolve_root(args.root)
+    import io
     if args.file:
         try:
-            text = Path(args.file).read_text(encoding="utf-8")
+            with open(args.file, encoding="utf-8", newline="\n") as f:
+                records = facts.parse_ndjson(f)
         except OSError as e:
             raise errors.UsageError(f"cannot read --file: {e}") from e
     else:
-        text = sys.stdin.read()
-    result = facts.add(root, args.table, facts.parse_ndjson(text))
+        if hasattr(sys.stdin, "buffer"):
+            f = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", newline="\n")
+        else:
+            # For tests where sys.stdin is patched with StringIO
+            f = sys.stdin
+        records = facts.parse_ndjson(f)
+    result = facts.add(root, args.table, records)
     if args.json:
         _emit(result)
     else:
