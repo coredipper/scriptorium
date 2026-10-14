@@ -9,6 +9,7 @@ unless a query is actually run.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import re
 import sys
@@ -519,12 +520,21 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
     root = resolve_root(args.root)
     if args.file:
         try:
-            text = Path(args.file).read_text(encoding="utf-8")
+            f = open(args.file, encoding="utf-8", newline="\n")
         except OSError as e:
             raise errors.UsageError(f"cannot read --file: {e}") from e
     else:
-        text = sys.stdin.read()
-    result = facts.add(root, args.table, facts.parse_ndjson(text))
+        if hasattr(sys.stdin, "buffer"):
+            f = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", newline="\n")
+        else:
+            f = sys.stdin
+
+    try:
+        result = facts.add(root, args.table, facts.parse_ndjson(f))
+    finally:
+        if args.file:
+            f.close()
+
     if args.json:
         _emit(result)
     else:
