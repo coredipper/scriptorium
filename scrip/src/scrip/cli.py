@@ -517,14 +517,25 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
     from . import facts
 
     root = resolve_root(args.root)
-    if args.file:
-        try:
-            text = Path(args.file).read_text(encoding="utf-8")
-        except OSError as e:
-            raise errors.UsageError(f"cannot read --file: {e}") from e
-    else:
-        text = sys.stdin.read()
-    result = facts.add(root, args.table, facts.parse_ndjson(text))
+    import io
+    from contextlib import ExitStack
+
+    with ExitStack() as stack:
+        if args.file:
+            try:
+                # Bolt optimization: stream NDJSON file line-by-line to avoid O(N) memory allocation
+                f = stack.enter_context(open(Path(args.file), encoding="utf-8", newline="\n"))
+            except OSError as e:
+                raise errors.UsageError(f"cannot read --file: {e}") from e
+            stream = f
+        else:
+            # Stream from stdin. Use buffer + TextIOWrapper if available to control newline
+            if hasattr(sys.stdin, "buffer"):
+                stream = stack.enter_context(io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", newline="\n", closefd=False))
+            else:
+                stream = sys.stdin
+
+        result = facts.add(root, args.table, facts.parse_ndjson(stream))
     if args.json:
         _emit(result)
     else:
