@@ -517,7 +517,6 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
     from . import facts
 
     root = resolve_root(args.root)
-    import io
     from contextlib import ExitStack
 
     with ExitStack() as stack:
@@ -529,11 +528,14 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
                 raise errors.UsageError(f"cannot read --file: {e}") from e
             stream = f
         else:
-            # Stream from stdin. Use buffer + TextIOWrapper if available to control newline
-            if hasattr(sys.stdin, "buffer"):
-                stream = stack.enter_context(io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", newline="\n", closefd=False))
-            else:
-                stream = sys.stdin
+            # Stream from stdin. Use buffer + TextIOWrapper if available to control newline.
+            # To prevent TextIOWrapper from closing sys.stdin.buffer upon garbage collection,
+            # we do not add it to ExitStack, and we must not let it be automatically closed.
+            # Wait, standard TextIOWrapper in standard Python does not accept closefd.
+            # A safe alternative is to just use sys.stdin directly, or use a generator that
+            # handles the newline separation if we must strictly avoid splitlines issues.
+            # Actually, `sys.stdin` is already configured, so we can just use `sys.stdin`.
+            stream = sys.stdin
 
         result = facts.add(root, args.table, facts.parse_ndjson(stream))
     if args.json:
