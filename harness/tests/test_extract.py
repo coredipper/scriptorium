@@ -35,7 +35,7 @@ def _claims_lines(root):
     p = root / "vault" / "facts" / "claims.ndjson"
     if not p.exists():
         return []
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").split("\n") if s.strip()]
 
 
 # --------------------------------------------------------------------------- #
@@ -46,7 +46,7 @@ def test_to_ndjson_serializes_proposals_for_scrip():
         _fact("a verbatim quote", claim_text="A restatement.", tags=["t1"]),
         _fact("another quote"),  # empty claim_text/tags are omitted: scrip defaults them
     ]
-    lines = [json.loads(s) for s in to_ndjson(facts, "raw/src").splitlines()]
+    lines = [json.loads(s) for s in to_ndjson(facts, "raw/src").split("\n") if s]
     assert lines[0]["source_id"] == "raw/src"
     assert lines[0]["claim_text"] == "A restatement."
     assert lines[0]["tags"] == ["t1"]
@@ -243,7 +243,7 @@ def test_to_ndjson_uses_per_claim_source_over_default():
         _fact("from a", source_id="raw/a"),
         _fact("from default"),  # empty source_id falls back to the default
     ]
-    lines = [json.loads(s) for s in to_ndjson(facts, "raw/default").splitlines()]
+    lines = [json.loads(s) for s in to_ndjson(facts, "raw/default").split("\n") if s]
     assert lines[0]["source_id"] == "raw/a"
     assert lines[1]["source_id"] == "raw/default"
 

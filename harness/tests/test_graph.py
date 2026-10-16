@@ -33,7 +33,7 @@ def _rows(root, name):
     p = root / "vault" / "facts" / name
     if not p.exists():
         return []
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").split("\n") if s.strip()]
 
 
 # --------------------------------------------------------------------------- #
@@ -56,7 +56,7 @@ def test_entities_to_ndjson_mints_ids_and_omits_empty_tags():
             DraftEntity(name="Vector DB", kind="tool"),
         ]
     )
-    rows = [json.loads(s) for s in out.splitlines()]
+    rows = [json.loads(s) for s in out.split("\n") if s]
     assert rows[0] == {"entity_id": "entity/pageindex", "name": "PageIndex", "kind": "tool", "tags": ["retrieval"]}
     assert rows[1] == {"entity_id": "entity/vector-db", "name": "Vector DB", "kind": "tool"}
     # scrip owns nothing here, but edges/entities never carry anchors/timestamps
@@ -68,7 +68,7 @@ def test_edges_to_ndjson_maps_names_to_ids():
     out = edges_to_ndjson(
         [DraftEdge(src="PageIndex", dst="Vector DB", kind="alternative-to")], name_to_id
     )
-    [row] = [json.loads(s) for s in out.splitlines()]
+    [row] = [json.loads(s) for s in out.split("\n") if s]
     # a bare edge is exactly src/dst/kind
     assert row == {"src": "entity/pageindex", "dst": "entity/vector-db", "kind": "alternative-to"}
 
