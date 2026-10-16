@@ -7,6 +7,14 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Performance
+- **`scrip fact add` streams its input.** `--file` and `--stdin` are parsed line
+  by line instead of being read into one string first. `facts.parse_ndjson` now
+  accepts either a string (as before) or an iterable of lines, such as a file
+  opened with `newline="\n"`. Records are still split on `"\n"` only, so
+  U+2028/U+2029 inside a JSON string stay intact. Output and errors are
+  unchanged. (#81)
+
 ## [harness-0.11.2] — 2026-10-16
 
 scrip-harness patch release: PROMOTE no longer rewrites Unicode line
