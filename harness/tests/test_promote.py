@@ -23,6 +23,27 @@ def test_split_body_separates_prose_from_definitions():
     assert defs == ['[^a1]: anchor=raw/x#qh:aa|loc:0|len:2  "x"']
 
 
+
+def test_split_body_keeps_unicode_line_separators_in_prose():
+    # splitlines() treats U+2028/U+2029/NEL/form feed as line breaks; the prose
+    # must keep them as-is, not have them rewritten to "\n".
+    body = (
+        "One\u2028two.[^a1]\u2029Three\x85four\x0cfive\r\nsix\rseven\n\n"
+        '[^a1]: anchor=raw/x#q  "x"\n'
+    )
+    prose, defs = split_body(body)
+    assert prose == "One\u2028two.[^a1]\u2029Three\x85four\x0cfive\nsix\nseven"
+    assert defs == ['[^a1]: anchor=raw/x#q  "x"']
+
+
+def test_split_body_definition_after_unicode_separator():
+    # A definition that starts right after U+2028 is still a definition, matching
+    # scrip's block segmentation; it is returned without the separator.
+    body = 'Claim.[^a1]\u2028[^a1]: anchor=raw/x#q  "x"\u2028'
+    prose, defs = split_body(body)
+    assert prose == "Claim.[^a1]"
+    assert defs == ['[^a1]: anchor=raw/x#q  "x"']
+
 def test_renumber_offsets_all_labels():
     body = 'A.[^a1] B.[^a2]\n\n[^a1]: anchor=raw/x#q  "A"\n[^a2]: anchor=raw/x#q2  "B"\n'
     out = renumber(body, 3)  # continue after a target's two footnotes

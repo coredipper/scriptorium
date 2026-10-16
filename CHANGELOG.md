@@ -7,6 +7,13 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Fixed
+- **PROMOTE merge keeps Unicode line separators in prose.** `promote.split_body`
+  rejoined prose with `"\n"` after `str.splitlines()`, so U+2028/U+2029, NEL and
+  form feed in a page body were silently rewritten to newlines on merge. Each
+  line now keeps its own separator; `\r\n` and `\r` are still normalized to
+  `\n`. Footnote-definition detection is unchanged.
+
 ## [harness-0.11.1] — 2026-09-14
 
 scrip-harness patch release: memory and allocation cleanups in the runner and
