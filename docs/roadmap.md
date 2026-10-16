@@ -82,8 +82,6 @@ Implemented:
 - `scrip-harness answer` includes a bounded, ranked `graph_context` packet from
   relevant entities and edges. This is context-only: final citations still have
   to be claim ids or verified raw quotes.
-
-Next:
-
-- Add focused views over the graph rather than whole-graph visualization, avoiding
-  the usual unreadable graph hairball.
+- `scrip neighbors <id>` gives a focused view over the graph: one node's edges
+  within `--depth` hops (filter by `--kind`, `--direction`, capped by `--limit`),
+  rather than a whole-graph dump, avoiding the usual unreadable graph hairball.
