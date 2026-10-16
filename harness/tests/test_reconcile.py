@@ -52,12 +52,12 @@ def _contradiction(tmp_path):
 
 def _recs(root):
     p = root / "vault" / "facts" / "reconciliations.ndjson"
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()] if p.exists() else []
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").split("\n") if s.strip()] if p.exists() else []
 
 
 def _claims(root):
     p = root / "vault" / "facts" / "claims.ndjson"
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()] if p.exists() else []
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").split("\n") if s.strip()] if p.exists() else []
 
 
 def _contradictions(root):

@@ -349,7 +349,8 @@ def test_answer_refuses_open_contradictions(tmp_path):
     # flip polarity on second claim by rewriting the tiny facts file
     rows = [
         json.loads(s)
-        for s in (root / "vault" / "facts" / "claims.ndjson").read_text().splitlines()
+        for s in (root / "vault" / "facts" / "claims.ndjson").read_text(encoding="utf-8").split("\n")
+        if s.strip()
     ]
     rows[1]["polarity"] = "denies"
     (root / "vault" / "facts" / "claims.ndjson").write_text(

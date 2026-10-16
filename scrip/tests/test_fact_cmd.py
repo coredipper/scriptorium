@@ -47,32 +47,32 @@ def _run_add(kb, text, *extra):
     return cli.main(["fact", "add", "--file", str(p), "--root", str(kb.root), *extra])
 
 
-def _claims_lines(kb):
-    p = kb.root / "vault" / "facts" / "claims.ndjson"
+def _read_ndjson(p):
+    # Split on "\n" only: splitlines() also breaks on U+2028/U+2029/NEL, which
+    # are legal inside JSON strings and would split one record into fragments.
     if not p.exists():
         return []
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+    return [json.loads(s) for s in p.read_text(encoding="utf-8").split("\n") if s.strip()]
+
+
+def _claims_lines(kb):
+    p = kb.root / "vault" / "facts" / "claims.ndjson"
+    return _read_ndjson(p)
 
 
 def _recs_lines(kb):
     p = kb.root / "vault" / "facts" / "reconciliations.ndjson"
-    if not p.exists():
-        return []
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+    return _read_ndjson(p)
 
 
 def _graph_lines(kb):
     p = kb.root / "vault" / "facts" / "graph.ndjson"
-    if not p.exists():
-        return []
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+    return _read_ndjson(p)
 
 
 def _entities_lines(kb):
     p = kb.root / "vault" / "facts" / "entities.ndjson"
-    if not p.exists():
-        return []
-    return [json.loads(s) for s in p.read_text(encoding="utf-8").splitlines() if s.strip()]
+    return _read_ndjson(p)
 
 
 def _write_ontology(kb, text):
@@ -251,10 +251,7 @@ def test_fact_add_file_streams_crlf_and_u2028(kb):
     assert "\u2028" in text
     rc = _run_add(kb, text)
     assert rc == 0
-    p = kb.root / "vault" / "facts" / "claims.ndjson"
-    lines = p.read_text(encoding="utf-8").split("\n")
-    claims = [json.loads(s) for s in lines if s.strip()]
-    assert [c["object"] for c in claims] == ["a\u2028b", "o"]
+    assert [c["object"] for c in _claims_lines(kb)] == ["a\u2028b", "o"]
 
 
 def test_fact_add_json_reports_appended_records(kb, capsys):
@@ -530,7 +527,7 @@ def test_fact_add_entities_appends_and_conflicts(kb, capsys):
     rc = _run_add(kb, _ndjson(ent), "--table", "entities")
     assert rc == 0
     lines = (kb.root / "vault" / "facts" / "entities.ndjson").read_text(encoding="utf-8")
-    assert json.loads(lines.splitlines()[0])["entity_id"] == "entity/duckdb"
+    assert json.loads(lines.split("\n")[0])["entity_id"] == "entity/duckdb"
 
     # identical record is skipped; a conflicting one (same id, new name) fails
     assert _run_add(kb, _ndjson(ent), "--table", "entities") == 0
@@ -540,7 +537,7 @@ def test_fact_add_entities_appends_and_conflicts(kb, capsys):
     assert rc == 1
     [failure] = json.loads(capsys.readouterr().out)["failures"]
     assert failure["status"] == "ID_CONFLICT"
-    assert len(lines.splitlines()) == 1  # nothing else was appended
+    assert lines.count("\n") == 1  # nothing else was appended
 
 
 def test_fact_add_entities_accept_optional_uri_metadata(kb):
@@ -635,7 +632,7 @@ def test_fact_add_edges_appends_and_skips_duplicates(kb):
     assert _run_add(kb, _ndjson(edge), "--table", "edges") == 0
     assert _run_add(kb, _ndjson(edge), "--table", "edges") == 0
     lines = (kb.root / "vault" / "facts" / "graph.ndjson").read_text(encoding="utf-8")
-    assert len(lines.splitlines()) == 1
+    assert lines.count("\n") == 1
 
 
 # --------------------------------------------------------------------------- #
