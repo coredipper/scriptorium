@@ -12,8 +12,9 @@ reference CLI. The file **contract** is versioned separately in
   by line instead of being read into one string first. `facts.parse_ndjson` now
   accepts either a string (as before) or an iterable of lines, such as a file
   opened with `newline="\n"`. Records are still split on `"\n"` only, so
-  U+2028/U+2029 inside a JSON string stay intact. Output and errors are
-  unchanged. (#81)
+  U+2028/U+2029 inside a JSON string stay intact. Output is unchanged; on
+  stdin a lone `\r` now also ends a line, which can shift the line number in an
+  error for such (already invalid) input. (#81)
 
 ## [harness-0.11.2] — 2026-10-16
 
