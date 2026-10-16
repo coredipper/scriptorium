@@ -7,6 +7,11 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [harness-0.11.2] — 2026-10-16
+
+scrip-harness patch release: PROMOTE no longer rewrites Unicode line
+separators in merged page prose.
+
 ### Fixed
 - **PROMOTE merge keeps Unicode line separators in prose.** `promote.split_body`
   rejoined prose with `"\n"` after `str.splitlines()`, so U+2028/U+2029, NEL and
@@ -511,6 +516,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   optional embeddings retrieval rung, and a dogfooded example vault.
 
 [0.10.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.10.0
+[harness-0.11.2]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.2
 [harness-0.11.1]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.1
 [harness-0.11.0]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.0
 [0.9.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.9.0
