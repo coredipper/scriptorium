@@ -7,6 +7,11 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-10-16
+
+scriptoria moves to 0.11.0 for `scrip neighbors`, a focused view over the
+facts graph.
+
 ### Added
 - **`scrip neighbors <id>`.** A focused, read-only view of one node's edges in
   `facts/graph.ndjson`: everything within `--depth` hops (1-3, default 1),
@@ -535,6 +540,7 @@ is hardened, the maintaining loop is automated, and the agent loop is runnable.
   reference CLI (`status`, `verify`, `stamp`, `query`, `search`, `index`), the
   optional embeddings retrieval rung, and a dogfooded example vault.
 
+[0.11.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.11.0
 [0.10.0]: https://github.com/coredipper/scriptorium/releases/tag/v0.10.0
 [harness-0.11.2]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.2
 [harness-0.11.1]: https://github.com/coredipper/scriptorium/releases/tag/harness-v0.11.1
