@@ -31,6 +31,3 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
-## 2024-05-19 - [O(1) memory streaming for NDJSON parsing]
-**Learning:** Parsing large NDJSON files using `sys.stdin.read()` or `Path.read_text()` allocated the whole string in memory. Also, simulating `splitlines` with `find('\n')` creates string slicing overhead. Using `Iterable[str]` combined with `sys.stdin` or `open(newline="\n")` enables native zero-allocation streaming. It handles unicode correctly without splitting elements inside JSON strings unexpectedly.
-**Action:** Always prefer `Iterable[str]` when handling large NDJSON files and stream directly from the file or stdin.

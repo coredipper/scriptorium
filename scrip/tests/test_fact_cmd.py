@@ -240,6 +240,23 @@ def test_fact_add_reads_stdin(kb, monkeypatch):
     assert len(_claims_lines(kb)) == 1
 
 
+def test_fact_add_file_streams_crlf_and_u2028(kb):
+    # --file is streamed with newline="\n": CRLF endings are stripped and a raw
+    # U+2028 inside a JSON string does not split the record.
+    kb.add_raw("s", SRC)
+    text = _ndjson(
+        _claim("The quick brown fox jumps over the lazy dog.", object="a\u2028b"),
+        _claim("Caching answers beats recomputing them."),
+    ).replace("\n", "\r\n")
+    assert "\u2028" in text
+    rc = _run_add(kb, text)
+    assert rc == 0
+    p = kb.root / "vault" / "facts" / "claims.ndjson"
+    lines = p.read_text(encoding="utf-8").split("\n")
+    claims = [json.loads(s) for s in lines if s.strip()]
+    assert [c["object"] for c in claims] == ["a\u2028b", "o"]
+
+
 def test_fact_add_json_reports_appended_records(kb, capsys):
     kb.add_raw("s", SRC)
     rc = _run_add(

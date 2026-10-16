@@ -6,14 +6,28 @@ from scrip.errors import DataError, UsageError
 from scrip import facts
 
 
+def test_iter_lf_lines_matches_split_newline_semantics():
+    samples = [
+        "",
+        "one",
+        "one\n",
+        "one\n\n",
+        "one\r\ntwo\r\n",
+        "one\rtwo",
+        "one\u2028two\ntwo\u2029three",
+    ]
+    for text in samples:
+        assert list(facts._iter_lf_lines(text)) == text.split("\n")
+
+
 def test_parse_ndjson_basic():
     text = '{"a": 1}\n{"b": 2}\n'
-    assert facts.parse_ndjson(io.StringIO(text, newline="\n")) == [{"a": 1}, {"b": 2}]
+    assert facts.parse_ndjson(text) == [{"a": 1}, {"b": 2}]
 
 
 def test_parse_ndjson_skips_blank_lines_and_strips_crlf():
     text = '{"a": 1}\r\n\r\n{"b": 2}\r\n'
-    assert facts.parse_ndjson(io.StringIO(text, newline="\n")) == [{"a": 1}, {"b": 2}]
+    assert facts.parse_ndjson(text) == [{"a": 1}, {"b": 2}]
 
 
 def test_parse_ndjson_keeps_u2028_inside_json_string():
@@ -21,16 +35,25 @@ def test_parse_ndjson_keeps_u2028_inside_json_string():
     # treats them as line breaks and would split this record into invalid
     # fragments; splitting on "\n" only keeps the record intact.
     text = '{"a": "x y z"}\n{"b": 2}\n'
-    assert facts.parse_ndjson(io.StringIO(text, newline="\n")) == [{"a": "x y z"}, {"b": 2}]
+    assert facts.parse_ndjson(text) == [{"a": "x y z"}, {"b": 2}]
 
 
 def test_parse_ndjson_reports_line_number_on_bad_json():
     text = '{"a": 1}\nnot json\n'
     with pytest.raises(DataError) as exc:
-        facts.parse_ndjson(io.StringIO(text, newline="\n"))
+        facts.parse_ndjson(text)
     assert "line 2" in str(exc.value)
 
 
 def test_parse_ndjson_empty_is_usage_error():
     with pytest.raises(UsageError):
-        facts.parse_ndjson(io.StringIO("  \n  \n", newline="\n"))
+        facts.parse_ndjson("  \n  \n")
+
+
+def test_parse_ndjson_accepts_line_iterable():
+    # A file opened with newline="\n" yields lines split on "\n" only, so
+    # U+2028 inside a string and \r\n endings parse the same as the str path.
+    text = '{"a": "x\u2028y"}\r\n\r\n{"b": 2}\n'
+    expected = facts.parse_ndjson(text)
+    assert facts.parse_ndjson(io.StringIO(text, newline="\n")) == expected
+    assert expected == [{"a": "x\u2028y"}, {"b": 2}]
