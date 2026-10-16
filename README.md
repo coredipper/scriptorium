@@ -149,9 +149,10 @@ cd scrip && uv run pytest        # hermetic; no network, no LLM
 
 ## Status
 
-**Latest releases: scriptoria v0.10.0 and scrip-harness v0.11.0** (see
-[CHANGELOG.md](CHANGELOG.md)) — `scrip init` gives a fresh install a first
-command to run; the keeper supports an optional ontology vocabulary, and the
+**Latest releases: scriptoria v0.11.0 and scrip-harness v0.11.2** (see
+[CHANGELOG.md](CHANGELOG.md)) — `scrip neighbors` shows one node's graph
+neighborhood instead of the whole edge list; `scrip init` gives a fresh install a
+first command to run; the keeper supports an optional ontology vocabulary, and the
 harness uses it for extraction/graph drafting while feeding bounded graph context
 into answers. The maintaining loop has runnable support end
 to end: every [AGENT.md](AGENT.md) stage
