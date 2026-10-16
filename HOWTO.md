@@ -109,6 +109,7 @@ evidence is thin, and verifies every citation before printing or saving.
 | See what needs recompiling | `scrip status` |
 | Prove citations still hold | `scrip verify` |
 | Find conflicting sources | `scrip query contradictions` |
+| Explore one entity's connections | `scrip neighbors entity/<slug> [--depth 2]` |
 | Browse it visually | open `vault/` in Obsidian; run the dashboard (below) |
 
 ## Browse in Obsidian

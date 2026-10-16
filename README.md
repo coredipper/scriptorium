@@ -71,6 +71,7 @@ scrip verify
 scrip query claims --where "list_contains(tags, 'caching')"
 scrip query contradictions
 scrip query --sql "SELECT source_id, count(*) AS n FROM claims GROUP BY 1 ORDER BY n DESC"
+scrip neighbors entity/duckdb --depth 2     # one node's edges, not the whole graph
 
 # optional semantic vocabulary: validates fact predicates/kinds when present
 scrip ontology

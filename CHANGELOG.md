@@ -7,6 +7,17 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Added
+- **`scrip neighbors <id>`.** A focused, read-only view of one node's edges in
+  `facts/graph.ndjson`: everything within `--depth` hops (1-3, default 1),
+  optionally only edges of `--kind` (repeatable) and one `--direction`
+  (`out`/`in`/`both`), capped at `--limit` edges (default 50; output says when it
+  truncates). The node can be an entity or any edge endpoint (`raw/…`,
+  `concept/…`). Order is deterministic (hop, then src/dst/kind); cited edges show
+  their anchor; `--json` gives `{root, depth, nodes, edges, truncated}`. Rows
+  are read through the same DuckDB views as `scrip query`. An unknown node is a
+  data error (exit 3).
+
 ### Performance
 - **`scrip fact add` streams its input.** `--file` and `--stdin` are parsed line
   by line instead of being read into one string first. `facts.parse_ndjson` now

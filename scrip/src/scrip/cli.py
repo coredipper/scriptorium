@@ -1,7 +1,7 @@
 """Command-line entry point for ``scrip``.
 
-Dispatches to the four subcommands. Logic modules (``graph``, ``anchors``,
-``query``) are imported lazily inside handlers so ``scrip --help`` works even
+Dispatches to the subcommands. Logic modules (``graph``, ``anchors``,
+``query``, ``neighbors``) are imported lazily inside handlers so ``scrip --help`` works even
 before those modules exist, and so importing the CLI never pulls in DuckDB
 unless a query is actually run.
 """
@@ -253,6 +253,25 @@ def cmd_query(args: argparse.Namespace) -> int:
         print(json.dumps(rows, default=str, ensure_ascii=False))
     else:
         query.print_table(columns, rows)
+    return 0
+
+
+def cmd_neighbors(args: argparse.Namespace) -> int:
+    from . import neighbors
+
+    root = resolve_root(args.root)
+    result = neighbors.neighborhood(
+        root,
+        args.node,
+        depth=args.depth,
+        kinds=args.kind,
+        direction=args.direction,
+        limit=args.limit,
+    )
+    if args.json:
+        _emit(result)
+    else:
+        neighbors.print_neighborhood(result)
     return 0
 
 
@@ -705,6 +724,25 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--where", help="SQL WHERE expression appended to a named query")
     pq.add_argument("--limit", type=int, help="row limit for a named query")
     pq.set_defaults(func=cmd_query)
+
+    pn = sub.add_parser(
+        "neighbors",
+        parents=[common],
+        help="show one node's edges within N hops of facts/graph.ndjson",
+    )
+    pn.add_argument("node", help="an entity id (entity/<slug>) or any edge src/dst id")
+    pn.add_argument("--depth", type=int, default=1, help="hops to walk, 1-3 (default 1)")
+    pn.add_argument(
+        "--kind", action="append", help="only follow edges of this kind (repeatable)"
+    )
+    pn.add_argument(
+        "--direction",
+        choices=["both", "out", "in"],
+        default="both",
+        help="follow outgoing, incoming, or both (default both)",
+    )
+    pn.add_argument("--limit", type=int, default=50, help="max edges shown (default 50)")
+    pn.set_defaults(func=cmd_neighbors)
 
     pi = sub.add_parser(
         "index",

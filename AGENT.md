@@ -162,6 +162,7 @@ caveat is left to the read-only view layer rather than mutating a stamped page.
 | record provenance hashes after compiling | `scrip stamp [path…]` |
 | check every citation still resolves | `scrip verify` |
 | query the facts layer | `scrip query claims \| entities \| edges \| contradictions \| --sql "…"` |
+| see one node's graph neighborhood | `scrip neighbors entity/<slug> [--depth N] [--kind K]` |
 | validate optional semantic vocabulary | `scrip ontology` |
 | retrieve source blocks (rung 4) | `scrip search "<question>"` |
 | build the semantic index (optional) | `scrip index` *(needs the `[embeddings]` extra)* |
