@@ -25,9 +25,17 @@ def split_body(body: str) -> tuple[str, list[str]]:
     definitions; prose is everything else with trailing blank lines trimmed."""
     prose: list[str] = []
     defs: list[str] = []
-    for line in body.splitlines():
-        (defs if _DEF.match(line) else prose).append(line)
-    return "\n".join(prose).rstrip(), defs
+    # Same line boundaries as scrip's block segmentation (str.splitlines), but
+    # keep each line's own separator so U+2028/U+2029, NEL, form feed etc. in
+    # prose survive the merge. Only \r\n and \r are normalized to \n.
+    for line in body.splitlines(keepends=True):
+        content = line.splitlines()[0]
+        if _DEF.match(content):
+            defs.append(content)
+        else:
+            ending = line[len(content):]
+            prose.append(content + ("\n" if ending in ("\r\n", "\r") else ending))
+    return "".join(prose).rstrip(), defs
 
 
 def _labels_in_order(body: str) -> list[str]:
