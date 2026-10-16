@@ -1,3 +1,5 @@
+import io
+
 import pytest
 from scrip.errors import DataError, UsageError
 
@@ -46,3 +48,12 @@ def test_parse_ndjson_reports_line_number_on_bad_json():
 def test_parse_ndjson_empty_is_usage_error():
     with pytest.raises(UsageError):
         facts.parse_ndjson("  \n  \n")
+
+
+def test_parse_ndjson_accepts_line_iterable():
+    # A file opened with newline="\n" yields lines split on "\n" only, so
+    # U+2028 inside a string and \r\n endings parse the same as the str path.
+    text = '{"a": "x\u2028y"}\r\n\r\n{"b": 2}\n'
+    expected = facts.parse_ndjson(text)
+    assert facts.parse_ndjson(io.StringIO(text, newline="\n")) == expected
+    assert expected == [{"a": "x\u2028y"}, {"b": 2}]

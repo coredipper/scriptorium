@@ -519,12 +519,13 @@ def cmd_fact_add(args: argparse.Namespace) -> int:
     root = resolve_root(args.root)
     if args.file:
         try:
-            text = Path(args.file).read_text(encoding="utf-8")
+            with Path(args.file).open(encoding="utf-8", newline="\n") as f:
+                proposals = facts.parse_ndjson(f)
         except OSError as e:
             raise errors.UsageError(f"cannot read --file: {e}") from e
     else:
-        text = sys.stdin.read()
-    result = facts.add(root, args.table, facts.parse_ndjson(text))
+        proposals = facts.parse_ndjson(sys.stdin)
+    result = facts.add(root, args.table, proposals)
     if args.json:
         _emit(result)
     else:
