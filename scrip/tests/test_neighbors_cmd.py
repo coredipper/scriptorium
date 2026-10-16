@@ -51,7 +51,7 @@ def test_depth_one_both_directions(kb):
         ("entity/x", "entity/a", "part-of"),
     ]
     assert all(e["hop"] == 1 for e in r["edges"])
-    assert [n["id"] for n in r["entities"]] == [
+    assert [n["id"] for n in r["nodes"]] == [
         "entity/a", "entity/b", "entity/c", "entity/e", "entity/x",
     ]
 
@@ -95,13 +95,13 @@ def test_cited_edge_and_non_entity_node(kb):
     r = neighbors.neighborhood(kb.root, "raw/paper")
     [edge] = r["edges"]
     assert edge["anchor"] == "qh:ab|loc:0|len:5"
-    assert {"id": "raw/paper"} in r["entities"]  # not an entity: id only
+    assert {"id": "raw/paper"} in r["nodes"]  # not an entity: id only
 
 
 def test_entity_without_edges(kb):
     _write(kb, "entities.ndjson", [_ent("lonely")])
     r = neighbors.neighborhood(kb.root, "entity/lonely")
-    assert r["edges"] == [] and [n["id"] for n in r["entities"]] == ["entity/lonely"]
+    assert r["edges"] == [] and [n["id"] for n in r["nodes"]] == ["entity/lonely"]
 
 
 def test_cli_unknown_node_is_data_error(kb, capsys):
@@ -126,7 +126,7 @@ def test_cli_json_is_stable(kb, capsys):
     first = json.loads(capsys.readouterr().out)
     assert cli.main(args) == 0
     assert json.loads(capsys.readouterr().out) == first
-    assert set(first) == {"root", "depth", "entities", "edges", "truncated"}
+    assert set(first) == {"root", "depth", "nodes", "edges", "truncated"}
 
 
 def test_cli_text_output(kb, capsys):

@@ -14,7 +14,7 @@ reference CLI. The file **contract** is versioned separately in
   (`out`/`in`/`both`), capped at `--limit` edges (default 50; output says when it
   truncates). The node can be an entity or any edge endpoint (`raw/…`,
   `concept/…`). Order is deterministic (hop, then src/dst/kind); cited edges show
-  their anchor; `--json` gives `{root, depth, entities, edges, truncated}`. Rows
+  their anchor; `--json` gives `{root, depth, nodes, edges, truncated}`. Rows
   are read through the same DuckDB views as `scrip query`. An unknown node is a
   data error (exit 3).
 

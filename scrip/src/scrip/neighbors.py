@@ -34,7 +34,7 @@ def _load(root: Path, name: str, fname: str) -> list[dict]:
     return rows
 
 
-def _entity_summary(node: str, entity: dict | None) -> dict:
+def _node_summary(node: str, entity: dict | None) -> dict:
     out: dict = {"id": node}
     if entity:
         out["name"] = entity.get("name")
@@ -51,7 +51,8 @@ def neighborhood(
     direction: str = "both",
     limit: int = 50,
 ) -> dict:
-    """Return the edges within ``depth`` hops of ``node`` and the nodes they touch.
+    """Return the edges within ``depth`` hops of ``node`` and the nodes they touch
+    (entity name/kind when the node is an entity, else id only).
 
     Walks breadth-first; each edge is reported once, at the hop it is first
     reached. Order is deterministic: by hop, then ``src``, ``dst``, ``kind``.
@@ -127,14 +128,14 @@ def neighborhood(
     return {
         "root": node,
         "depth": depth,
-        "entities": [_entity_summary(n, entity_by_id.get(n)) for n in sorted(touched)],
+        "nodes": [_node_summary(n, entity_by_id.get(n)) for n in sorted(touched)],
         "edges": out_edges,
         "truncated": truncated,
     }
 
 
 def print_neighborhood(result: dict) -> None:
-    names = {e["id"]: e for e in result["entities"]}
+    names = {n["id"]: n for n in result["nodes"]}
     root = result["root"]
 
     def _label(node: str) -> str:
@@ -157,9 +158,9 @@ def print_neighborhood(result: dict) -> None:
         rows.append(f"{indent}{arrow} {e['kind']}  {other}  {_label(other)}".rstrip() + cite)
     for line in rows:
         print(line)
-    n_edges, n_ent = len(result["edges"]), len(result["entities"])
+    n_edges, n_nodes = len(result["edges"]), len(result["nodes"])
     more = " (truncated; raise --limit)" if result["truncated"] else ""
     print(
         f"{n_edges} edge{'s' if n_edges != 1 else ''}, "
-        f"{n_ent} node{'s' if n_ent != 1 else ''} (depth {result['depth']}){more}"
+        f"{n_nodes} node{'s' if n_nodes != 1 else ''} (depth {result['depth']}){more}"
     )
