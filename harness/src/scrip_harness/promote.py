@@ -30,7 +30,7 @@ def split_body(body: str) -> tuple[str, list[str]]:
     # prose survive the merge. Only \r\n and \r are normalized to \n.
     # Bolt optimization: Zipping the two arrays allocated in C avoids calling
     # .splitlines() repeatedly inside the Python hot loop for every line.
-    for content, line in zip(body.splitlines(), body.splitlines(keepends=True)):
+    for content, line in zip(body.splitlines(), body.splitlines(keepends=True), strict=False):
         if _DEF.match(content):
             defs.append(content)
         else:
