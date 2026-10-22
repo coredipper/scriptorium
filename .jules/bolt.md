@@ -31,3 +31,7 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+
+## 2024-11-25 - Python zip strict=True and empty line splits
+**Learning:** `"".splitlines()` and `"\n".splitlines()` behave differently: `"".splitlines()` is `[]` and `"\n".splitlines()` is `[]`. So `zip(text.splitlines(), text.splitlines(keepends=True))` works perfectly and cleanly handles `\n` without crashing because both lists are exactly identically sized. Attempting to index `.splitlines()[0]` on a line that consists only of a newline will raise `IndexError`.
+**Action:** When working with Python's `.splitlines()`, avoid `.splitlines()[0]` on lines unless you verify the line is not just a newline character. Use `zip(text.splitlines(), text.splitlines(keepends=True), strict=True)` when keeping ends is needed, as it correctly handles empty lists without crashing, ensures sequence alignment, and avoids `O(N)` loop allocation overhead.

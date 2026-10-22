@@ -28,8 +28,8 @@ def split_body(body: str) -> tuple[str, list[str]]:
     # Same line boundaries as scrip's block segmentation (str.splitlines), but
     # keep each line's own separator so U+2028/U+2029, NEL, form feed etc. in
     # prose survive the merge. Only \r\n and \r are normalized to \n.
-    for line in body.splitlines(keepends=True):
-        content = line.splitlines()[0]
+    # ⚡ Bolt: zip() avoids O(N) overhead of re-calling splitlines() on each line
+    for content, line in zip(body.splitlines(), body.splitlines(keepends=True), strict=True):
         if _DEF.match(content):
             defs.append(content)
         else:
