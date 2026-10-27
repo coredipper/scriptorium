@@ -30,7 +30,7 @@ def _is_heading(line: str) -> bool:
 
 
 def _is_blank(line: str) -> bool:
-    return line.strip() == ""
+    return line.isspace() or not line
 
 
 def split_blocks(text: str) -> list[dict]:
@@ -59,11 +59,11 @@ def split_blocks(text: str) -> list[dict]:
 
     for line in text.splitlines(keepends=True):
         end = start + len(line)
-        if _is_blank(line):
+        if line.isspace() or not line:
             if cur_start is not None:
                 emit(cur_start, cur_end)
                 cur_start = None
-        elif _is_heading(line):
+        elif line.lstrip().startswith("#"):
             if cur_start is not None:
                 emit(cur_start, cur_end)
                 cur_start = None
