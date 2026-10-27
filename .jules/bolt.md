@@ -31,3 +31,7 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+
+## 2024-05-30 - Optimize string processing in blocks segmentation
+**Learning:** Checking for blank lines using `line.strip() == ""` allocates new string objects, which creates an overhead. Using `line.isspace() or not line` achieves the same result without allocation. Furthermore, in Python hot loops like `text.splitlines()`, inlining simple operations like `isspace()` and `lstrip().startswith()` is measurably faster than executing helper functions.
+**Action:** When performing string checks inside hot loops processing large text inputs line-by-line, prefer inline operations and avoid methods like `strip()` that allocate memory if a non-allocating alternative like `isspace()` exists.
