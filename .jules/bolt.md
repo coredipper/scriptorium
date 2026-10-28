@@ -31,3 +31,11 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+
+## 2024-11-21 - Python Function Call Overhead in Hot Loops
+**Learning:** In CPython, invoking functions (even simple ones like `_is_blank` or `_is_heading`) adds measurable overhead in hot loops parsing large texts line-by-line (e.g., inside `for line in splitlines()`). By inlining the conditional logic (`line.isspace() or not line` and `line.lstrip().startswith("#")`) directly into the loop, execution time improved significantly without drastically sacrificing code readability.
+**Action:** In a hot loop processing strings (e.g., iterating lines with `splitlines()`), inlining straightforward string checks (like `.isspace()` or simple indexing) instead of invoking helper functions avoids Python function call overhead and provides significant, measurable speedups.
+
+## 2024-11-21 - Memory overhead of `strip() == ""`
+**Learning:** In CPython, checking for a blank line using `line.strip() == ""` forces the interpreter to allocate a brand new string object in memory on every iteration. On loops scaling to thousands or millions of lines, this introduces massive, unnecessary garbage collection overhead and slows down the loop.
+**Action:** In CPython, checking for a blank line using `line.strip() == ""` allocates a new string object in memory. In hot loops, replace this with `line.isspace() or not line` to avoid the allocation overhead and execute significantly faster.
