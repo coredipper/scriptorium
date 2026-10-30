@@ -25,14 +25,6 @@ from __future__ import annotations
 from . import hashing
 
 
-def _is_heading(line: str) -> bool:
-    return line.lstrip().startswith("#")
-
-
-def _is_blank(line: str) -> bool:
-    return line.strip() == ""
-
-
 def split_blocks(text: str) -> list[dict]:
     """Return a list of ``{"block_id", "span": [start, end], "hash"}``."""
     # Use splitlines(keepends=True): its boundary set (form feed, NEL, U+2028/9,
@@ -59,11 +51,14 @@ def split_blocks(text: str) -> list[dict]:
 
     for line in text.splitlines(keepends=True):
         end = start + len(line)
-        if _is_blank(line):
+        # Performance: inline `line.isspace() or not line` instead of `line.strip() == ""`
+        # to avoid O(N) allocation overhead for blank checks, and inline string matching
+        # to avoid function call overhead in this hot loop.
+        if line.isspace() or not line:
             if cur_start is not None:
                 emit(cur_start, cur_end)
                 cur_start = None
-        elif _is_heading(line):
+        elif line.lstrip().startswith("#"):
             if cur_start is not None:
                 emit(cur_start, cur_end)
                 cur_start = None
