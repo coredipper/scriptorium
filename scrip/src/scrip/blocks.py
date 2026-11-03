@@ -51,7 +51,8 @@ def split_blocks(text: str) -> list[dict]:
 
     for line in text.splitlines(keepends=True):
         end = start + len(line)
-        # ⚡ Bolt: Inline strip and character checks to avoid method/function call overhead
+        # One lstrip() classifies the line: empty after it means blank (same
+        # whitespace set as strip()), a leading '#' means heading.
         s = line.lstrip()
         if not s:
             if cur_start is not None:
