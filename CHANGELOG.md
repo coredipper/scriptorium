@@ -8,6 +8,10 @@ reference CLI. The file **contract** is versioned separately in
 ## [Unreleased]
 
 ### Performance
+- **harness: `promote.split_body` splits the body once per form.** It pairs
+  `splitlines()` with `splitlines(keepends=True)` instead of calling
+  `splitlines()` on every line. Output is unchanged. Ships with the next
+  `scrip-harness` release. (#93)
 - **Faster block segmentation.** `blocks.split_blocks` classifies each line with
   a single `lstrip()` instead of two helper calls (`strip()` + `lstrip()`), about
   10% faster on large sources. Blocks, ids and hashes are unchanged. (#91)
