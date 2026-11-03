@@ -7,6 +7,11 @@ reference CLI. The file **contract** is versioned separately in
 
 ## [Unreleased]
 
+### Performance
+- **Faster block segmentation.** `blocks.split_blocks` classifies each line with
+  a single `lstrip()` instead of two helper calls (`strip()` + `lstrip()`), about
+  10% faster on large sources. Blocks, ids and hashes are unchanged. (#91)
+
 ## [0.11.0] — 2026-10-16
 
 scriptoria moves to 0.11.0 for `scrip neighbors`, a focused view over the
