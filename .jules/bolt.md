@@ -31,3 +31,7 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+
+## 2024-11-04 - Reduce memory overhead in string segmentation
+**Learning:** Using `zip(text.splitlines(), text.splitlines(keepends=True))` creates two full copies of line lists in memory.
+**Action:** Iterate over `text.splitlines(keepends=True)` only and use `line.rstrip('\r\n\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029')` to efficiently strip line endings, halving the memory footprint.
