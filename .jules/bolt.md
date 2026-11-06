@@ -31,3 +31,7 @@
 ## 2024-05-24 - Streaming NDJSON parsing avoids O(N) memory allocation
 **Learning:** Loading large NDJSON files entirely into memory using `.read_text()` before splitting into lines causes significant memory overhead.
 **Action:** Always process large text files line-by-line using `with open(...) as f: for line in f:` to maintain O(1) memory usage.
+
+## 2024-11-21 - Avoid Memory Doubling with splitlines(keepends=True)
+**Learning:** Zipping two complete `splitlines()` calls (one with `keepends=True` and one without) to easily extract both content and line terminators causes Python to allocate two full arrays of lines for the entire string in memory simultaneously, effectively doubling the memory footprint.
+**Action:** To avoid this O(N) memory doubling while safely extracting line content without line terminators, use a single loop over `splitlines(keepends=True)` and extract the content using `line.rstrip('\r\n\v\f\x1c\x1d\x1e\x85\u2028\u2029')`. This correctly strips only standard Python line boundaries while saving significant memory.
