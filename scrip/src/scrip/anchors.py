@@ -182,11 +182,10 @@ def verify_vault(root: Path) -> dict:
         seen: set[str] = set()
         with claims_path.open(encoding="utf-8") as f:
             for lineno, raw_line in enumerate(f, start=1):
-                line = raw_line.strip()
-                if not line:
+                if raw_line.isspace() or not raw_line:
                     continue
                 try:
-                    rec = json.loads(line)
+                    rec = json.loads(raw_line)
                 except json.JSONDecodeError as e:
                     raise DataError(f"claims.ndjson:{lineno}: invalid JSON: {e}") from e
                 for key in ("claim_id", "source_id", "anchor"):
@@ -205,11 +204,10 @@ def verify_vault(root: Path) -> dict:
     if edges_path.exists():
         with edges_path.open(encoding="utf-8") as f:
             for lineno, raw_line in enumerate(f, start=1):
-                line = raw_line.strip()
-                if not line:
+                if raw_line.isspace() or not raw_line:
                     continue
                 try:
-                    rec = json.loads(line)
+                    rec = json.loads(raw_line)
                 except json.JSONDecodeError as e:
                     raise DataError(f"graph.ndjson:{lineno}: invalid JSON: {e}") from e
                 if "anchor" not in rec:
