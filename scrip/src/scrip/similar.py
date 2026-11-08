@@ -58,11 +58,10 @@ def _source_tags(root: Path) -> dict[str, set[str]]:
         return out
     with p.open(encoding="utf-8") as f:
         for lineno, raw_line in enumerate(f, start=1):
-            line = raw_line.strip()
-            if not line:
+            if raw_line.isspace() or not raw_line:
                 continue
             try:
-                rec = json.loads(line)
+                rec = json.loads(raw_line)
             except json.JSONDecodeError as e:
                 raise DataError(f"claims.ndjson:{lineno}: invalid JSON: {e}") from e
             if not isinstance(rec, dict):

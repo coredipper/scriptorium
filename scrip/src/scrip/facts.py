@@ -103,11 +103,10 @@ def parse_ndjson(source: str | Iterable[str]) -> list[dict]:
     # \r\n) and the trailing empty element from a final newline are dropped below.
     lines = _iter_lf_lines(source) if isinstance(source, str) else source
     for lineno, raw_line in enumerate(lines, start=1):
-        line = raw_line.strip()
-        if not line:
+        if raw_line.isspace() or not raw_line:
             continue
         try:
-            rec = json.loads(line)
+            rec = json.loads(raw_line)
         except json.JSONDecodeError as e:
             raise DataError(f"input line {lineno}: invalid JSON: {e}") from e
         if not isinstance(rec, dict):
@@ -316,11 +315,10 @@ def _read_table(path: Path) -> tuple[list[dict], bool]:
     records: list[dict] = []
     with path.open(encoding="utf-8") as f:
         for lineno, raw_line in enumerate(f, start=1):
-            line = raw_line.strip()
-            if not line:
+            if raw_line.isspace() or not raw_line:
                 continue
             try:
-                rec = json.loads(line)
+                rec = json.loads(raw_line)
             except json.JSONDecodeError as e:
                 raise DataError(f"{path.name}:{lineno}: invalid JSON: {e}") from e
             records.append(rec)
